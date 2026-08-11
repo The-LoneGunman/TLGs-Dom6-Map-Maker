@@ -3,6 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isWaterTerrain, type Plane, type PreviewCondition, type Province, type TerrainKey } from "./domain";
 import { terrainPreviewKey } from "./dom6";
+import {
+  computeProvinceTopology,
+  computeVoronoiCells,
+  connectionKey,
+  type Cell,
+  type Point,
+  type ProvinceTopology,
+} from "./geometry";
 
 const TERRAIN_COLORS: Record<TerrainKey, [string, string]> = {
   plains: ["#8ea56c", "#6f8752"],
@@ -45,6 +53,7 @@ export function MapCanvas({ plane, selectedId, previewCondition, onSelect, onZoo
   const dragRef = useRef<{ x: number; y: number; panX: number; panY: number; moved: boolean } | null>(null);
   const [view, setView] = useState<ViewState>({ zoom: 1, panX: 0, panY: 0 });
   const cells = useMemo(() => computeVoronoiCells(plane), [plane]);
+  const topology = useMemo(() => computeProvinceTopology(plane), [plane]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -70,10 +79,10 @@ export function MapCanvas({ plane, selectedId, previewCondition, onSelect, onZoo
     context.translate(width / 2 + view.panX, height / 2 + view.panY);
     context.scale(view.zoom, view.zoom);
     context.translate(-width / 2, -height / 2);
-    paintPlane(context, plane, cells, previewCondition, width, height, { selectedId, labels: view.zoom >= 1.35, detail: view.zoom >= 0.92 });
+    paintPlane(context, plane, cells, topology, previewCondition, width, height, { selectedId, labels: view.zoom >= 1.35, detail: view.zoom >= 0.92 });
     context.restore();
     drawVignette(context, width, height);
-  }, [cells, plane, previewCondition, selectedId, view]);
+  }, [cells, plane, previewCondition, selectedId, topology, view]);
 
   useEffect(() => {
     draw();
@@ -171,72 +180,18 @@ export async function renderPlanePng(plane: Plane, condition: PreviewCondition):
   context.fillStyle = plane.kind === "underworld" || plane.kind === "abyss" ? "#17171b" : "#183544";
   context.fillRect(0, 0, canvas.width, canvas.height);
   const cells = computeVoronoiCells(plane);
-  paintPlane(context, plane, cells, condition, canvas.width, canvas.height, { labels: true, detail: true });
+  const topology = computeProvinceTopology(plane);
+  paintPlane(context, plane, cells, topology, condition, canvas.width, canvas.height, { labels: true, detail: true });
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("The preview image could not be encoded.")), "image/png");
   });
-}
-
-type Point = { x: number; y: number };
-type Cell = { provinceId: string; points: Point[] };
-
-function computeVoronoiCells(plane: Plane): Cell[] {
-  return plane.provinces.map((province) => {
-    let polygon: Point[] = [
-      { x: 0, y: 0 },
-      { x: 1, y: 0 },
-      { x: 1, y: 1 },
-      { x: 0, y: 1 },
-    ];
-    for (const other of plane.provinces) {
-      if (other.id === province.id) continue;
-      let qx = other.x;
-      let qy = other.y;
-      if (plane.wrapX) {
-        const delta = qx - province.x;
-        if (delta > 0.5) qx -= 1;
-        else if (delta < -0.5) qx += 1;
-      }
-      if (plane.wrapY) {
-        const delta = qy - province.y;
-        if (delta > 0.5) qy -= 1;
-        else if (delta < -0.5) qy += 1;
-      }
-      const a = 2 * (qx - province.x);
-      const b = 2 * (qy - province.y);
-      const c = qx * qx + qy * qy - province.x * province.x - province.y * province.y;
-      polygon = clipPolygon(polygon, a, b, c);
-      if (!polygon.length) break;
-    }
-    return { provinceId: province.id, points: polygon };
-  });
-}
-
-function clipPolygon(polygon: Point[], a: number, b: number, c: number): Point[] {
-  const result: Point[] = [];
-  for (let index = 0; index < polygon.length; index += 1) {
-    const current = polygon[index]!;
-    const previous = polygon[(index + polygon.length - 1) % polygon.length]!;
-    const currentInside = a * current.x + b * current.y <= c + 1e-9;
-    const previousInside = a * previous.x + b * previous.y <= c + 1e-9;
-    if (currentInside !== previousInside) {
-      const dx = current.x - previous.x;
-      const dy = current.y - previous.y;
-      const denominator = a * dx + b * dy;
-      if (Math.abs(denominator) > 1e-12) {
-        const t = (c - a * previous.x - b * previous.y) / denominator;
-        result.push({ x: previous.x + dx * t, y: previous.y + dy * t });
-      }
-    }
-    if (currentInside) result.push(current);
-  }
-  return result;
 }
 
 function paintPlane(
   context: CanvasRenderingContext2D,
   plane: Plane,
   cells: Cell[],
+  topology: ProvinceTopology,
   condition: PreviewCondition,
   width: number,
   height: number,
@@ -245,10 +200,10 @@ function paintPlane(
   const cellById = new Map(cells.map((cell) => [cell.provinceId, cell]));
   for (const province of plane.provinces) {
     const cell = cellById.get(province.id);
-    if (!cell?.points.length) continue;
+    if (!cell?.polygons.length) continue;
     const terrain = terrainPreviewKey(province.terrain, condition);
     const [primary, secondary] = colorsForCondition(TERRAIN_COLORS[terrain], condition);
-    drawCellPath(context, cell.points, width, height);
+    drawCellPath(context, cell.polygons, width, height);
     const gradient = context.createLinearGradient(province.x * width - width * 0.05, province.y * height - height * 0.05, province.x * width + width * 0.05, province.y * height + height * 0.05);
     gradient.addColorStop(0, primary);
     gradient.addColorStop(1, secondary);
@@ -257,20 +212,28 @@ function paintPlane(
     context.strokeStyle = options.selectedId === province.id ? "#f5d67c" : "rgba(15, 24, 27, .72)";
     context.lineWidth = options.selectedId === province.id ? Math.max(2, width / 900) : Math.max(0.75, width / 3400);
     context.stroke();
-    if (options.detail) drawTerrainMarks(context, province, terrain, cell.points, width, height, condition);
+    if (options.detail) drawTerrainMarks(context, province, terrain, cell.polygons, width, height, condition);
   }
 
   context.save();
   context.lineCap = "round";
   for (const edge of plane.edges) {
-    const a = plane.provinces.find((province) => province.id === edge.a);
-    const b = plane.provinces.find((province) => province.id === edge.b);
-    if (!a || !b) continue;
+    // Ordinary shared cell outlines are the standard-connection display. Only
+    // special movement rules need an overlay, and those overlays follow the
+    // actual shared border instead of crossing province interiors.
+    if (edge.kind === "standard") continue;
+    const segments = topology.sharedBorders.get(connectionKey(edge.a, edge.b));
+    if (!segments?.length) continue;
     const style = edgeStyle(edge.kind);
     context.strokeStyle = style.color;
     context.lineWidth = Math.max(style.width, width / 1900);
     context.setLineDash(style.dash.map((value) => value * Math.max(1, width / 1700)));
-    drawWrappedLine(context, a, b, plane, width, height);
+    context.beginPath();
+    for (const segment of segments) {
+      context.moveTo(segment.from.x * width, segment.from.y * height);
+      context.lineTo(segment.to.x * width, segment.to.y * height);
+    }
+    context.stroke();
   }
   context.setLineDash([]);
   context.restore();
@@ -311,14 +274,14 @@ function drawTerrainMarks(
   context: CanvasRenderingContext2D,
   province: Province,
   terrain: TerrainKey,
-  points: Point[],
+  polygons: Point[][],
   width: number,
   height: number,
   condition: PreviewCondition,
 ) {
   const radius = Math.max(2, Math.min(width, height) / 330);
   context.save();
-  drawCellPath(context, points, width, height);
+  drawCellPath(context, polygons, width, height);
   context.clip();
   const count = clamp(Math.round(3 + Math.min(width, height) / 450), 3, 12);
   for (let index = 0; index < count; index += 1) {
@@ -365,41 +328,17 @@ function drawTerrainMarks(
   context.restore();
 }
 
-function drawCellPath(context: CanvasRenderingContext2D, points: Point[], width: number, height: number) {
+function drawCellPath(context: CanvasRenderingContext2D, polygons: Point[][], width: number, height: number) {
   context.beginPath();
-  points.forEach((point, index) => {
-    const x = point.x * width;
-    const y = point.y * height;
-    if (index === 0) context.moveTo(x, y);
-    else context.lineTo(x, y);
-  });
-  context.closePath();
-}
-
-function drawWrappedLine(context: CanvasRenderingContext2D, a: Province, b: Province, plane: Plane, width: number, height: number) {
-  let bx = b.x;
-  let by = b.y;
-  if (plane.wrapX) {
-    const delta = bx - a.x;
-    if (delta > 0.5) bx -= 1;
-    else if (delta < -0.5) bx += 1;
+  for (const points of polygons) {
+    points.forEach((point, index) => {
+      const x = point.x * width;
+      const y = point.y * height;
+      if (index === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    });
+    context.closePath();
   }
-  if (plane.wrapY) {
-    const delta = by - a.y;
-    if (delta > 0.5) by -= 1;
-    else if (delta < -0.5) by += 1;
-  }
-  const draw = (offsetX: number, offsetY: number) => {
-    context.beginPath();
-    context.moveTo((a.x + offsetX) * width, (a.y + offsetY) * height);
-    context.lineTo((bx + offsetX) * width, (by + offsetY) * height);
-    context.stroke();
-  };
-  draw(0, 0);
-  if (bx < 0) draw(1, 0);
-  if (bx > 1) draw(-1, 0);
-  if (by < 0) draw(0, 1);
-  if (by > 1) draw(0, -1);
 }
 
 function edgeStyle(kind: string) {

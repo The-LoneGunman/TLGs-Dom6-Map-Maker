@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addPlane, adjacencyFor, calculateFairness, createDefaultProject, generateProject, shortestDistances } from "../src/generator";
+import { addPlane, adjacencyFor, calculateFairness, createDefaultProject, generateProject, shortestDistances, synchronizePlaneEdges } from "../src/generator";
 import { cloneProject } from "../src/domain";
+import { auditPlaneTopology, computeProvinceTopology, connectionKey } from "../src/geometry";
 import {
   D6M_MAGIC,
   D6M_TRAILER,
@@ -35,6 +36,80 @@ test("generation is deterministic, connected, varied, and multiplayer-scored", (
   const fairness = calculateFairness(first);
   assert.ok(fairness.overall >= 0 && fairness.overall <= 100);
   assert.equal(validateProject(first).filter((issue) => issue.severity === "error").length, 0);
+  const topology = computeProvinceTopology(plane);
+  assert.deepEqual(
+    plane.edges.map((edge) => connectionKey(edge.a, edge.b)).sort(),
+    [...topology.pairKeys].sort(),
+  );
+});
+
+test("province topology excludes corner contacts and includes wrapped seam borders", () => {
+  const project = createDefaultProject("topology-fixture");
+  const plane = project.planes[0]!;
+  plane.width = 1000;
+  plane.height = 1000;
+  plane.wrapX = false;
+  plane.wrapY = false;
+  plane.provinces = plane.provinces.slice(0, 4).map((province, index) => ({
+    ...province,
+    id: `square-${index + 1}`,
+    index: index + 1,
+    x: index % 2 ? 0.75 : 0.25,
+    y: index > 1 ? 0.75 : 0.25,
+  }));
+  plane.edges = [];
+  const square = computeProvinceTopology(plane);
+  assert.equal(square.pairs.length, 4);
+  assert.equal(square.pairKeys.has(connectionKey("square-1", "square-4")), false);
+  assert.equal(square.pairKeys.has(connectionKey("square-2", "square-3")), false);
+
+  plane.provinces = plane.provinces.slice(0, 3).map((province, index) => ({
+    ...province,
+    id: `seam-${index + 1}`,
+    index: index + 1,
+    x: [0.05, 0.5, 0.95][index]!,
+    y: 0.5,
+  }));
+  const withoutWrap = computeProvinceTopology(plane);
+  assert.equal(withoutWrap.pairKeys.has(connectionKey("seam-1", "seam-3")), false);
+  plane.wrapX = true;
+  const withWrap = computeProvinceTopology(plane);
+  assert.equal(withWrap.pairKeys.has(connectionKey("seam-1", "seam-3")), true);
+  assert.ok(withWrap.sharedBorders.get(connectionKey("seam-1", "seam-3"))?.some((segment) => segment.from.x === 0 || segment.from.x === 1));
+});
+
+test("topology repair preserves special borders and removes stale links", () => {
+  const project = createDefaultProject("topology-repair");
+  const plane = project.planes[0]!;
+  const topology = computeProvinceTopology(plane);
+  const preserved = plane.edges[0]!;
+  preserved.kind = "road";
+  const missing = plane.edges[1]!;
+  plane.edges = plane.edges.filter((edge) => edge.id !== missing.id);
+  let stalePair: [string, string] | undefined;
+  for (let left = 0; left < plane.provinces.length && !stalePair; left += 1) {
+    for (let right = left + 1; right < plane.provinces.length; right += 1) {
+      const a = plane.provinces[left]!.id;
+      const b = plane.provinces[right]!.id;
+      if (!topology.pairKeys.has(connectionKey(a, b))) {
+        stalePair = [a, b];
+        break;
+      }
+    }
+  }
+  assert.ok(stalePair);
+  plane.edges.push({ id: "stale-cross-map-edge", a: stalePair![0], b: stalePair![1], kind: "standard" });
+  assert.deepEqual(
+    { missing: auditPlaneTopology(plane).missing.length, extra: auditPlaneTopology(plane).extra.length },
+    { missing: 1, extra: 1 },
+  );
+  assert.ok(validateProject(project).some((issue) => issue.severity === "error" && issue.message.includes("do not share a border")));
+
+  const repaired = synchronizePlaneEdges(plane, "topology-repair:sync");
+  assert.deepEqual(auditPlaneTopology(repaired), { missing: [], extra: [] });
+  const preservedAfter = repaired.edges.find((edge) => connectionKey(edge.a, edge.b) === connectionKey(preserved.a, preserved.b));
+  assert.equal(preservedAfter?.id, preserved.id);
+  assert.equal(preservedAfter?.kind, "road");
 });
 
 test("terrain masks preserve Dominions 6 high bits and transformations", () => {
@@ -95,6 +170,31 @@ test("D6M encoder writes the official header, exact length, row-major owners, an
     const x = Math.round(province.x * (plane.width - 1));
     const y = Math.round(province.y * (plane.height - 1));
     assert.equal(view.getInt16(ownerOffset + (y * plane.width + x) * 2, true), province.index);
+  }
+  const topology = computeProvinceTopology(plane);
+  const ownerAt = (x: number, y: number) => view.getInt16(ownerOffset + (y * plane.width + x) * 2, true) - 1;
+  const transitionCounts = new Map<string, number>();
+  const recordTransition = (left: number, right: number) => {
+    if (left === right) return;
+    const a = plane.provinces[left]!.id;
+    const b = plane.provinces[right]!.id;
+    const key = connectionKey(a, b);
+    transitionCounts.set(key, (transitionCounts.get(key) ?? 0) + 1);
+  };
+  for (let y = 0; y < plane.height; y += 1) {
+    for (let x = 0; x < plane.width - 1; x += 1) recordTransition(ownerAt(x, y), ownerAt(x + 1, y));
+    if (plane.wrapX) recordTransition(ownerAt(plane.width - 1, y), ownerAt(0, y));
+  }
+  for (let y = 0; y < plane.height - 1; y += 1) {
+    for (let x = 0; x < plane.width; x += 1) recordTransition(ownerAt(x, y), ownerAt(x, y + 1));
+  }
+  if (plane.wrapY) {
+    for (let x = 0; x < plane.width; x += 1) recordTransition(ownerAt(x, plane.height - 1), ownerAt(x, 0));
+  }
+  for (const [key, count] of transitionCounts) {
+    if (!topology.pairKeys.has(key)) {
+      assert.equal(count, 1, `Only a one-pixel Voronoi-vertex alias may lack a positive-length geometric border (${key})`);
+    }
   }
 });
 

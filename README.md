@@ -9,6 +9,7 @@ Pantokrator Atlas is a local-first Dominions 6 map maker. It creates determinist
 - Preferred, avoided, and advanced fixed throne locations
 - Up to eight contiguous planes connected by matching gate numbers
 - Standard, road, river, bridge, mountain, impassable, and custom borders
+- Ownership-boundary topology: every positive-length shared border is an exported neighbour, including wrap seams
 - Hidden or known vanilla magic sites and path/site-frequency terrain flags
 - Unique initial independent commanders, squads, items, and magic
 - Province ownership, poptypes, population, unrest, forts, temples, labs, and owned PD level
@@ -30,6 +31,8 @@ npm run lint
 ```
 
 The default output is 3840×2160. The D6M encoder streams one plane at a time during direct installation; ZIP export holds the package in memory and is best for smaller atlases.
+
+Older saved projects created before ownership-boundary topology may show a **Synchronize visible borders** action. It preserves valid authored border types, adds missing shared-border neighbours, and removes stale links that cross province interiors.
 
 ## Format references
 

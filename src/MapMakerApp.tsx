@@ -36,8 +36,10 @@ import {
   createDefaultProject,
   generateProject,
   hashString,
+  synchronizePlaneEdges,
 } from "./generator";
 import { ADVANCED_COMMANDS, terrainMask, validateProject } from "./dom6";
+import { auditPlaneTopology, computeProvinceTopology, connectionKey } from "./geometry";
 import {
   downloadPackage,
   downloadProject,
@@ -67,7 +69,7 @@ const CONDITIONS: Array<{ value: PreviewCondition; label: string }> = [
 
 const TOOL_ITEMS: Array<{ id: Tool; mark: string; label: string; hint: string }> = [
   { id: "select", mark: "⌖", label: "Select", hint: "Inspect and edit provinces" },
-  { id: "link", mark: "⌁", label: "Link", hint: "Connect two provinces" },
+  { id: "link", mark: "⌁", label: "Link", hint: "Check a shared-border connection" },
   { id: "gate", mark: "◎", label: "Gate", hint: "Link provinces across planes" },
   { id: "start", mark: "S", label: "Start", hint: "Toggle a player start" },
   { id: "throne", mark: "♜", label: "Throne", hint: "Cycle throne preference" },
@@ -119,6 +121,12 @@ export function MapMakerApp() {
   const selected = activePlane?.provinces.find((province) => province.id === selectedId);
   const fairness = useMemo(() => calculateFairness(project), [project]);
   const issues = useMemo(() => validateProject(project), [project]);
+  const topologyAudits = useMemo(() => project.planes.map((plane) => ({
+    planeId: plane.id,
+    audit: auditPlaneTopology(plane),
+  })), [project.planes]);
+  const projectTopologyIssueCount = topologyAudits.reduce((sum, item) =>
+    sum + item.audit.missing.length + item.audit.extra.length, 0);
   const errorCount = issues.filter((issue) => issue.severity === "error").length;
   const warningCount = issues.filter((issue) => issue.severity === "warning").length;
   const totalProvinces = project.planes.reduce((sum, plane) => sum + plane.provinces.length, 0);
@@ -207,6 +215,34 @@ export function MapMakerApp() {
     setToast(`Generated ${next.planes.reduce((sum, plane) => sum + plane.provinces.length, 0)} provinces from seed “${next.seed}”.`);
   };
 
+  const handleSynchronizeBorders = () => {
+    if (!projectTopologyIssueCount) return;
+    const removed = topologyAudits.reduce((sum, item) => sum + item.audit.extra.length, 0);
+    const added = topologyAudits.reduce((sum, item) => sum + item.audit.missing.length, 0);
+    mutate((draft) => {
+      draft.planes = draft.planes.map((plane, planeIndex) => synchronizePlaneEdges(
+        plane,
+        `${draft.seed}:plane:${planeIndex}:border-sync`,
+      ));
+    });
+    setLinkSource(undefined);
+    setToast(`Visible borders synchronized: added ${added}, removed ${removed}.`);
+  };
+
+  const updateWrap = (axis: "wrapX" | "wrapY", value: boolean) => {
+    if (!activePlane) return;
+    mutate((draft) => {
+      const planeIndex = draft.planes.findIndex((plane) => plane.id === activePlane.id);
+      if (planeIndex < 0) return;
+      const plane = draft.planes[planeIndex]!;
+      plane[axis] = value;
+      draft.planes[planeIndex] = synchronizePlaneEdges(
+        plane,
+        `${draft.seed}:plane:${planeIndex}:wrap-sync`,
+      );
+    });
+  };
+
   const handleProvinceClick = (provinceId: string) => {
     if (!activePlane) return;
     setSelectedId(provinceId);
@@ -242,13 +278,22 @@ export function MapMakerApp() {
         setLinkSource(undefined);
         return;
       }
+      const existing = activePlane.edges.find((edge) =>
+        (edge.a === linkSource.provinceId && edge.b === provinceId)
+        || (edge.b === linkSource.provinceId && edge.a === provinceId));
+      if (existing) {
+        setLinkSource(undefined);
+        setToast("Those provinces already share a connection. Change its border type in the province inspector.");
+        return;
+      }
+      const topology = computeProvinceTopology(activePlane);
+      if (!topology.pairKeys.has(connectionKey(linkSource.provinceId, provinceId))) {
+        setToast("Those provinces do not share a visible border. Use a gate for remote or cross-plane travel.");
+        return;
+      }
       mutate((draft) => {
         const plane = draft.planes.find((item) => item.id === activePlane.id)!;
-        const existing = plane.edges.find((edge) =>
-          (edge.a === linkSource.provinceId && edge.b === provinceId)
-          || (edge.b === linkSource.provinceId && edge.a === provinceId));
-        if (existing) plane.edges = plane.edges.filter((edge) => edge.id !== existing.id);
-        else plane.edges.push({
+        plane.edges.push({
           id: `edge-manual-${hashString(`${draft.seed}:${linkSource.provinceId}:${provinceId}:${Date.now()}`).toString(36)}`,
           a: linkSource.provinceId,
           b: provinceId,
@@ -411,10 +456,20 @@ export function MapMakerApp() {
                 <span>{activePlane.width.toLocaleString()} × {activePlane.height.toLocaleString()}</span>
                 <small>Native D6M • condition-reactive</small>
               </div>
-              <Toggle label="Wrap east / west" checked={activePlane.wrapX} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.wrapX = value; })} />
-              <Toggle label="Wrap north / south" checked={activePlane.wrapY} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.wrapY = value; })} />
+              <Toggle label="Wrap east / west" checked={activePlane.wrapX} onChange={(value) => updateWrap("wrapX", value)} />
+              <Toggle label="Wrap north / south" checked={activePlane.wrapY} onChange={(value) => updateWrap("wrapY", value)} />
               <button className="button generate-button" type="button" onClick={handleGenerate}><span>✦</span> Generate balanced atlas</button>
-              <p className="microcopy">Deterministic geometry, connected graphs, coherent biomes, spaced starts, contested thrones, and reproducible gates.</p>
+              <button
+                className="button quiet wide"
+                type="button"
+                disabled={!projectTopologyIssueCount}
+                onClick={handleSynchronizeBorders}
+              >
+                {projectTopologyIssueCount
+                  ? `Synchronize ${projectTopologyIssueCount} project border issue${projectTopologyIssueCount === 1 ? "" : "s"}`
+                  : "Visible borders synchronized"}
+              </button>
+              <p className="microcopy">Every shared border is a Dominions connection. Rivers, passes, roads, and impassable borders are drawn directly on that boundary.</p>
             </div>
           )}
 
@@ -530,6 +585,7 @@ export function MapMakerApp() {
               <small>{activePlane.provinces.length} provinces · {activePlane.width}×{activePlane.height}</small>
             </div>
             <div className="map-legend">
+              <span><i className="legend-border" />Shared border = connected</span>
               <span><i className="legend-start" />Start</span>
               <span><i className="legend-throne" />Throne</span>
               <span><i className="legend-site" />Site</span>
@@ -739,7 +795,7 @@ function AdvancedInspector({ project, planeId, province, update, mutateProject }
       <div className="edge-list">{incident.map((edge) => {
         const otherId = edge.a === province.id ? edge.b : edge.a;
         const other = plane.provinces.find((item) => item.id === otherId);
-        return <div className="edge-row" key={edge.id}><span>{other?.index}. {other?.name}</span><select value={edge.kind} onChange={(event) => mutateProject((draft) => { const target = draft.planes.find((item) => item.id === planeId)!.edges.find((item) => item.id === edge.id)!; target.kind = event.target.value as EdgeKind; })}>{EDGE_KINDS.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}</select><button type="button" onClick={() => mutateProject((draft) => { const draftPlane = draft.planes.find((item) => item.id === planeId)!; draftPlane.edges = draftPlane.edges.filter((item) => item.id !== edge.id); })}>×</button></div>;
+        return <div className="edge-row" key={edge.id}><span>{other?.index}. {other?.name}</span><select value={edge.kind} onChange={(event) => mutateProject((draft) => { const target = draft.planes.find((item) => item.id === planeId)!.edges.find((item) => item.id === edge.id)!; target.kind = event.target.value as EdgeKind; })}>{EDGE_KINDS.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}</select></div>;
       })}</div>
       <Divider />
       <SectionHeading kicker="BATTLE SCENE" title="Province battlefield" />

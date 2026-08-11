@@ -19,6 +19,7 @@ import {
   type Province,
   type TerrainKey,
 } from "./domain";
+import { computeProvinceTopology, connectionKey } from "./geometry";
 
 const TAU = Math.PI * 2;
 
@@ -105,17 +106,6 @@ function field(x: number, y: number, salt: number): number {
   const c = Math.sin(((x + y) * 0.71 + salt * 0.037) * TAU);
   const d = Math.cos(((x - y) * 1.93 - salt * 0.019) * TAU);
   return (a * 0.38 + b * 0.31 + c * 0.21 + d * 0.1 + 1) / 2;
-}
-
-function torusDelta(a: number, b: number, wrap: boolean): number {
-  const delta = Math.abs(a - b);
-  return wrap ? Math.min(delta, 1 - delta) : delta;
-}
-
-function distance(a: Province, b: Province, plane: Pick<Plane, "wrapX" | "wrapY">): number {
-  const dx = torusDelta(a.x, b.x, plane.wrapX);
-  const dy = torusDelta(a.y, b.y, plane.wrapY);
-  return Math.hypot(dx, dy);
 }
 
 function defaultPlane(seed: string, index: number, kind: PlaneKind = "surface"): Plane {
@@ -419,64 +409,39 @@ function makeProvinceName(biome: BiomeKey, index: number, rng: SeededRandom): st
   return index % 17 === 0 ? `The ${prefix} ${capitalize(suffix)}` : base;
 }
 
-function buildEdges(provinces: Province[], plane: Pick<Plane, "id" | "wrapX" | "wrapY">, seed: string): Edge[] {
-  const degree = new Map<string, number>();
-  const edges = new Map<string, Edge>();
-  const add = (a: Province, b: Province) => {
-    if (a.id === b.id) return;
-    const [left, right] = a.index < b.index ? [a, b] : [b, a];
-    const key = `${left.id}|${right.id}`;
-    if (edges.has(key)) return;
-    edges.set(key, { id: idFor(seed, "edge", edges.size), a: left.id, b: right.id, kind: "standard" });
-    degree.set(left.id, (degree.get(left.id) ?? 0) + 1);
-    degree.set(right.id, (degree.get(right.id) ?? 0) + 1);
-  };
+function buildEdges(provinces: Province[], plane: Plane, seed: string): Edge[] {
+  return synchronizePlaneEdges({ ...plane, provinces, edges: [] }, seed, false).edges;
+}
 
-  const pairs: Array<{ a: Province; b: Province; distance: number }> = [];
-  for (let i = 0; i < provinces.length; i += 1) {
-    for (let j = i + 1; j < provinces.length; j += 1) {
-      pairs.push({ a: provinces[i]!, b: provinces[j]!, distance: distance(provinces[i]!, provinces[j]!, plane) });
+/**
+ * Reconciles Dominions neighbour commands with the province ownership geometry.
+ * Valid existing edge kinds are preserved so a repair does not erase authored
+ * rivers, roads, passes, or impassable borders.
+ */
+export function synchronizePlaneEdges(plane: Plane, seed: string, preserveExisting = true): Plane {
+  const topology = computeProvinceTopology(plane);
+  const existing = new Map<string, Edge>();
+  if (preserveExisting) {
+    for (const edge of plane.edges) {
+      const key = connectionKey(edge.a, edge.b);
+      if (!existing.has(key)) existing.set(key, edge);
     }
   }
-  pairs.sort((left, right) => left.distance - right.distance || left.a.index - right.a.index || left.b.index - right.b.index);
-
-  // A minimum spanning tree guarantees that every generated plane is connected.
-  const parent = provinces.map((_, index) => index);
-  const find = (value: number): number => {
-    while (parent[value] !== value) {
-      parent[value] = parent[parent[value]!]!;
-      value = parent[value]!;
-    }
-    return value;
-  };
-  const union = (a: number, b: number) => {
-    const rootA = find(a);
-    const rootB = find(b);
-    if (rootA !== rootB) parent[rootB] = rootA;
-  };
-  for (const pair of pairs) {
-    const a = pair.a.index - 1;
-    const b = pair.b.index - 1;
-    if (find(a) === find(b)) continue;
-    add(pair.a, pair.b);
-    union(a, b);
-  }
-
-  // Fill sparse areas while capping the degree to keep readable movement choices.
-  for (const pair of pairs) {
-    const degreeA = degree.get(pair.a.id) ?? 0;
-    const degreeB = degree.get(pair.b.id) ?? 0;
-    if ((degreeA < 4 || degreeB < 4) && degreeA < 7 && degreeB < 7) add(pair.a, pair.b);
-    if ([...degree.values()].every((value) => value >= 4)) break;
-  }
-
+  const provinceById = new Map(plane.provinces.map((province) => [province.id, province]));
   const rng = new SeededRandom(`${seed}:borders`);
-  for (const edge of edges.values()) {
-    const a = provinces.find((province) => province.id === edge.a)!;
-    const b = provinces.find((province) => province.id === edge.b)!;
-    edge.kind = borderKind(a, b, rng);
-  }
-  return [...edges.values()];
+  const edges = topology.pairs.map((pair, index) => {
+    const current = existing.get(pair.key);
+    if (current) return { ...current, a: pair.a, b: pair.b };
+    const a = provinceById.get(pair.a)!;
+    const b = provinceById.get(pair.b)!;
+    return {
+      id: idFor(seed, "edge", index),
+      a: pair.a,
+      b: pair.b,
+      kind: borderKind(a, b, rng),
+    } satisfies Edge;
+  });
+  return { ...plane, edges };
 }
 
 function borderKind(a: Province, b: Province, rng: SeededRandom): EdgeKind {

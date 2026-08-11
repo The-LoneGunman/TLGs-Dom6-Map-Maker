@@ -15,6 +15,7 @@ import {
   type ValidationIssue,
 } from "./domain";
 import { adjacencyFor, provinceGlobalNumber, shortestDistances } from "./generator";
+import { auditPlaneTopology, createProvinceOwnerResolver } from "./geometry";
 
 export const D6M_MAGIC = 898933;
 export const D6M_VERSION = 3;
@@ -381,33 +382,16 @@ export async function encodeD6m(
 
   const heights = new Int16Array(buffer, heightOffset, pixelCount);
   const owners = new Int16Array(buffer, ownerOffset, pixelCount);
-  const buckets = buildSpatialBuckets(plane);
+  const ownerResolver = createProvinceOwnerResolver(plane);
   const seedHash = hash32(seed);
   const baseHeights = plane.provinces.map((province) => terrainHeight(province.terrain));
   const yieldEvery = Math.max(8, Math.floor(height / 40));
 
   for (let y = 0; y < height; y += 1) {
     const ny = (y + 0.5) / height;
-    const bucketY = Math.min(buckets.rows - 1, Math.floor(ny * buckets.rows));
     for (let x = 0; x < width; x += 1) {
       const nx = (x + 0.5) / width;
-      const bucketX = Math.min(buckets.cols - 1, Math.floor(nx * buckets.cols));
-      const candidates = buckets.candidates[bucketY * buckets.cols + bucketX]!;
-      let bestIndex = candidates[0] ?? 0;
-      let bestDistance = Infinity;
-      for (const index of candidates) {
-        const province = plane.provinces[index]!;
-        let dx = Math.abs(nx - province.x);
-        let dy = Math.abs(ny - province.y);
-        if (plane.wrapX) dx = Math.min(dx, 1 - dx);
-        if (plane.wrapY) dy = Math.min(dy, 1 - dy);
-        const warped = pixelNoise(x >> 4, y >> 4, seedHash ^ index) * 0.000018;
-        const distance = dx * dx + dy * dy + warped;
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          bestIndex = index;
-        }
-      }
+      const bestIndex = ownerResolver.ownerAt(nx, ny);
       const pixel = y * width + x;
       const noise = pixelNoise(x >> 2, y >> 2, seedHash) * 0.32 + pixelNoise(x >> 5, y >> 5, seedHash ^ 0x9e3779b9) * 0.68;
       heights[pixel] = clamp(Math.round(baseHeights[bestIndex]! + noise * 180), -2000, 2000);
@@ -421,40 +405,6 @@ export async function encodeD6m(
   view.setInt32(totalBytes - 4, D6M_TRAILER, true);
   onProgress?.({ phase: "done", completedRows: height, totalRows: height });
   return new Uint8Array(buffer);
-}
-
-function buildSpatialBuckets(plane: Plane) {
-  const count = plane.provinces.length;
-  const aspect = plane.width / plane.height;
-  const cols = Math.max(2, Math.ceil(Math.sqrt(count * aspect)));
-  const rows = Math.max(2, Math.ceil(count / cols));
-  const raw = Array.from({ length: cols * rows }, () => [] as number[]);
-  plane.provinces.forEach((province, index) => {
-    const x = Math.min(cols - 1, Math.max(0, Math.floor(province.x * cols)));
-    const y = Math.min(rows - 1, Math.max(0, Math.floor(province.y * rows)));
-    raw[y * cols + x]!.push(index);
-  });
-  const candidates = Array.from({ length: cols * rows }, () => [] as number[]);
-  for (let y = 0; y < rows; y += 1) {
-    for (let x = 0; x < cols; x += 1) {
-      const found = new Set<number>();
-      for (let radius = 1; radius <= 3 && found.size < 3; radius += 1) {
-        for (let dy = -radius; dy <= radius; dy += 1) {
-          for (let dx = -radius; dx <= radius; dx += 1) {
-            let bx = x + dx;
-            let by = y + dy;
-            if (plane.wrapX) bx = (bx + cols) % cols;
-            if (plane.wrapY) by = (by + rows) % rows;
-            if (bx < 0 || bx >= cols || by < 0 || by >= rows) continue;
-            for (const index of raw[by * cols + bx]!) found.add(index);
-          }
-        }
-      }
-      if (!found.size) plane.provinces.forEach((_, index) => found.add(index));
-      candidates[y * cols + x] = [...found];
-    }
-  }
-  return { cols, rows, candidates };
 }
 
 export function inspectD6m(data: Uint8Array) {
@@ -499,6 +449,23 @@ export function validateProject(project: MapProject): ValidationIssue[] {
     const adjacency = adjacencyFor(plane);
     const reachable = shortestDistances(adjacency, plane.provinces[0]!.id);
     if (reachable.size !== plane.provinces.length) add("error", `${plane.name} is disconnected (${reachable.size}/${plane.provinces.length} provinces reachable).`, plane.id);
+    const topologyAudit = auditPlaneTopology(plane);
+    if (topologyAudit.missing.length) {
+      add(
+        "error",
+        `${plane.name} has ${topologyAudit.missing.length} shared province border${topologyAudit.missing.length === 1 ? "" : "s"} without a Dominions connection. Synchronize visible borders before export.`,
+        plane.id,
+        topologyAudit.missing[0]?.a,
+      );
+    }
+    if (topologyAudit.extra.length) {
+      add(
+        "error",
+        `${plane.name} has ${topologyAudit.extra.length} connection${topologyAudit.extra.length === 1 ? "" : "s"} between provinces that do not share a border. Synchronize visible borders before export.`,
+        plane.id,
+        topologyAudit.extra[0]?.a,
+      );
+    }
     const edgeKeys = new Set<string>();
     for (const edge of plane.edges) {
       if (!provinceIds.has(edge.a) || !provinceIds.has(edge.b)) add("error", "A connection references a missing province.", plane.id);
