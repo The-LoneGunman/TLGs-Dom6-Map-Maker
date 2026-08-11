@@ -38,6 +38,7 @@ yarn-error.log*
 /.wrangler/
 /outputs/
 /work/
+/tmp/
 
 # local Codex preview and TypeScript caches
 /.codex-dev.*.log

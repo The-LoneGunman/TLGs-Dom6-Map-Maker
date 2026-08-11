@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { isWaterTerrain, type Plane, type PreviewCondition, type Province, type TerrainKey } from "./domain";
+import {
+  effectiveProvinceTerrainFlags,
+  isWaterTerrain,
+  type Plane,
+  type PreviewCondition,
+  type Province,
+  type TerrainKey,
+} from "./domain";
 import { terrainPreviewKey } from "./dom6";
 import {
   computeProvinceTopology,
@@ -201,7 +208,7 @@ function paintPlane(
   for (const province of plane.provinces) {
     const cell = cellById.get(province.id);
     if (!cell?.polygons.length) continue;
-    const terrain = terrainPreviewKey(province.terrain, condition);
+    const terrain = terrainPreviewKey(visualTerrainKey(province), condition);
     const [primary, secondary] = colorsForCondition(TERRAIN_COLORS[terrain], condition);
     drawCellPath(context, cell.polygons, width, height);
     const gradient = context.createLinearGradient(province.x * width - width * 0.05, province.y * height - height * 0.05, province.x * width + width * 0.05, province.y * height + height * 0.05);
@@ -279,6 +286,14 @@ function drawTerrainMarks(
   height: number,
   condition: PreviewCondition,
 ) {
+  const flags = effectiveProvinceTerrainFlags(province);
+  const markKinds: Array<"forest" | "mountain" | "water" | "farm" | "waste"> = [];
+  if (flags.has("forest") || ["forest", "caveforest", "kelp"].includes(terrain)) markKinds.push("forest");
+  if (flags.has("highland") || flags.has("mountains") || ["highland", "mountains", "cavehighland"].includes(terrain)) markKinds.push("mountain");
+  if (flags.has("sea") || flags.has("freshwater") || flags.has("swamp") || isWaterTerrain(terrain) || terrain.includes("swamp")) markKinds.push("water");
+  if (flags.has("farm") || terrain === "farm") markKinds.push("farm");
+  if (flags.has("waste") || terrain.includes("waste")) markKinds.push("waste");
+  if (!markKinds.length) return;
   const radius = Math.max(2, Math.min(width, height) / 330);
   context.save();
   drawCellPath(context, polygons, width, height);
@@ -293,39 +308,69 @@ function drawTerrainMarks(
     context.strokeStyle = condition === "winter" ? "#f4f7ef" : "#172b25";
     context.fillStyle = condition === "winter" ? "#e7eee7" : "#1d352c";
     context.lineWidth = Math.max(0.65, radius * 0.18);
-    if (["forest", "caveforest", "kelp"].includes(terrain)) {
+    const mark = markKinds[index % markKinds.length]!;
+    if (mark === "forest") {
       context.beginPath();
       context.moveTo(x, y - radius);
       context.lineTo(x - radius * 0.68, y + radius * 0.55);
       context.lineTo(x + radius * 0.68, y + radius * 0.55);
       context.closePath();
       context.fill();
-    } else if (["highland", "mountains", "cavehighland"].includes(terrain)) {
+    } else if (mark === "mountain") {
       context.beginPath();
       context.moveTo(x - radius, y + radius * 0.7);
       context.lineTo(x, y - radius);
       context.lineTo(x + radius, y + radius * 0.7);
       context.stroke();
-    } else if (isWaterTerrain(terrain) || terrain === "freshwater" || terrain.includes("swamp")) {
+    } else if (mark === "water") {
+      if (condition !== "winter" && flags.has("freshwater") && !flags.has("sea")) {
+        context.globalAlpha = 0.42;
+        context.strokeStyle = "#63b5ce";
+      }
       context.beginPath();
       context.moveTo(x - radius, y);
       context.quadraticCurveTo(x - radius * 0.4, y - radius * 0.45, x, y);
       context.quadraticCurveTo(x + radius * 0.4, y + radius * 0.45, x + radius, y);
       context.stroke();
-    } else if (terrain === "farm") {
+    } else if (mark === "farm") {
       context.beginPath();
       context.moveTo(x - radius, y - radius);
       context.lineTo(x + radius, y + radius);
       context.moveTo(x, y - radius);
       context.lineTo(x + radius, y);
       context.stroke();
-    } else if (terrain.includes("waste")) {
+    } else if (mark === "waste") {
       context.beginPath();
       context.arc(x, y, radius * 0.52, 0, TAU);
       context.stroke();
     }
   }
   context.restore();
+}
+
+function visualTerrainKey(province: Province): TerrainKey {
+  const flags = effectiveProvinceTerrainFlags(province);
+  if (flags.has("cavewall")) return "cavewall";
+  if (flags.has("sea")) {
+    if (flags.has("deep")) return "deepsea";
+    if (flags.has("forest")) return "kelp";
+    return "sea";
+  }
+  if (flags.has("cave")) {
+    if (flags.has("forest")) return "caveforest";
+    if (flags.has("swamp")) return "caveswamp";
+    if (flags.has("waste")) return "cavewaste";
+    if (flags.has("mountains") || flags.has("highland")) return "cavehighland";
+    return "cave";
+  }
+  if (province.terrain !== "plains" && province.terrain !== "freshwater") return province.terrain;
+  if (flags.has("mountains")) return "mountains";
+  if (flags.has("highland")) return "highland";
+  if (flags.has("forest")) return "forest";
+  if (flags.has("swamp")) return "swamp";
+  if (flags.has("waste")) return "waste";
+  if (flags.has("farm")) return "farm";
+  return "plains";
 }
 
 function drawCellPath(context: CanvasRenderingContext2D, polygons: Point[][], width: number, height: number) {

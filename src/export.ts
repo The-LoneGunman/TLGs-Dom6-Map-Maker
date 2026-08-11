@@ -1,4 +1,4 @@
-import { sanitizeMapName, type MapProject } from "./domain";
+import { cloneProject, sanitizeMapName, type MapProject } from "./domain";
 import { calculateFairness } from "./generator";
 import {
   compileMapText,
@@ -111,7 +111,7 @@ export function parseProject(text: string): MapProject {
   const parsed = JSON.parse(text) as MapProject;
   if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.planes)) throw new Error("This is not a Pantokrator Atlas project.");
   if (parsed.schemaVersion !== 1) throw new Error(`Unsupported project schema ${String(parsed.schemaVersion)}.`);
-  return parsed;
+  return cloneProject(parsed);
 }
 
 export function estimatedPackageBytes(project: MapProject): number {
@@ -136,6 +136,11 @@ function supportFiles(project: MapProject): PackageFile[] {
     `  Throne access: ${fairness.throneAccess}`,
     `  Terrain variety: ${fairness.terrainVariety}`,
     `  Connectivity: ${fairness.connectivity}`,
+    `  Start degree parity: ${fairness.startDegree}`,
+    `  Requested start allocation: ${fairness.startAllocation}`,
+    "",
+    "PLANES",
+    ...project.planes.map((plane, index) => `  ${index + 1}. ${plane.name} — ${plane.kind}/${plane.variant ?? "default"}, ${plane.provinces.length} provinces, ${project.gates.filter((gate) => gate.endpoints.some((endpoint) => endpoint.planeId === plane.id)).length} gates`),
     "",
     "VALIDATION",
     ...issues.map((issue) => `[${issue.severity.toUpperCase()}] ${issue.message}`),
@@ -144,6 +149,7 @@ function supportFiles(project: MapProject): PackageFile[] {
     "Place this entire folder inside the Dominions 6 user data 'maps' directory.",
     "In Dominions 6, use Tools & Manuals > Open User Data Directory to locate it.",
     "The .d6m files let Dominions render winter and terrain transformations natively.",
+    `This package declares Dominions ${formatDomVersion(project.targetVersion)} or newer.`,
     "",
     "NOTE ABOUT PROVINCE DEFENSE",
     "Authored commander/unit groups are unique initial independent guardians.",
@@ -155,6 +161,8 @@ function supportFiles(project: MapProject): PackageFile[] {
     `Map file: ${sanitizeMapName(project.name)}.map`,
     `Recommended players: ${project.settings.players}`,
     `Recommended throne slots: ${project.settings.throneCount}`,
+    `Start mix: ${formatStartDistribution(project)}`,
+    `Minimum start connections: ${project.settings.startDegreeTarget ?? 4}`,
     project.victoryPoints ? `Ascension points: ${project.victoryPoints}` : "Ascension points: choose in the host setup",
     `Special starts: ${project.specificStarts.length ? "enable if using assigned nations" : "not required"}`,
     `Wrap: ${project.planes[0]?.wrapX ? "east/west" : "none"}${project.planes[0]?.wrapY ? " + north/south" : ""}`,
@@ -164,6 +172,21 @@ function supportFiles(project: MapProject): PackageFile[] {
     { name: "balance_report.txt", data: encoder.encode(report) },
     { name: "host_settings.txt", data: encoder.encode(host) },
   ];
+}
+
+function formatDomVersion(version: number): string {
+  const major = Math.floor(version / 100);
+  const minor = String(Math.max(0, version % 100)).padStart(2, "0");
+  return `${major}.${minor}`;
+}
+
+function formatStartDistribution(project: MapProject): string {
+  const distribution = project.settings.startDistribution;
+  if (!distribution) return `${project.settings.players} land`;
+  return (["land", "coastal", "water", "cave", "other"] as const)
+    .filter((type) => distribution[type] > 0)
+    .map((type) => `${distribution[type]} ${type}`)
+    .join(", ");
 }
 
 async function writeFile(directory: FileSystemDirectoryHandle, name: string, data: Uint8Array) {

@@ -21,6 +21,10 @@ test("server-renders the complete map workbench and social metadata", async () =
   assert.match(html, /Pantokrator Atlas/);
   assert.match(html, /DOMINIONS 6 MAP FORGE/);
   assert.match(html, /Generate balanced atlas/);
+  assert.match(html, /Start allocation/);
+  assert.match(html, /Land starts/);
+  assert.match(html, /Minimum useful connections at starts/);
+  assert.match(html, /Configure plane archetypes &amp; gates/);
   assert.match(html, /Install \/ export/);
   assert.match(html, /og\.png/);
   assert.doesNotMatch(html, /Your site is taking shape|react-loading-skeleton|codex-preview/i);

@@ -126,6 +126,14 @@ test("terrain masks preserve Dominions 6 high bits and transformations", () => {
   assert.equal(terrainPreviewKey("plains", "forested"), "forest");
   assert.equal(terrainPreviewKey("sea", "forested"), "kelp");
   assert.equal(terrainPreviewKey("cave", "flooded"), "caveswamp");
+
+  province.terrain = "forest";
+  province.terrainFlags = ["swamp", "freshwater"];
+  const combined = terrainMask(province);
+  assert.ok((combined & TERRAIN_BITS.forest) !== 0n);
+  assert.ok((combined & TERRAIN_BITS.swamp) !== 0n);
+  assert.ok((combined & TERRAIN_BITS.freshwater) !== 0n);
+  assert.equal((combined & TERRAIN_BITS.sea) !== 0n, false, "fresh water alone must remain land");
 });
 
 test("map compilation covers starts, thrones, sites, guardians, and correct wrap flags", () => {
@@ -135,18 +143,18 @@ test("map compilation covers starts, thrones, sites, guardians, and correct wrap
   plane.wrapY = false;
   const province = plane.provinces.find((item) => !item.start)!;
   province.throne = "fixed";
-  province.fixedThrone = "The Throne of Gaia";
-  province.sites.push({ id: "site-test", value: "The Enchanted Forest", known: false });
-  province.defenders.push({ commander: "Druid", magic: { nature: 2, holy: 1 }, squads: [{ id: "squad-test", unit: "Fir Bolg", count: 12 }] });
+  province.fixedThrone = "1361"; // The Throne of Gaia in the pinned 6.35 catalog.
+  province.sites.push({ id: "site-test", value: "1", known: false }); // The Smouldercone.
+  province.defenders.push({ commander: "2468", magic: { nature: 2, holy: 1 }, squads: [{ id: "squad-test", unit: "1756", count: 12 }] });
   const text = compileMapText(project, 0);
   const firstCommand = text.split(/\r?\n/).find((line) => line.startsWith("#"));
   assert.equal(firstCommand?.startsWith("#dom2title "), true);
   assert.match(text, /#hwraparound/);
   assert.doesNotMatch(text, /^#wraparound$/m);
-  assert.match(text, /#feature "The Throne of Gaia"/);
-  assert.match(text, /#feature "The Enchanted Forest"/);
-  assert.match(text, /#commander "Druid"/);
-  assert.match(text, /#units 12 "Fir Bolg"/);
+  assert.match(text, /#feature 1361/);
+  assert.match(text, /#feature 1/);
+  assert.match(text, /#commander 2468/);
+  assert.match(text, /#units 12 1756/);
   assert.match(text, /#mag_nature 2/);
   assert.match(text, /#mag_priest 1/);
 });
@@ -156,15 +164,21 @@ test("D6M encoder writes the official header, exact length, row-major owners, an
   const plane = project.planes[0]!;
   plane.width = 256;
   plane.height = 256;
+  const underwaterMountain = plane.provinces.find((province) => !province.start)!;
+  underwaterMountain.terrain = "mountains";
+  underwaterMountain.terrainFlags = ["sea"];
   const bytes = await encodeD6m(plane, "binary-fixture");
   const inspection = inspectD6m(bytes);
   assert.deepEqual(
-    { magic: inspection.magic, version: inspection.version, trailer: inspection.trailer, validLength: inspection.validLength },
-    { magic: D6M_MAGIC, version: D6M_VERSION, trailer: D6M_TRAILER, validLength: true },
+    { magic: inspection.magic, version: inspection.version, trailer: inspection.trailer, validLength: inspection.validLength, valid: inspection.valid },
+    { magic: D6M_MAGIC, version: D6M_VERSION, trailer: D6M_TRAILER, validLength: true, valid: true },
   );
   assert.equal(inspection.width, 256);
   assert.equal(inspection.height, 256);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const underwaterSpec = view.getBigInt64(34 + (underwaterMountain.index - 1) * 12 + 4, true);
+  assert.ok((underwaterSpec & TERRAIN_BITS.sea) !== 0n, "combined sea terrain must be present in the native D6M province spec");
+  assert.equal((underwaterSpec & TERRAIN_BITS.deep) !== 0n, false);
   const ownerOffset = 34 + plane.provinces.length * 12 + plane.width * plane.height * 2;
   for (const province of plane.provinces) {
     const x = Math.round(province.x * (plane.width - 1));
@@ -196,6 +210,15 @@ test("D6M encoder writes the official header, exact length, row-major owners, an
       assert.equal(count, 1, `Only a one-pixel Voronoi-vertex alias may lack a positive-length geometric border (${key})`);
     }
   }
+
+  const corrupted = bytes.slice();
+  const corruptedView = new DataView(corrupted.buffer, corrupted.byteOffset, corrupted.byteLength);
+  corruptedView.setBigInt64(16, 1n, true);
+  corruptedView.setInt16(ownerOffset, plane.provinces.length + 1, true);
+  const corruptedInspection = inspectD6m(corrupted);
+  assert.equal(corruptedInspection.validHeader, false);
+  assert.equal(corruptedInspection.validOwners, false);
+  assert.equal(corruptedInspection.valid, false);
 });
 
 test("all eight planes are generated, named contiguously, and gate-connected", () => {

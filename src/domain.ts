@@ -1,13 +1,56 @@
 export const MAX_PLANES = 8;
 export const SCHEMA_VERSION = 1;
 
-export type PlaneKind =
+export type PlaneArchetype =
   | "surface"
+  | "cave"
+  | "cavern"
+  | "cloud"
+  | "air"
   | "underworld"
+  | "hell"
   | "abyss"
   | "dream"
   | "elemental"
   | "custom";
+
+/** Kept as an alias so schema-v1 projects and existing callers stay valid. */
+export type PlaneKind = PlaneArchetype;
+
+export type PlaneVariant =
+  | "temperate"
+  | "wild"
+  | "frozen"
+  | "arid"
+  | "oceanic"
+  | "fungal"
+  | "crystal"
+  | "volcanic"
+  | "storm"
+  | "infernal"
+  | "void";
+
+export type StartType = "land" | "coastal" | "water" | "cave" | "other";
+
+export interface StartDistribution {
+  land: number;
+  coastal: number;
+  water: number;
+  cave: number;
+  other: number;
+}
+
+export interface PlaneConnectionRule {
+  /** Stable Plane.id values, not mutable display names or array indexes. */
+  a: string;
+  b: string;
+  pairs: number;
+  /** Missing means enabled for backward-compatible compact rule lists. */
+  enabled?: boolean;
+}
+
+export type GateDirection = "bidirectional" | "forward" | "reverse";
+export type GateLayout = "hub" | "chain" | "ring" | "compatible";
 
 export type TerrainKey =
   | "plains"
@@ -17,6 +60,7 @@ export type TerrainKey =
   | "waste"
   | "highland"
   | "mountains"
+  /** @deprecated Serialized schema-v1 value; cloneProject migrates it to plains + freshwater. */
   | "freshwater"
   | "sea"
   | "deepsea"
@@ -26,6 +70,20 @@ export type TerrainKey =
   | "caveswamp"
   | "cavewaste"
   | "cavehighland"
+  | "cavewall";
+
+/** Additive Dominions terrain bits layered over a province's visual primary. */
+export type TerrainFlag =
+  | "sea"
+  | "freshwater"
+  | "highland"
+  | "swamp"
+  | "waste"
+  | "forest"
+  | "farm"
+  | "deep"
+  | "cave"
+  | "mountains"
   | "cavewall";
 
 export type BiomeKey =
@@ -94,6 +152,7 @@ export interface DefenseSquad {
 
 export interface ProvinceDefense {
   commander: string;
+  clearMagic?: boolean;
   commanderName?: string;
   bodyguard?: string;
   bodyguardCount?: number;
@@ -121,7 +180,11 @@ export interface Province {
   gridY: number;
   name: string;
   biome: BiomeKey;
+  /** Generated/visual primary; terrainFlags can add any legal combination. */
   terrain: TerrainKey;
+  terrainFlags?: TerrainFlag[];
+  /** Auxiliary Dominions freshwater bit; does not make a province aquatic. */
+  freshwater?: boolean;
   small: boolean;
   large: boolean;
   noStart: boolean;
@@ -130,6 +193,7 @@ export interface Province {
   colder: boolean;
   siteBias: MagicPath[];
   start: boolean;
+  startType?: StartType;
   teamStart?: number;
   throne: "none" | "preferred" | "avoid" | "fixed";
   fixedThrone?: string;
@@ -152,11 +216,20 @@ export interface Plane {
   id: string;
   name: string;
   kind: PlaneKind;
+  variant?: PlaneVariant;
+  /** Whether provinceTarget follows players * provincesPerPlayer on generation. */
+  autoSize?: boolean;
   provinceTarget: number;
   width: number;
   height: number;
   wrapX: boolean;
   wrapY: boolean;
+  /** Optional per-plane overrides; missing inherits the project-level flag. */
+  mapNoHide?: boolean;
+  noDeepCaves?: boolean;
+  /** Dominions #maptextcol and #mapdomcol payloads, stored verbatim for export. */
+  mapTextColor?: string;
+  mapDominionColor?: string;
   provinces: Province[];
   edges: Edge[];
   rawDirectives: string;
@@ -170,6 +243,14 @@ export interface GateEndpoint {
 export interface GateLink {
   id: string;
   gateNumber: number;
+  /**
+   * Editor layout orientation only. Dominions matching #gate identifiers are
+   * bidirectional, so exporters must not interpret this as one-way movement.
+   * Missing in schema-v1 projects means bidirectional.
+   */
+  direction?: GateDirection;
+  /** True only when a cramped plane forced an endpoint into a start's one-ring. */
+  adjacentStartFallback?: boolean;
   endpoints: GateEndpoint[];
 }
 
@@ -191,6 +272,15 @@ export interface GenerationSettings {
   biomeCohesion: number;
   throneCount: number;
   siteFrequency?: number;
+  /** Missing in schema-v1 projects means every requested start is surface land. */
+  startDistribution?: StartDistribution;
+  /** Preferred traversable connection count at starts; defaults to four. */
+  startDegreeTarget?: number;
+  gateLayout?: GateLayout;
+  gateDirection?: GateDirection;
+  gatePairsPerConnection?: number;
+  /** Explicit pre-generation plane-pair graph; missing uses gateLayout. */
+  planeConnections?: PlaneConnectionRule[];
   resolution: "compact" | "2k" | "4k" | "square-max" | "custom";
 }
 
@@ -226,6 +316,8 @@ export interface FairnessMetrics {
   throneAccess: number;
   terrainVariety: number;
   connectivity: number;
+  startDegree: number;
+  startAllocation: number;
   notes: string[];
 }
 
@@ -245,7 +337,7 @@ export const TERRAIN_LABELS: Record<TerrainKey, string> = {
   waste: "Waste",
   highland: "Highlands",
   mountains: "Mountains",
-  freshwater: "Fresh water",
+  freshwater: "Fresh water (legacy marker)",
   sea: "Sea",
   deepsea: "Deep sea",
   kelp: "Kelp forest",
@@ -299,9 +391,9 @@ export function planeFileSuffix(index: number): string {
 export function sanitizeMapName(value: string): string {
   const cleaned = value
     .normalize("NFKD")
-    .replace(/[^a-zA-Z0-9_-]+/g, "_")
+    .replace(/[^a-zA-Z_]+/g, "_")
     .replace(/_+/g, "_")
-    .replace(/^[_-]+|[_-]+$/g, "")
+    .replace(/^_+|_+$/g, "")
     .slice(0, 64);
   return cleaned || "pantokrator_atlas";
 }
@@ -318,6 +410,78 @@ export function isBlockedTerrain(terrain: TerrainKey): boolean {
   return terrain === "cavewall";
 }
 
+export const TERRAIN_FLAGS: readonly TerrainFlag[] = [
+  "sea",
+  "freshwater",
+  "highland",
+  "swamp",
+  "waste",
+  "forest",
+  "farm",
+  "deep",
+  "cave",
+  "mountains",
+  "cavewall",
+];
+
+const TERRAIN_FLAG_SET = new Set<TerrainFlag>(TERRAIN_FLAGS);
+
+export function effectiveProvinceTerrainFlags(
+  province: Pick<Province, "terrain" | "terrainFlags" | "freshwater">,
+): ReadonlySet<TerrainFlag> {
+  const flags = new Set<TerrainFlag>();
+  switch (province.terrain) {
+    case "forest": flags.add("forest"); break;
+    case "farm": flags.add("farm"); break;
+    case "swamp": flags.add("swamp"); break;
+    case "waste": flags.add("waste"); break;
+    case "highland": flags.add("highland"); break;
+    case "mountains": flags.add("mountains"); break;
+    case "freshwater": flags.add("freshwater"); break;
+    case "sea": flags.add("sea"); break;
+    case "deepsea": flags.add("sea").add("deep"); break;
+    case "kelp": flags.add("sea").add("forest"); break;
+    case "cave": flags.add("cave"); break;
+    case "caveforest": flags.add("cave").add("forest"); break;
+    case "caveswamp": flags.add("cave").add("swamp"); break;
+    case "cavewaste": flags.add("cave").add("waste"); break;
+    case "cavehighland": flags.add("cave").add("highland"); break;
+    case "cavewall": flags.add("cavewall"); break;
+    default: break;
+  }
+  if (province.freshwater) flags.add("freshwater");
+  for (const flag of province.terrainFlags ?? []) if (TERRAIN_FLAG_SET.has(flag)) flags.add(flag);
+  return flags;
+}
+
+export function isWaterProvince(province: Pick<Province, "terrain" | "terrainFlags" | "freshwater">): boolean {
+  return effectiveProvinceTerrainFlags(province).has("sea");
+}
+
+export function isCaveProvince(province: Pick<Province, "terrain" | "terrainFlags" | "freshwater">): boolean {
+  const flags = effectiveProvinceTerrainFlags(province);
+  return flags.has("cave") || flags.has("cavewall");
+}
+
+export function isBlockedProvince(province: Pick<Province, "terrain" | "terrainFlags" | "freshwater">): boolean {
+  return effectiveProvinceTerrainFlags(province).has("cavewall");
+}
+
 export function cloneProject(project: MapProject): MapProject {
-  return JSON.parse(JSON.stringify(project)) as MapProject;
+  const clone = JSON.parse(JSON.stringify(project)) as MapProject;
+  for (const plane of clone.planes ?? []) {
+    for (const province of plane.provinces ?? []) {
+      province.terrainFlags = [...new Set((province.terrainFlags ?? []).filter((flag): flag is TerrainFlag => TERRAIN_FLAG_SET.has(flag as TerrainFlag)))];
+      if (!province.terrainFlags.length) province.terrainFlags = undefined;
+      if (province.terrain !== "freshwater") continue;
+      province.terrain = "plains";
+      province.freshwater = true;
+      if (province.biome === "archipelago" || province.biome === "deep_ocean") province.biome = "heartland";
+      province.poptype = undefined;
+      province.defenders = [];
+      if (province.startType === "water") province.startType = "land";
+      if (province.population === undefined) province.population = 8200;
+    }
+  }
+  return clone;
 }
