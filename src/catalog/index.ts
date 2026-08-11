@@ -10,6 +10,14 @@ import {
 
 export { BUILTIN_DOM6_CATALOG } from "./builtin";
 export { provinceSiteLocationMask, siteCompatibility, type SiteCompatibility } from "./compatibility";
+export {
+  NATION_RECRUITABLE_COMMANDER_TAG,
+  NATION_RECRUITABLE_TROOP_TAG,
+  ORDINARY_SITE_TAG,
+  commanderUnitEntries,
+  provinceSiteEntries,
+  troopUnitEntries,
+} from "./selection";
 export type { CatalogCollection, CatalogEntry, CatalogProvenance, Dom6CatalogBundle } from "./types";
 
 const COLLECTIONS: CatalogCollection[] = ["poptypes", "sites", "units", "nations", "forts", "planes", "siteTerrainTypes"];
@@ -79,7 +87,19 @@ export function mergeCatalogBundles(...bundles: Dom6CatalogBundle[]): Dom6Catalo
   for (const collection of COLLECTIONS) {
     const byId = new Map<number, CatalogEntry>();
     for (const bundle of available) {
-      for (const entry of bundle[collection]) byId.set(entry.id, entry);
+      for (const entry of bundle[collection]) {
+        const current = byId.get(entry.id);
+        if (collection === "sites" && current) {
+          const protectedTags = (current.tags ?? []).filter((tag) =>
+            tag === "throne" || tag.startsWith("throne-level-") || tag === "home-site" || tag === "nation-home-site");
+          byId.set(entry.id, protectedTags.length ? {
+            ...entry,
+            tags: [...new Set([...(entry.tags ?? []), ...protectedTags])],
+          } : entry);
+        } else {
+          byId.set(entry.id, entry);
+        }
+      }
     }
     merged[collection] = [...byId.values()].sort(compareCatalogEntries);
   }

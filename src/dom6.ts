@@ -18,8 +18,15 @@ import {
   type TerrainKey,
   type ValidationIssue,
 } from "./domain";
-import { adjacencyFor, provinceGlobalNumber, shortestDistances } from "./generator";
-import { auditPlaneTopology, createProvinceOwnerResolver } from "./geometry";
+import {
+  ISLAND_CHAIN_MIN_WATER_PERCENT,
+  adjacencyFor,
+  globalMovementAdjacency,
+  provinceGlobalNumber,
+  scaledStartSeparationTarget,
+  shortestDistances,
+} from "./generator";
+import { auditPlaneTopology, createProvinceOwnerResolver, resolvePlaneOwnershipMode } from "./geometry";
 import { BUILTIN_DOM6_CATALOG, findCatalogEntry, siteCompatibility } from "./catalog";
 
 export const D6M_MAGIC = 898933;
@@ -72,6 +79,15 @@ const SITE_PATH_BITS: Record<MagicPath, bigint> = {
   blood: TERRAIN_BITS.bloodSites,
   holy: TERRAIN_BITS.holySites,
 };
+
+const TERRAIN_KEY_SET = new Set<TerrainKey>([
+  "plains", "forest", "farm", "swamp", "waste", "highland", "mountains", "freshwater",
+  "sea", "deepsea", "kelp", "cave", "caveforest", "caveswamp", "cavewaste", "cavehighland", "cavewall",
+]);
+
+const EDGE_KIND_SET = new Set<EdgeKind>([
+  "standard", "mountain_border", "mountain_pass", "river", "bridge", "impassable", "road", "custom",
+]);
 
 export const ADVANCED_COMMANDS = [
   { command: "#dom2title", scope: "plane", description: "Required first command in every plane file" },
@@ -219,9 +235,11 @@ export function compileMapText(project: MapProject, planeIndex: number): string 
     if (project.noHomelandNames) lines.push("#nohomelandnames");
     if (project.noNameFilter) lines.push("#nonamefilter");
     if (project.victoryPoints !== undefined) lines.push(`#victorycondition 6 ${Math.max(1, Math.round(project.victoryPoints))}`);
-    for (const nation of uniqueNumbers(project.allowedPlayers)) lines.push(`#allowedplayer ${nation}`);
-    for (const player of project.computerPlayers) lines.push(`#computerplayer ${player.nation} ${player.difficulty}`);
-    for (const nation of uniqueNumbers(project.cannotWin)) lines.push(`#cannotwin ${nation}`);
+    for (const nation of uniquePlayerNationIds(project.allowedPlayers)) lines.push(`#allowedplayer ${nation}`);
+    for (const player of project.computerPlayers.filter((item) => isPlayerNationId(item.nation))) {
+      lines.push(`#computerplayer ${player.nation} ${player.difficulty}`);
+    }
+    for (const nation of uniquePlayerNationIds(project.cannotWin)) lines.push(`#cannotwin ${nation}`);
   }
 
   lines.push("", "-- Province names, terrain, starts, thrones, and gates");
@@ -245,6 +263,7 @@ export function compileMapText(project: MapProject, planeIndex: number): string 
 
   if (planeIndex === 0) {
     for (const start of project.specificStarts) {
+      if (!isPlayerNationId(start.nation)) continue;
       const global = provinceGlobalNumber(project, start.planeId, start.provinceId);
       if (global !== undefined) lines.push(`#specstart ${start.nation} ${global}`);
     }
@@ -374,7 +393,7 @@ export async function encodeD6m(
   view.setInt32(offset, width, true); offset += 4;
   view.setInt32(offset, height, true); offset += 4;
   view.setBigInt64(offset, 0n, true); offset += 8;
-  const minDistance = minimumCapitalDistance(plane) * Math.min(width, height);
+  const minDistance = minimumCapitalDistance(plane, width, height);
   const integerPart = Math.floor(minDistance);
   const decimalPart = Math.round((minDistance - integerPart) * 65535);
   view.setUint16(offset, decimalPart, true); offset += 2;
@@ -403,6 +422,11 @@ export async function encodeD6m(
       const nx = (x + 0.5) / width;
       const bestIndex = ownerResolver.ownerAt(nx, ny);
       const pixel = y * width + x;
+      if (bestIndex < 0) {
+        heights[pixel] = 0;
+        owners[pixel] = 0;
+        continue;
+      }
       const noise = pixelNoise(x >> 2, y >> 2, seedHash) * 0.32 + pixelNoise(x >> 5, y >> 5, seedHash ^ 0x9e3779b9) * 0.68;
       heights[pixel] = clamp(Math.round(baseHeights[bestIndex]! + noise * 180), -2000, 2000);
       owners[pixel] = bestIndex + 1;
@@ -412,6 +436,15 @@ export async function encodeD6m(
       await yieldToBrowser();
     }
   }
+  // Capital coordinates must always point at their own owner, even when a
+  // quantized pixel center lands just outside a very narrow analytic chamber.
+  plane.provinces.forEach((province, index) => {
+    const x = clamp(Math.round(province.x * (width - 1)), 0, width - 1);
+    const y = clamp(Math.round(province.y * (height - 1)), 0, height - 1);
+    const pixel = y * width + x;
+    owners[pixel] = index + 1;
+    heights[pixel] = clamp(baseHeights[index]!, -2000, 2000);
+  });
   view.setInt32(totalBytes - 4, D6M_TRAILER, true);
   onProgress?.({ phase: "done", completedRows: height, totalRows: height });
   return new Uint8Array(buffer);
@@ -436,6 +469,7 @@ export function inspectD6m(data: Uint8Array) {
   let validProvinceSpecs = validLength;
   let validHeights = validLength;
   let validOwners = validLength;
+  let noneOwnerPixels = 0;
   if (validLength) {
     let provinceOffset = 34;
     for (let index = 0; index < provinceCount; index += 1) {
@@ -456,6 +490,7 @@ export function inspectD6m(data: Uint8Array) {
       const owner = view.getInt16(ownerOffset + pixel * 2, true);
       if (elevation < -2000 || elevation > 2000) validHeights = false;
       if (owner < 0 || owner > provinceCount) validOwners = false;
+      if (owner === 0) noneOwnerPixels += 1;
     }
   }
   const validHeader = magic === D6M_MAGIC
@@ -480,6 +515,7 @@ export function inspectD6m(data: Uint8Array) {
     validProvinceSpecs,
     validHeights,
     validOwners,
+    noneOwnerPixels,
     validTrailer,
     valid: validLength && validHeader && validCenters && validProvinceSpecs && validHeights && validOwners && validTrailer,
   };
@@ -496,8 +532,27 @@ export function validateProject(project: MapProject): ValidationIssue[] {
   if (!integerInRange(project.settings.players, 2, 32)) add("error", "Player count must be a whole number from 2 to 32.");
   if (!integerInRange(project.settings.provincesPerPlayer, 8, 30)) add("error", "Provinces per player must be a whole number from 8 to 30.");
   if (!integerInRange(project.settings.waterPercent, 0, 60)) add("error", "Water percentage must be between 0 and 60.");
+  if (project.settings.oceanLayout !== undefined
+    && !["natural", "single_continent", "multiple_continents", "island_chains", "inland_sea"].includes(project.settings.oceanLayout)) {
+    add("error", "Overland ocean layout is not supported.");
+  }
+  if (project.settings.continentCount !== undefined && !integerInRange(project.settings.continentCount, 2, 6)) {
+    add("error", "Major continent count must be a whole number from 2 to 6.");
+  }
+  if (project.settings.oceanLayout === "island_chains" && project.settings.waterPercent < ISLAND_CHAIN_MIN_WATER_PERCENT) {
+    add("warning", `Island chains require at least ${ISLAND_CHAIN_MIN_WATER_PERCENT}% overland water; Generate uses and records that effective minimum instead of the lower requested quota.`);
+  }
+  if (project.settings.specialPlaneSizePercent !== undefined && !integerInRange(project.settings.specialPlaneSizePercent, 1, 500)) {
+    add("error", "Bonus-plane size must be a whole percentage from 1 to 500.");
+  }
   if (!integerInRange(project.settings.biomeCohesion, 0, 100)) add("error", "Biome cohesion must be between 0 and 100.");
   if (!integerInRange(project.settings.throneCount, 0, 64)) add("error", "Recommended throne count must be between 0 and 64.");
+  const provinceCount = project.planes.reduce((sum, plane) => sum + plane.provinces.length, 0);
+  const placedThroneCount = project.planes.reduce((sum, plane) => sum + plane.provinces.filter((province) =>
+    province.throne === "preferred" || province.throne === "fixed").length, 0);
+  if (provinceCount > 0 && placedThroneCount < project.settings.throneCount) {
+    add("warning", `Requested ${project.settings.throneCount} recommended throne locations, but only ${placedThroneCount} fit outside protected start and gate zones. Reduce the target or enlarge the atlas.`);
+  }
   if (!integerInRange(project.settings.startDegreeTarget ?? 4, 1, 8)) add("error", "Start connection target must be between 1 and 8.");
   if (project.settings.gatePairsPerConnection !== undefined && !integerInRange(project.settings.gatePairsPerConnection, 1, 3)) add("error", "Gate pairs per plane connection must be between 1 and 3.");
   if (project.settings.startDistribution) {
@@ -507,27 +562,85 @@ export function validateProject(project: MapProject): ValidationIssue[] {
       .every((type) => Number.isInteger(project.settings.startDistribution![type]) && project.settings.startDistribution![type] >= 0);
     if (!validSplit || startTotal !== project.settings.players) add("error", "Start-category counts must be non-negative whole numbers that add up to the player count.");
   }
+  const caveStartNations = project.settings.caveStartNations ?? [];
+  const uniqueCaveStartNations = new Set<number>();
+  for (const nation of caveStartNations) {
+    if (!isPlayerNationId(nation)) {
+      add("error", "Configured cave-start nations must be playable nation IDs of 5 or greater.");
+      continue;
+    }
+    if (uniqueCaveStartNations.has(nation)) {
+      add("warning", `Configured cave-start nation ${nation} is duplicated and will only be assigned once.`);
+      continue;
+    }
+    uniqueCaveStartNations.add(nation);
+    if (!findCatalogEntry(BUILTIN_DOM6_CATALOG.nations, nation)) {
+      add("warning", `Configured cave-start nation ${nation} is not in the bundled vanilla 6.35 catalog; it requires matching custom content.`);
+    }
+  }
+  const actualCaveStarts = project.planes.reduce((sum, plane) => sum + plane.provinces.filter((province) =>
+    province.start && !isWaterProvince(province) && (province.startType === "cave" || isCaveProvince(province))).length, 0);
+  if (uniqueCaveStartNations.size > actualCaveStarts) {
+    add("error", `${uniqueCaveStartNations.size} cave-start nations are configured, but only ${actualCaveStarts} generated cave starts exist. Adjust Cave starts and choose Generate.`);
+  }
   if (!Number.isInteger(project.targetVersion) || project.targetVersion < 600) add("error", "The minimum Dominions version must be an integer of 600 or newer.");
   if (!integerInRange(project.sailDistance, 1, 10)) add("error", "Sail distance must be between 1 and 10.");
   if (project.settings.siteFrequency !== undefined && !integerInRange(project.settings.siteFrequency, 0, 100)) add("error", "Magic-site frequency must be between 0 and 100.");
   if (project.victoryPoints !== undefined && (!Number.isInteger(project.victoryPoints) || project.victoryPoints < 1)) add("error", "Ascension points must be a positive integer.");
   for (const player of project.computerPlayers) {
-    if (!Number.isInteger(player.nation) || player.nation < 0 || !integerInRange(player.difficulty, 1, 5)) {
-      add("error", "Forced AI entries require a non-negative nation ID and difficulty from 1 to 5.");
-    } else if (isIndependentOwner(player.nation)) {
-      add("error", `Special independent ID ${player.nation} cannot be selected as a forced AI player.`);
+    if (!isPlayerNationId(player.nation) || !integerInRange(player.difficulty, 1, 5)) {
+      add("error", "Forced AI entries require a player nation ID of 5 or greater and difficulty from 1 to 5.");
     } else if (!findCatalogEntry(BUILTIN_DOM6_CATALOG.nations, player.nation)) {
       add("warning", `Forced AI nation ${player.nation} is not in the bundled vanilla 6.35 catalog; it requires matching custom content.`);
     }
   }
   for (const nation of [...project.allowedPlayers, ...project.cannotWin]) {
-    if (!Number.isInteger(nation) || nation < 0) add("error", "Allowed-player and cannot-win nation IDs must be non-negative integers.");
-    else if (isIndependentOwner(nation)) add("error", `Special independent ID ${nation} is an owner type, not a playable nation.`);
+    if (!isPlayerNationId(nation)) add("error", "Allowed-player and cannot-win entries require player nation IDs of 5 or greater.");
     else if (!findCatalogEntry(BUILTIN_DOM6_CATALOG.nations, nation)) add("warning", `Nation ${nation} is not in the bundled vanilla 6.35 catalog; it requires matching custom content.`);
   }
+  const allowedPlayerCount = uniquePlayerNationIds(project.allowedPlayers).length;
+  if (project.allowedPlayers.length && allowedPlayerCount < project.settings.players) {
+    add("error", `Only ${allowedPlayerCount} distinct allowed nation${allowedPlayerCount === 1 ? " is" : "s are"} available for ${project.settings.players} recommended players.`);
+  }
 
+  if (project.settings.oceanLayout === "multiple_continents") {
+    const overland = project.planes.find((plane) => (plane.kind === "surface" || plane.kind === "custom")
+      && resolvePlaneOwnershipMode(plane) === "solid" && plane.provinces.length > 0);
+    if (overland) {
+      const eligible = new Set(overland.provinces.filter((province) => !isWaterProvince(province) && !isBlockedProvince(province))
+        .map((province) => province.id));
+      const adjacency = adjacencyFor(overland, { traversableOnly: true });
+      let achieved = 0;
+      while (eligible.size) {
+        achieved += 1;
+        const queue = [eligible.values().next().value as string];
+        eligible.delete(queue[0]!);
+        for (let cursor = 0; cursor < queue.length; cursor += 1) {
+          for (const neighbour of adjacency.get(queue[cursor]!) ?? []) {
+            if (!eligible.delete(neighbour)) continue;
+            queue.push(neighbour);
+          }
+        }
+      }
+      const requested = project.settings.continentCount ?? 3;
+      if (achieved !== requested) {
+        add("warning", `Requested ${requested} major continents, but the current overland water quota and wrap topology sustain ${achieved}. Generate keeps the achieved movement components explicit; increase water or change wrapping to reach the requested count.`, overland.id);
+      }
+    }
+  }
+
+  const planeIds = new Set<string>();
   for (const plane of project.planes) {
+    if (!plane.id.trim()) add("error", `${plane.name} needs a stable internal plane ID.`);
+    else if (planeIds.has(plane.id)) add("error", `Plane ID ${plane.id} is duplicated; gates and cross-plane starts would be ambiguous.`, plane.id);
+    planeIds.add(plane.id);
     if (!integerInRange(plane.provinceTarget, 8, 800)) add("error", `${plane.name} province target must be between 8 and 800.`, plane.id);
+    if (plane.ownershipMode !== undefined && plane.ownershipMode !== "solid" && plane.ownershipMode !== "sparse") {
+      add("error", `${plane.name} ownership mode must be solid or sparse.`, plane.id);
+    }
+    if (plane.kind === "underworld" && plane.wrapX && plane.wrapY) {
+      add("warning", `${plane.name} wraps in both directions, so one River Styx band cannot form a true two-bank barrier across the torus. Disable at least one wrap axis and Generate again.`, plane.id);
+    }
     if (!Number.isInteger(plane.width) || !Number.isInteger(plane.height)) add("error", `${plane.name} dimensions must be whole pixels.`, plane.id);
     if (plane.width < 256 || plane.height < 256) add("error", `${plane.name} is below Dominions' 256×256 minimum.`, plane.id);
     if (plane.width > 32767 || plane.height > 32767) add("error", `${plane.name} exceeds signed-short D6M coordinates.`, plane.id);
@@ -549,6 +662,19 @@ export function validateProject(project: MapProject): ValidationIssue[] {
     if (provinceIds.size !== plane.provinces.length) add("error", `${plane.name} contains duplicate province IDs.`, plane.id);
     const indices = plane.provinces.map((province) => province.index).sort((a, b) => a - b);
     if (indices.some((value, index) => value !== index + 1)) add("error", `${plane.name} province numbers are not contiguous from 1.`, plane.id);
+    const capitalPixels = new Set<string>();
+    for (const province of plane.provinces) {
+      if (!Number.isFinite(province.x) || !Number.isFinite(province.y) || province.x < 0 || province.x > 1 || province.y < 0 || province.y > 1) {
+        add("error", `${province.name}: province-center coordinates must be finite values from 0 to 1.`, plane.id, province.id);
+        continue;
+      }
+      if (!Number.isInteger(plane.width) || !Number.isInteger(plane.height) || plane.width < 1 || plane.height < 1) continue;
+      const x = Math.round(province.x * (plane.width - 1));
+      const y = Math.round(province.y * (plane.height - 1));
+      const key = `${x}:${y}`;
+      if (capitalPixels.has(key)) add("error", `${plane.name} has multiple province centers on D6M pixel ${x},${y}.`, plane.id, province.id);
+      capitalPixels.add(key);
+    }
 
     const adjacency = adjacencyFor(plane);
     const protectedStartIds = new Set(plane.provinces
@@ -589,22 +715,39 @@ export function validateProject(project: MapProject): ValidationIssue[] {
       const key = [edge.a, edge.b].sort().join("|");
       if (edgeKeys.has(key)) add("warning", "A province connection is duplicated.", plane.id, edge.a);
       edgeKeys.add(key);
+      if (!EDGE_KIND_SET.has(edge.kind)) {
+        add("error", `A connection has unknown edge kind ${String(edge.kind)}.`, plane.id, edge.a);
+        continue;
+      }
       const special = edgeSpecial(edge);
       if (special < 0 || special > 255) add("error", "A special connection value must be between 0 and 255.", plane.id, edge.a);
     }
 
     for (const province of plane.provinces) {
+      if (!TERRAIN_KEY_SET.has(province.terrain)) add("error", `${province.name}: unknown terrain ${String(province.terrain)}.`, plane.id, province.id);
       const degree = adjacency.get(province.id)?.length ?? 0;
       if (province.start) {
         if (province.noStart) add("error", `${province.name} is marked both Start and No start.`, plane.id, province.id);
         if (isBlockedProvince(province)) add("error", `${province.name} is a start on blocked terrain.`, plane.id, province.id);
         const targetDegree = project.settings.startDegreeTarget ?? 4;
-        if (degree < targetDegree) add("error", `${province.name} is a start with ${degree} connections; the configured minimum is ${targetDegree}.`, plane.id, province.id);
+        const hardMinimumDegree = Math.min(targetDegree, 4);
+        if (degree < hardMinimumDegree) {
+          add("error", `${province.name} is a start with ${degree} connections; at least ${hardMinimumDegree} are required.`, plane.id, province.id);
+        } else if (degree < targetDegree) {
+          add("warning", `${province.name} achieved ${degree} connections; the requested ${targetDegree} is a best-effort preference above four.`, plane.id, province.id);
+        }
         const blockingEdges = plane.edges.filter((edge) => (edge.a === province.id || edge.b === province.id) && blocksReliableStartMovement(edge));
         if (blockingEdges.length) add("error", `${province.name} has ${blockingEdges.length} blocking or condition-dependent start border${blockingEdges.length === 1 ? "" : "s"}.`, plane.id, province.id);
         if (province.defenders.length) add("error", `${province.name} is a start with authored independent defenders; #land would erase its starting army.`, plane.id, province.id);
       }
       if (province.teamStart !== undefined && (!Number.isInteger(province.teamStart) || province.teamStart < 0)) add("error", `${province.name}: team-start group must be a non-negative integer smaller than the number of teams selected while hosting.`, plane.id, province.id);
+      if (province.teamStart !== undefined && (province.noStart || isBlockedProvince(province))) add("error", `${province.name}: a team start cannot use no-start or blocked terrain.`, plane.id, province.id);
+      if (province.owner !== undefined) {
+        if (!isValidOwner(province.owner)) add("error", `${province.name}: owner must be independent 0, 2, or 4, or a playable nation ID of 5 or greater.`, plane.id, province.id);
+        else if (isPlayerNationId(province.owner) && !findCatalogEntry(BUILTIN_DOM6_CATALOG.nations, province.owner)) {
+          add("warning", `${province.name}: owner nation ${province.owner} is not in the bundled vanilla 6.35 catalog; it requires matching custom content.`, plane.id, province.id);
+        }
+      }
       if (province.population !== undefined && !integerInRange(province.population, 0, 50000)) add("error", `${province.name}: population must be between 0 and 50000.`, plane.id, province.id);
       if (province.unrest !== undefined && !integerInRange(province.unrest, 0, 500)) add("error", `${province.name}: unrest must be between 0 and 500.`, plane.id, province.id);
       if (province.provinceDefense !== undefined && !integerInRange(province.provinceDefense, 0, 125)) add("error", `${province.name}: owned province defence must be between 0 and 125.`, plane.id, province.id);
@@ -688,16 +831,95 @@ export function validateProject(project: MapProject): ValidationIssue[] {
     }
   }
 
-  const starts = project.planes.flatMap((plane) => plane.provinces.filter((province) => province.start).map((province) => ({ plane, province })));
-  if (starts.length < project.settings.players) add("error", `Only ${starts.length} starts exist across all planes for ${project.settings.players} players.`);
-  if (starts.length > project.settings.players) add("info", `The atlas has ${starts.length} generic starts for ${project.settings.players} players.`);
+  const genericStarts = project.planes.flatMap((plane) => plane.provinces.filter((province) => province.start).map((province) => ({ plane, province })));
+  const startLocations = new Map<string, { plane: Plane; province: Province }>();
+  for (const plane of project.planes) {
+    for (const province of plane.provinces) {
+      if (province.start || province.teamStart !== undefined) startLocations.set(`${plane.id}:${province.id}`, { plane, province });
+    }
+  }
+  for (const start of project.specificStarts) {
+    const plane = project.planes.find((item) => item.id === start.planeId);
+    const province = plane?.provinces.find((item) => item.id === start.provinceId);
+    if (plane && province) startLocations.set(`${plane.id}:${province.id}`, { plane, province });
+  }
+  const starts = [...startLocations.values()];
+  if (starts.length < project.settings.players) add("error", `Only ${starts.length} distinct start locations exist across all planes for ${project.settings.players} players.`);
+  if (starts.length > project.settings.players) add("info", `The atlas has ${starts.length} distinct start locations for ${project.settings.players} players.`);
   if (starts.length > 1) {
     const degrees = starts.map(({ plane, province }) => adjacencyFor(plane).get(province.id)?.length ?? 0);
     if (Math.min(...degrees) !== Math.max(...degrees)) add("warning", `Start connection counts across the atlas vary from ${Math.min(...degrees)} to ${Math.max(...degrees)}.`);
+    const movement = globalMovementAdjacency(project);
+    const globalKey = (planeId: string, provinceId: string) => `${planeId}:${provinceId}`;
+    const distances = new Map(starts.map(({ plane, province }) => {
+      const key = globalKey(plane.id, province.id);
+      return [key, shortestDistances(movement, key)];
+    }));
+    for (let left = 0; left < starts.length; left += 1) {
+      const a = starts[left]!;
+      const fromA = distances.get(globalKey(a.plane.id, a.province.id))!;
+      for (let right = left + 1; right < starts.length; right += 1) {
+        const b = starts[right]!;
+        const distance = fromA.get(globalKey(b.plane.id, b.province.id));
+        if (distance === undefined || distance >= 3) continue;
+        const aLabel = `${a.province.name} (${a.plane.name})`;
+        const bLabel = `${b.province.name} (${b.plane.name})`;
+        add(
+          "error",
+          `${aLabel} and ${bLabel} are only ${distance} movement connection${distance === 1 ? "" : "s"} apart; distinct multiplayer starts require at least 3.`,
+          a.plane.id,
+          a.province.id,
+        );
+      }
+    }
+    const preferredByStart = new Map<string, number>();
+    for (const plane of project.planes) {
+      const local = adjacencyFor(plane, { traversableOnly: true });
+      const startKeysOnPlane = new Set(starts.filter((start) => start.plane.id === plane.id)
+        .map((start) => start.province.id));
+      const visited = new Set<string>();
+      for (const province of plane.provinces) {
+        if (visited.has(province.id) || isBlockedProvince(province)) continue;
+        const component = [...shortestDistances(local, province.id).keys()].filter((id) => {
+          const resolved = plane.provinces.find((item) => item.id === id);
+          return resolved ? !isBlockedProvince(resolved) : false;
+        });
+        for (const id of component) visited.add(id);
+        const componentStarts = component.filter((id) => startKeysOnPlane.has(id));
+        if (!componentStarts.length) continue;
+        const target = scaledStartSeparationTarget(component.length, componentStarts.length);
+        for (const id of componentStarts) preferredByStart.set(globalKey(plane.id, id), target);
+      }
+    }
+    const nearestByStart = starts.map(({ plane, province }) => {
+      const key = globalKey(plane.id, province.id);
+      const fromStart = distances.get(key)!;
+      const nearest = starts.filter((other) => globalKey(other.plane.id, other.province.id) !== key)
+        .map((other) => fromStart.get(globalKey(other.plane.id, other.province.id)))
+        .filter((distance): distance is number => distance !== undefined)
+        .reduce((minimum, distance) => Math.min(minimum, distance), Infinity);
+      return { plane, province, nearest, target: preferredByStart.get(key) ?? 3 };
+    }).filter((item) => Number.isFinite(item.nearest));
+    const belowScale = nearestByStart.filter((item) => item.nearest < item.target && item.nearest >= 3);
+    if (belowScale.length) {
+      const achieved = Math.min(...belowScale.map((item) => item.nearest));
+      const requestedTarget = Math.max(...belowScale.map((item) => item.target));
+      add(
+        "warning",
+        `Scale-aware start spacing reaches ${achieved} moves, below the preferred ${requestedTarget} for this map's traversable provinces per start; generation keeps the hard 3-move floor when the larger target is infeasible.`,
+        belowScale[0]!.plane.id,
+        belowScale[0]!.province.id,
+      );
+    }
+    if (nearestByStart.length > 1) {
+      const finiteNearest = nearestByStart.map((item) => item.nearest);
+      const nearestSpread = Math.max(...finiteNearest) - Math.min(...finiteNearest);
+      if (nearestSpread > 1) add("warning", `Nearest-hostile start distances vary by ${nearestSpread} moves; prefer a spread of at most 1 when editing or regenerating capitals.`);
+    }
   }
   if (project.settings.startDistribution) {
     const actual = { land: 0, coastal: 0, water: 0, cave: 0, other: 0 };
-    for (const { plane, province } of starts) actual[classifyStart(plane, province)] += 1;
+    for (const { plane, province } of genericStarts) actual[classifyStart(plane, province)] += 1;
     for (const type of ["land", "coastal", "water", "cave", "other"] as const) {
       const requested = project.settings.startDistribution[type];
       if (actual[type] !== requested) add("error", `Requested ${requested} ${type} start${requested === 1 ? "" : "s"}, but generated ${actual[type]}.`);
@@ -707,17 +929,50 @@ export function validateProject(project: MapProject): ValidationIssue[] {
   const specificNations = new Set<number>();
   const specificProvinces = new Set<string>();
   for (const start of project.specificStarts) {
-    if (!Number.isInteger(start.nation) || start.nation < 0) add("error", "A nation-specific start has an invalid nation ID.");
-    else if (isIndependentOwner(start.nation)) add("error", `Special independent ID ${start.nation} cannot receive a nation-specific player start.`);
+    if (!isPlayerNationId(start.nation)) add("error", "A nation-specific start requires a player nation ID of 5 or greater.");
     else if (!findCatalogEntry(BUILTIN_DOM6_CATALOG.nations, start.nation)) add("warning", `Nation-specific start ${start.nation} is not in the bundled vanilla 6.35 catalog; it requires matching custom content.`);
     const plane = project.planes.find((item) => item.id === start.planeId);
     const province = plane?.provinces.find((item) => item.id === start.provinceId);
     if (!plane || !province) add("error", `Nation-specific start for nation ${start.nation} references a missing province.`);
+    else if (province.noStart || isBlockedProvince(province)) add("error", `${province.name}: a nation-specific start cannot use no-start or blocked terrain.`, plane.id, province.id);
     if (specificNations.has(start.nation)) add("error", `Nation ${start.nation} has more than one nation-specific start.`);
     specificNations.add(start.nation);
     const provinceKey = `${start.planeId}:${start.provinceId}`;
-    if (specificProvinces.has(provinceKey)) add("warning", `${province?.name ?? "A province"} is assigned to more than one nation-specific start.`, plane?.id, province?.id);
+    if (specificProvinces.has(provinceKey)) add("error", `${province?.name ?? "A province"} is assigned to more than one nation-specific start.`, plane?.id, province?.id);
     specificProvinces.add(provinceKey);
+  }
+
+  const configuredCaveProvinceKeys = new Set<string>();
+  for (const nation of uniqueCaveStartNations) {
+    const assignments = project.specificStarts.filter((start) => start.nation === nation);
+    if (assignments.length === 0) {
+      add("error", `Configured cave-start nation ${nation} has no current #specstart cave capital. Choose Generate to create its assignment.`);
+      continue;
+    }
+    if (assignments.length !== 1) {
+      add("error", `Configured cave-start nation ${nation} has ${assignments.length} #specstart assignments; exactly one distinct generated cave start is required.`);
+      continue;
+    }
+    const assignment = assignments[0]!;
+    const plane = project.planes.find((item) => item.id === assignment.planeId);
+    const province = plane?.provinces.find((item) => item.id === assignment.provinceId);
+    if (!plane || !province) continue;
+    if (!province.start || classifyStart(plane, province) !== "cave") {
+      const provenance = assignment.source === "generated-cave" ? "Generated" : "Manual";
+      add(
+        "error",
+        `${provenance} #specstart for configured cave-start nation ${nation} is preserved, but ${province.name} is not an actual generated cave start. Move the manual assignment to a cave start or remove the conflict and choose Generate.`,
+        plane.id,
+        province.id,
+      );
+      continue;
+    }
+    const provinceKey = `${assignment.planeId}:${assignment.provinceId}`;
+    if (configuredCaveProvinceKeys.has(provinceKey)) {
+      add("error", `Configured cave-start nation ${nation} shares ${province.name}; every configured nation needs a distinct generated cave start.`, plane.id, province.id);
+      continue;
+    }
+    configuredCaveProvinceKeys.add(provinceKey);
   }
 
   const gateNumbers = new Set<number>();
@@ -728,11 +983,17 @@ export function validateProject(project: MapProject): ValidationIssue[] {
     if (gate.endpoints.length < 2) add("error", `Gate ${gate.gateNumber} has fewer than two endpoints.`);
     const endpointKeys = new Set(gate.endpoints.map((endpoint) => `${endpoint.planeId}:${endpoint.provinceId}`));
     if (endpointKeys.size !== gate.endpoints.length) add("error", `Gate ${gate.gateNumber} repeats an endpoint.`);
+    const resolvedEndpoints: Array<{ plane: Plane; province: Province }> = [];
     for (const endpoint of gate.endpoints) {
       const plane = project.planes.find((item) => item.id === endpoint.planeId);
       const province = plane?.provinces.find((item) => item.id === endpoint.provinceId);
       if (!plane || !province) add("error", `Gate ${gate.gateNumber} references a missing province.`);
       if (!plane || !province) continue;
+      resolvedEndpoints.push({ plane, province });
+      if (isBlockedProvince(province)) {
+        add("error", `Gate ${gate.gateNumber} endpoint ${province.name} is on blocked terrain.`, plane.id, province.id);
+        continue;
+      }
       const protectedStarts = new Set(plane.provinces
         .filter((item) => item.start || item.teamStart !== undefined || project.specificStarts.some((start) => start.planeId === plane.id && start.provinceId === item.id))
         .map((item) => item.id));
@@ -746,6 +1007,19 @@ export function validateProject(project: MapProject): ValidationIssue[] {
         add("warning", `Gate ${gate.gateNumber} in ${province.name} is adjacent to start province ${startName}; prefer an endpoint at least two connections away.`, plane.id, province.id);
       }
     }
+    for (let left = 0; left < resolvedEndpoints.length; left += 1) {
+      for (let right = left + 1; right < resolvedEndpoints.length; right += 1) {
+        const a = resolvedEndpoints[left]!;
+        const b = resolvedEndpoints[right]!;
+        const aSurface = (a.plane.kind === "surface" || a.plane.kind === "custom") && resolvePlaneOwnershipMode(a.plane) === "solid";
+        const bSurface = (b.plane.kind === "surface" || b.plane.kind === "custom") && resolvePlaneOwnershipMode(b.plane) === "solid";
+        const aSubterranean = a.plane.kind === "cave" || a.plane.kind === "cavern" || a.plane.kind === "underworld";
+        const bSubterranean = b.plane.kind === "cave" || b.plane.kind === "cavern" || b.plane.kind === "underworld";
+        if (!((aSurface && bSubterranean) || (bSurface && aSubterranean))) continue;
+        if (isWaterProvince(a.province) === isWaterProvince(b.province)) continue;
+        add("error", `Gate ${gate.gateNumber} mixes a dry endpoint with an aquatic surface-to-subterranean endpoint; move both ends to matching water status or regenerate the link.`);
+      }
+    }
   }
   if (project.planes.length > 1) {
     const connectedPlanes = new Set<string>([project.planes[0]!.id]);
@@ -753,8 +1027,13 @@ export function validateProject(project: MapProject): ValidationIssue[] {
     while (changed) {
       changed = false;
       for (const gate of project.gates) {
-        if (!gate.endpoints.some((endpoint) => connectedPlanes.has(endpoint.planeId))) continue;
-        for (const endpoint of gate.endpoints) {
+        const validEndpoints = gate.endpoints.filter((endpoint) => {
+          const plane = project.planes.find((item) => item.id === endpoint.planeId);
+          const province = plane?.provinces.find((item) => item.id === endpoint.provinceId);
+          return !!plane && !!province && !isBlockedProvince(province);
+        });
+        if (!validEndpoints.some((endpoint) => connectedPlanes.has(endpoint.planeId))) continue;
+        for (const endpoint of validEndpoints) {
           if (!connectedPlanes.has(endpoint.planeId)) {
             connectedPlanes.add(endpoint.planeId);
             changed = true;
@@ -782,17 +1061,21 @@ export function terrainPreviewKey(terrain: TerrainKey, condition: string): Terra
   return terrain;
 }
 
-function minimumCapitalDistance(plane: Plane): number {
+function minimumCapitalDistance(plane: Plane, width: number, height: number): number {
   if (plane.provinces.length < 2) return 0;
+  const centers = plane.provinces.map((province) => ({
+    x: clamp(Math.round(province.x * (width - 1)), 0, width - 1),
+    y: clamp(Math.round(province.y * (height - 1)), 0, height - 1),
+  }));
   let minimum = Infinity;
-  for (let i = 0; i < plane.provinces.length; i += 1) {
-    for (let j = i + 1; j < plane.provinces.length; j += 1) {
-      const a = plane.provinces[i]!;
-      const b = plane.provinces[j]!;
+  for (let i = 0; i < centers.length; i += 1) {
+    for (let j = i + 1; j < centers.length; j += 1) {
+      const a = centers[i]!;
+      const b = centers[j]!;
       let dx = Math.abs(a.x - b.x);
       let dy = Math.abs(a.y - b.y);
-      if (plane.wrapX) dx = Math.min(dx, 1 - dx);
-      if (plane.wrapY) dy = Math.min(dy, 1 - dy);
+      if (plane.wrapX) dx = Math.min(dx, width - dx);
+      if (plane.wrapY) dy = Math.min(dy, height - dy);
       minimum = Math.min(minimum, Math.hypot(dx, dy));
     }
   }
@@ -893,8 +1176,8 @@ function appendRaw(lines: string[], raw: string) {
   if (clean.length) lines.push(...clean);
 }
 
-function uniqueNumbers(values: number[]): number[] {
-  return [...new Set(values.map((value) => Math.round(value)).filter((value) => Number.isFinite(value)))];
+function uniquePlayerNationIds(values: number[]): number[] {
+  return [...new Set(values.filter(isPlayerNationId))];
 }
 
 function integerInRange(value: number, minimum: number, maximum: number): boolean {
@@ -903,6 +1186,14 @@ function integerInRange(value: number, minimum: number, maximum: number): boolea
 
 function isIndependentOwner(nation: number): boolean {
   return nation === 0 || nation === 2 || nation === 4;
+}
+
+function isValidOwner(nation: number): boolean {
+  return Number.isSafeInteger(nation) && (isIndependentOwner(nation) || nation >= 5);
+}
+
+function isPlayerNationId(nation: number): boolean {
+  return Number.isSafeInteger(nation) && nation >= 5;
 }
 
 function validBattleColor(value: string): boolean {

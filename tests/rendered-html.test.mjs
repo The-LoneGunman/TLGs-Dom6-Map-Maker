@@ -23,8 +23,15 @@ test("server-renders the complete map workbench and social metadata", async () =
   assert.match(html, /Generate balanced atlas/);
   assert.match(html, /Start allocation/);
   assert.match(html, /Land starts/);
-  assert.match(html, /Minimum useful connections at starts/);
-  assert.match(html, /Configure plane archetypes &amp; gates/);
+  assert.match(html, /Deterministic cave-start nations/);
+  assert.match(html, /Dominions native cave preference/);
+  assert.match(html, /Target useful connections at starts/);
+  assert.match(html, /Four useful connections is the recommended multiplayer baseline/);
+  assert.match(html, /Lower cohesion creates more local variation and patchwork/);
+  assert.match(html, /<button[^>]*type="button"[^>]*>Reroll generated names \(preserve manual\)<\/button>/i);
+  assert.match(html, /<button[^>]*type="button"[^>]*>Replace every province name…<\/button>/i);
+  assert.match(html, /Names edited in the province inspector are marked manual/);
+  assert.match(html, /Configure plane archetypes &amp; selected links/);
   assert.match(html, /Install \/ export/);
   assert.match(html, /og\.png/);
   assert.doesNotMatch(html, /Your site is taking shape|react-loading-skeleton|codex-preview/i);
@@ -33,7 +40,7 @@ test("server-renders the complete map workbench and social metadata", async () =
 test("ships a local-first editor without database-backed page dependencies", async () => {
   const response = await render();
   const html = await response.text();
-  assert.match(html, /Local autosave/);
+  assert.match(html, /Loading autosave/);
   assert.match(html, /Condition preview/);
   assert.match(html, /Province inspector/i);
   assert.match(html, /Fairness/);

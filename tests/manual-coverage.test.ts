@@ -108,6 +108,16 @@ test("validation exposes gates and thrones placed in a start exclusion zone", ()
   assert.ok(issues.some((issue) => issue.message.includes("throne location adjacent to start province")));
 });
 
+test("validation reports when protected zones prevent the requested throne count", () => {
+  const project = createDefaultProject("manual-throne-shortfall");
+  const placed = project.planes.flatMap((plane) => plane.provinces)
+    .filter((province) => province.throne === "preferred" || province.throne === "fixed").length;
+  project.settings.throneCount = placed + 1;
+
+  assert.ok(validateProject(project).some((issue) => issue.severity === "warning"
+    && issue.message.includes(`Requested ${placed + 1} recommended throne locations, but only ${placed} fit`)));
+});
+
 test("project import migrates legacy exclusive freshwater safely", () => {
   const project = createDefaultProject("manual-freshwater-import");
   const province = project.planes[0]!.provinces.find((item) => !item.start)!;
@@ -118,4 +128,114 @@ test("project import migrates legacy exclusive freshwater safely", () => {
   assert.equal(migrated.terrain, "plains");
   assert.equal(migrated.freshwater, true);
   assert.equal(migrated.startType, "land");
+});
+
+test("validation counts distinct generic, team, and nation-specific start locations", () => {
+  const project = createDefaultProject("manual-start-union");
+  project.settings.players = 2;
+  project.settings.startDistribution = undefined;
+  for (const plane of project.planes) {
+    for (const province of plane.provinces) {
+      province.start = false;
+      province.startType = undefined;
+    }
+  }
+  const candidates = project.planes[0]!.provinces.filter((province) => !province.noStart).slice(0, 2);
+  assert.equal(candidates.length, 2);
+  candidates[0]!.teamStart = 0;
+  project.specificStarts = [{ nation: 5, planeId: project.planes[0]!.id, provinceId: candidates[1]!.id }];
+  assert.equal(validateProject(project).some((issue) => issue.message.includes("distinct start locations")), false);
+
+  project.specificStarts.push({ nation: 6, planeId: project.planes[0]!.id, provinceId: candidates[1]!.id });
+  assert.ok(validateProject(project).some((issue) => issue.severity === "error" && issue.message.includes("more than one nation-specific start")));
+});
+
+test("validation rejects blocked gates and ignores them for plane connectivity", () => {
+  const project = addPlane(createDefaultProject("manual-blocked-gate"), "cave");
+  const main = project.planes[0]!;
+  const other = project.planes[1]!;
+  const blocked = main.provinces.find((province) => !province.start && province.throne === "none")!;
+  const destination = other.provinces.find((province) => !province.start && province.throne === "none" && province.terrain !== "cavewall")!;
+  blocked.terrain = "cavewall";
+  blocked.noStart = true;
+  project.gates = [{
+    id: "blocked-gate",
+    gateNumber: 77,
+    endpoints: [
+      { planeId: main.id, provinceId: blocked.id },
+      { planeId: other.id, provinceId: destination.id },
+    ],
+  }];
+  const issues = validateProject(project);
+  assert.ok(issues.some((issue) => issue.severity === "error" && issue.message.includes("endpoint") && issue.message.includes("blocked terrain")));
+  assert.ok(issues.some((issue) => issue.severity === "error" && issue.message.includes(`${other.name} is not linked`)));
+});
+
+test("validation hardens imported runtime IDs, enums, coordinates, owners, and allowed-player capacity", () => {
+  const project = addPlane(createDefaultProject("manual-import-hardening"), "cave");
+  project.settings.players = 3;
+  project.allowedPlayers = [5, 5];
+  project.planes[1]!.id = project.planes[0]!.id;
+  project.planes[0]!.provinces[0]!.x = 2;
+  project.planes[0]!.provinces[0]!.terrain = "bogus" as never;
+  project.planes[0]!.provinces[0]!.owner = 3;
+  project.planes[0]!.edges[0]!.kind = "bogus" as never;
+  const messages = validateProject(project).filter((issue) => issue.severity === "error").map((issue) => issue.message);
+  assert.ok(messages.some((message) => message.includes("distinct allowed nation")));
+  assert.ok(messages.some((message) => message.includes("Plane ID") && message.includes("duplicated")));
+  assert.ok(messages.some((message) => message.includes("province-center coordinates")));
+  assert.ok(messages.some((message) => message.includes("unknown terrain")));
+  assert.ok(messages.some((message) => message.includes("owner must be independent")));
+  assert.ok(messages.some((message) => message.includes("unknown edge kind")));
+});
+
+test("start degrees above four are best-effort while four remains the hard floor", () => {
+  const project = createDefaultProject("manual-start-degree-preference");
+  project.settings.startDegreeTarget = 8;
+  const start = project.planes[0]!.provinces.find((province) => province.start)!;
+  const degree = adjacencyFor(project.planes[0]!).get(start.id)!.length;
+  assert.ok(degree >= 4 && degree < 8);
+  const issues = validateProject(project);
+  assert.equal(issues.some((issue) => issue.severity === "error" && issue.provinceId === start.id && issue.message.includes("connections")), false);
+  assert.ok(issues.some((issue) => issue.severity === "warning" && issue.provinceId === start.id && issue.message.includes("best-effort")));
+
+  const plane = project.planes[0]!;
+  plane.edges = plane.edges.filter((edge) => edge.a !== start.id && edge.b !== start.id).slice();
+  for (const neighbour of plane.provinces.filter((province) => province.id !== start.id).slice(0, 3)) {
+    plane.edges.push({ id: `low-degree-${neighbour.id}`, a: start.id, b: neighbour.id, kind: "standard" });
+  }
+  assert.ok(validateProject(project).some((issue) => issue.severity === "error" && issue.provinceId === start.id && issue.message.includes("at least 4")));
+});
+
+test("custom neighbourspec bit 4 is impassable for connectivity validation", () => {
+  const project = createDefaultProject("manual-custom-impassable");
+  project.settings.players = 2;
+  project.settings.startDegreeTarget = 2;
+  project.settings.startDistribution = { land: 0, coastal: 0, water: 0, cave: 2, other: 0 };
+  const plane = project.planes[0]!;
+  plane.kind = "cave";
+  plane.ownershipMode = "sparse";
+  plane.provinces = plane.provinces.slice(0, 8).map((province, index) => ({
+    ...province,
+    id: `custom-impassable-province-${index}`,
+    index: index + 1,
+    x: 0.08 + index * 0.12,
+    y: 0.5,
+    terrain: "cave",
+    start: index === 2 || index === 6,
+    startType: index === 2 || index === 6 ? "cave" : undefined,
+    noStart: false,
+    defenders: [],
+  }));
+  plane.edges = plane.provinces.slice(1).map((province, index) => ({
+    id: `custom-impassable-edge-${index}`,
+    a: plane.provinces[index]!.id,
+    b: province.id,
+    kind: index === 0 ? "custom" : "standard",
+    special: index === 0 ? 4 : undefined,
+  }));
+
+  const issues = validateProject(project);
+  assert.ok(issues.some((issue) => issue.severity === "error" && issue.message.includes("disconnected for normal movement")));
+  assert.equal(adjacencyFor(plane, { traversableOnly: true }).get(plane.provinces[0]!.id)!.length, 0);
 });

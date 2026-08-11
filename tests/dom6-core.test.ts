@@ -221,6 +221,49 @@ test("D6M encoder writes the official header, exact length, row-major owners, an
   assert.equal(corruptedInspection.valid, false);
 });
 
+test("D6M minimum-capital distance uses exact stored pixels and enabled wrap seams", async () => {
+  const project = createDefaultProject("binary-mindist");
+  const plane = project.planes[0]!;
+  plane.width = 384;
+  plane.height = 256;
+  plane.wrapX = false;
+  plane.wrapY = false;
+  plane.provinces = plane.provinces.slice(0, 2).map((province, index) => ({
+    ...province,
+    id: `mindist-${index + 1}`,
+    index: index + 1,
+    x: index ? 0.2 : 0.1,
+    y: 0.5,
+  }));
+  plane.edges = [{ id: "mindist-edge", a: plane.provinces[0]!.id, b: plane.provinces[1]!.id, kind: "standard" }];
+
+  const inspectDistance = async () => {
+    const bytes = await encodeD6m(plane, "binary-mindist");
+    const inspection = inspectD6m(bytes);
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const first = { x: view.getInt16(34, true), y: view.getInt16(36, true) };
+    const second = { x: view.getInt16(46, true), y: view.getInt16(48, true) };
+    let dx = Math.abs(first.x - second.x);
+    let dy = Math.abs(first.y - second.y);
+    if (plane.wrapX) dx = Math.min(dx, plane.width - dx);
+    if (plane.wrapY) dy = Math.min(dy, plane.height - dy);
+    return {
+      encoded: inspection.minimumDistanceInteger + inspection.minimumDistanceFraction / 65535,
+      expected: Math.hypot(dx, dy),
+    };
+  };
+
+  const nonWrapped = await inspectDistance();
+  assert.ok(Math.abs(nonWrapped.encoded - nonWrapped.expected) < 1 / 65535);
+
+  plane.provinces[0]!.x = 0.01;
+  plane.provinces[1]!.x = 0.99;
+  plane.wrapX = true;
+  const wrapped = await inspectDistance();
+  assert.ok(Math.abs(wrapped.encoded - wrapped.expected) < 1 / 65535);
+  assert.ok(wrapped.expected < nonWrapped.expected, "the seam is the shortest enabled periodic path");
+});
+
 test("all eight planes are generated, named contiguously, and gate-connected", () => {
   let project = createDefaultProject("eight-realms");
   while (project.planes.length < 8) project = addPlane(project, project.planes.length % 2 ? "underworld" : "dream");

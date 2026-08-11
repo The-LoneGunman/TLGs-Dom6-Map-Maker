@@ -5,29 +5,47 @@ Pantokrator Atlas is a local-first Dominions 6 map maker. It creates determinist
 ## Included map features
 
 - Coherent procedural biomes with controlled terrain variety and plane-specific site/population themes
+- Topology-aware overland ocean presets: natural, single continent, multiple continents, island chains, and a central inland sea
 - Surface, cave, cavern, cloud, air, underworld, hell, abyss, dream, elemental, and custom plane archetypes
 - Pre-generation plane planning with independent names, sizes, terrain variants, wrapping, display flags, and colors
 - Exact land, coastal, water, cave, and other-plane start allocations
-- Configurable minimum start degree with an exact shared degree whenever the requested land/coast/water/cave mix has a feasible assignment, plus deterministic best-fit fallback and blocker repair
+- One-click Generate-tab default reset that preserves the current map and participates in Undo
+- Deterministic plane-, terrain-, coast-, flooded-cave-, and Styx-aware province names with project-wide uniqueness, capital-name protection, and a reroll that preserves manual edits
+- Ordered deterministic cave-start nations, bound to generated cave capitals with `#specstart` when special starts are enabled
+- Configurable minimum start degree and scale-aware capital spacing: starts never share a one-ring province, larger maps seek progressively wider separation, and any infeasible shared-degree or preferred-distance target is reported as an accessible best-effort warning
 - Start exclusion zones for generated thrones, gates, and unique independent guardians
 - Preferred, avoided, and catalog-verified fixed throne locations
 - Up to eight planes connected through compatible, hub, chain, ring, or explicit gate graphs
 - Standard, road, river, bridge, mountain, impassable, and custom borders
 - Ownership-boundary topology: every positive-length shared border is an exported neighbour, including wrap seams
 - Searchable Dominions 6.35 catalogs: 4,091 units, 1,253 sites, 82 poptypes, 106 active/special nations, and 28 forts
-- Terrain-compatible hidden/known site selection and throne-only fixed-throne selection
-- Unique initial independent commanders, squads, bodyguards, items, cleared/assigned magic, experience, and equipment
+- Terrain-compatible hidden/known selection across all 900 ordinary province sites plus an explicit 71-site non-random/non-home expansion, with 208 nation home references excluded and a separate 74-site throne-only fixed-throne selector
+- Unique initial independent commanders, squads, bodyguards, items, cleared/assigned magic, experience, and equipment; all 4,091 vanilla monster IDs are searchable by default, with optional factual filters for 627 nation-recruitable commanders and 679 troops
 - Province ownership, poptypes, population, unrest, forts, temples, labs, and owned PD level
 - Battle maps, skyboxes, colors, host restrictions, AI players, victory points, and raw advanced directives
 - Fully additive Dominions terrain flags (including freshwater land, forest + swamp, and sea + mountains/underwater forest) with native game-rendered winter, forest, waste, farm, submergence, water, and kelp changes
+- Sparse non-overland chambers and corridors with native owner-0 negative space shared by D6M output, interactive hit-testing, and themed editor/PNG backdrops for cavern, cloud, underworld, infernal, abyssal, dream, and elemental realms
+- IndexedDB-first device autosave with localStorage fallback, legacy migration, and a visible failure state for atlas sizes that exceed browser quotas
 - Direct installation through the browser File System Access API, plus a ready-to-install ZIP fallback
 - Validation for filenames, command ranges, catalog IDs, start safety, site terrain, topology, gates, and `.d6m` structure
 
 ## Plane and gate behavior
 
-Dominions connects every province carrying the same `#gate` number in both directions. Pantokrator Atlas therefore treats the connection matrix as an undirected graph and does not promise unsupported one-way travel. The compatible preset favors surface-to-cave/cavern, surface-to-cloud/air, and cave-family-to-underworld/hell/abyss links instead of connecting every plane to every other plane.
+Dominions connects every province carrying the same `#gate` number in both directions. Pantokrator Atlas therefore treats plane links as an undirected graph and does not promise unsupported one-way travel. Presets quickly seed the full graph; the Planes tab then shows only the selected plane’s destinations so each next-generation link and gate-pair count can be customized without an all-plane matrix. A separate Existing gateways editor lists the saved gate groups touching that plane, including every endpoint’s local province index and stable ID, and lets you reassign endpoints, edit the shared gate number, or delete the group. The compatible preset favors surface-to-cave/cavern, surface-to-cloud/air, and cave-family-to-underworld/hell/abyss links.
 
 Generated gate and throne endpoints prefer provinces at least two graph steps from every generic, team, and nation-specific start. On a cramped custom plane, validation exposes any deterministic fallback that had to use the adjacent ring.
+
+Sparse cave, cloud, underworld, infernal, abyssal, dream, and elemental realms use subdued illustrated art behind ownerless space in the editor and high-resolution PNG preview. Dominions' native D6M v3 format has no second raster/underlay field: its single `#imagefile` is the D6M itself, so the game renders owner-zero space with its own presentation rather than loading these preview backdrops. See [realm backdrop asset provenance](docs/ASSET_PROVENANCE.md) for the original OpenAI ImageGen inventory.
+
+Cave and Cavern generation includes connected flooded chambers whose terrain remains additively both Sea and Cave. Every Underworld is crossed edge-to-edge by a connected, named River Styx band with Death + Water site bias, amphibious spectral guardians, two connected dry banks, and one or two controlled bridge crossings. Newly staged Underworld planes therefore default to no wrap; manually enabling both wrap axes is preserved but validation warns that a single river band cannot truly divide a torus. When both realms have enough safe aquatic provinces, a bounded share of surface-to-underground gate pairs link ocean to subterranean water while retaining at least one dry entrance. This follows Illwinter's official Hollow World precedent, where sea provinces have linked underground levels and several entrances are underwater.
+
+Natural, single-continent, multiple-continent, and inland-sea layouts preserve the requested feasible water quota. Island chains require enough surrounding sea to read as islands, so Generate raises and records any lower request to an effective 48% minimum. Multiple-continent cuts use the exported movement topology; when the selected water quota and wrapping cannot sustain every requested continent, validation reports the achieved component count instead of silently presenting one connected landmass as several continents.
+
+`Players x provinces per player` budgets only core Surface, Cave, Cavern, and surface-like solid Custom realms. Each auto-sized bonus realm independently uses the Generate-tab bonus-plane percentage of the combined core total; values above 100% intentionally make every bonus plane larger than all core realms combined, subject to the 800-province per-plane cap. Manual plane sizes are never changed by that setting.
+
+Leaving the cave-start nation list empty preserves Dominions' native cave preference. Within the requested capacity, configured entries are guaranteed generated cave capitals through `#specstart` in the displayed priority order when the host enables special starts; the UI warns when the list exceeds that capacity. Auto-sized Cave and Cavern core planes share the cave-start province budget, while the main overland plane follows the combined land, coastal, and water allocation.
+
+Generated province names use original, historically rooted geographic vocabulary rather than copied third-party map lists. The grammar combines the plane archetype or Custom variant with effective additive terrain flags, so flooded caves, kelp seas, forested highlands, and Styx provinces receive different language. Names are unique across the entire atlas and avoid normalized matches with playable nation names and epithets, nation home-site names, and official special-realm labels from the pinned catalog. Editing a name in the province inspector marks it manual; map regeneration and the ordinary Generate-tab reroll leave it untouched. Older projects without name provenance can use the separately confirmed **Replace every province name** action to repair legacy duplicates; it replaces manual names too, but remains Undoable. Dominions can still apply a nation's homeland name to a start when special starts are enabled unless the scenario author explicitly turns on `#nohomelandnames`.
 
 ## Important PD distinction
 
@@ -62,4 +80,4 @@ Older saved projects created before ownership-boundary topology may show a **Syn
 - [Official Dominions 6 file formats](https://illwinter.com/dom6/dom6fileformats.pdf)
 - [Official Dominions 6 modding manual](https://illwinter.com/dom6/dom6modman.pdf)
 
-The bundled population and fort tables are transcribed from the official map manual. Unit, site, nation, special-plane, and site-location indexes are generated from the pinned Dom6 Inspector 6.35 data revision documented in `src/catalog/data/NOTICE.md`; its GPL-3.0 license is included beside the generated catalog.
+The bundled population and fort tables are transcribed from the official map manual. Unit, site, nation, special-plane, and site-location indexes are generated from the pinned Dom6 Inspector 6.35 data revision documented in `src/catalog/data/NOTICE.md`; its nation recruitment tables supply commander/troop roles and its nation attributes identify home-site references without name guessing. The same pinned nation, epithet, home-site, plane, and Nexus entries generate the reserved-name blacklist used by the province namer. The GPL-3.0 license is included beside the generated catalog.

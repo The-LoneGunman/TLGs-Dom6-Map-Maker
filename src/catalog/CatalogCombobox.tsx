@@ -13,6 +13,8 @@ interface CatalogComboboxProps {
   compact?: boolean;
   allowClear?: boolean;
   getEntryStatus?: (entry: CatalogEntry) => { label: string; compatible: boolean };
+  isValueAllowed?: (value: string) => boolean;
+  rejectedMessage?: string;
 }
 
 export function CatalogCombobox({
@@ -25,15 +27,20 @@ export function CatalogCombobox({
   compact = false,
   allowClear = true,
   getEntryStatus,
+  isValueAllowed,
+  rejectedMessage = "That value is not available in this field.",
 }: CatalogComboboxProps) {
   const inputId = useId();
   const listboxId = `${inputId}-results`;
+  const errorId = `${inputId}-error`;
+  const statusId = `${inputId}-status`;
   const [query, setQuery] = useState(value === undefined ? "" : String(value));
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [error, setError] = useState<string>();
   const focusRef = useRef(false);
   const selected = useMemo(() => findCatalogEntry(entries, value), [entries, value]);
-  const results = useMemo(() => searchCatalog(entries, query, 8), [entries, query]);
+  const results = useMemo(() => searchCatalog(entries, query, 12), [entries, query]);
 
   useEffect(() => {
     if (!focusRef.current) setQuery(value === undefined ? "" : String(value));
@@ -41,8 +48,17 @@ export function CatalogCombobox({
 
   const commit = (next: string) => {
     const normalized = next.trim();
+    const current = value === undefined ? "" : String(value).trim();
+    if (normalized !== current && normalized && isValueAllowed && !isValueAllowed(normalized)) {
+      setQuery(value === undefined ? "" : String(value));
+      setError(rejectedMessage);
+      setOpen(false);
+      setActiveIndex(0);
+      return;
+    }
     onCommit(normalized);
     setQuery(normalized);
+    setError(undefined);
     setOpen(false);
     setActiveIndex(0);
   };
@@ -60,6 +76,8 @@ export function CatalogCombobox({
           aria-autocomplete="list"
           aria-expanded={open}
           aria-controls={listboxId}
+          aria-describedby={[error ? errorId : undefined, open && entries.length > results.length ? statusId : undefined].filter(Boolean).join(" ") || undefined}
+          aria-invalid={!!error}
           aria-activedescendant={open && results[activeIndex] ? `${listboxId}-${results[activeIndex]!.id}` : undefined}
           onFocus={() => {
             focusRef.current = true;
@@ -67,6 +85,7 @@ export function CatalogCombobox({
           }}
           onChange={(event) => {
             setQuery(event.target.value);
+            setError(undefined);
             setOpen(true);
             setActiveIndex(0);
           }}
@@ -95,7 +114,13 @@ export function CatalogCombobox({
         />
         {allowClear && query && <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => commit("")} aria-label={`Clear ${label}`}>×</button>}
       </div>
+      {error && <span id={errorId} className="catalog-field-error" role="alert">{error}</span>}
       {selected && <span className="catalog-selection" title={selected.sourceRef}>{formatCatalogEntry(selected)}</span>}
+      {open && entries.length > results.length && (
+        <p className="catalog-result-count" id={statusId} role="status">
+          Searching all {entries.length.toLocaleString()} entries; showing up to 12 best matches. Type more of the name or a numeric ID to narrow the list.
+        </p>
+      )}
       {open && (
         <div className="catalog-results" id={listboxId} role="listbox" aria-label={`${label} catalog results`}>
           {results.map((entry, index) => (
@@ -113,7 +138,7 @@ export function CatalogCombobox({
               <b>#{entry.id}</b>
             </button>
           ))}
-          {!results.length && <p>{entries.length ? "No catalog matches. Press Enter to keep the raw value." : emptyMessage}</p>}
+          {!results.length && <div role="option" aria-disabled="true" aria-selected="false"><span>{entries.length ? "No catalog matches. Press Enter to keep the raw value." : emptyMessage}</span></div>}
         </div>
       )}
     </div>

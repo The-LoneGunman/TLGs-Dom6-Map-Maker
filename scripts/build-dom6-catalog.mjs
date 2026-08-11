@@ -108,21 +108,68 @@ const forts = [
   [27, "Fortified village"], [28, "Wooden Fort"], [29, "Crystal Citadel"],
 ];
 
-const [unitRows, siteRows, nationRows, planeRows, siteTerrainRows] = await Promise.all([
+const LEADER_TABLES = [
+  "fort_leader_types_by_nation.csv",
+  "coast_leader_types_by_nation.csv",
+  "nonfort_leader_types_by_nation.csv",
+];
+const TROOP_TABLES = [
+  "fort_troop_types_by_nation.csv",
+  "coast_troop_types_by_nation.csv",
+  "nonfort_troop_types_by_nation.csv",
+];
+
+const [
+  unitRows,
+  siteRows,
+  nationRows,
+  planeRows,
+  siteTerrainRows,
+  nationAttributeRows,
+  attributeKeyRows,
+  ...roleTables
+] = await Promise.all([
   table("BaseU.csv"),
   table("MagicSites.csv"),
   table("nations.csv"),
   table("other_planes.csv"),
   table("site_terrain_types.csv"),
+  table("attributes_by_nation.csv"),
+  table("attribute_keys.csv"),
+  ...LEADER_TABLES.map(table),
+  ...TROOP_TABLES.map(table),
 ]);
 
-const units = unitRows.filter((row) => row.id && row.name).map((row) => [integer(row.id, "unit"), row.name]);
+const documentedStartSiteAttributeIds = new Set(attributeKeyRows
+  .filter((row) => row.name?.includes("{Ntn: #startsite}"))
+  .map((row) => integer(row.number, "nation start-site attribute")));
+if (!documentedStartSiteAttributeIds.has(52)) throw new Error("Nation attribute metadata does not identify #startsite fields.");
+// The pinned nation dump uses 25 for the three death-nation home sites and
+// 631 for Ubar's additional/future home sites. Attribute 100 is the second
+// #startsite key in attribute_keys.csv even though this revision has no rows.
+const nationHomeSiteAttributeIds = new Set([25, ...documentedStartSiteAttributeIds, 631]);
+const nationHomeSiteIds = new Set(nationAttributeRows
+  .filter((row) => nationHomeSiteAttributeIds.has(integer(row.attribute, "nation attribute")))
+  .map((row) => integer(row.raw_value, "nation home site")));
+
+const roleIds = (tables, context) => new Set(tables.flatMap((rows) => rows
+  .filter((row) => row.monster_number)
+  .map((row) => integer(row.monster_number, context))));
+const leaderIds = roleIds(roleTables.slice(0, LEADER_TABLES.length), "leader unit");
+const troopIds = roleIds(roleTables.slice(LEADER_TABLES.length), "troop unit");
+
+const units = unitRows.filter((row) => row.id && row.name).map((row) => {
+  const id = integer(row.id, "unit");
+  const roleFlags = (leaderIds.has(id) ? 1 : 0) | (troopIds.has(id) ? 2 : 0);
+  return [id, row.name, roleFlags];
+});
 const sites = siteRows.filter((row) => row.id && row.name).map((row) => [
   integer(row.id, "site"),
   row.name,
   row.loc ? integer(row.loc, "site loc") : 0,
   row.path ?? "",
   row.rarity ? integer(row.rarity, "site rarity") : 0,
+  (nationHomeSiteIds.has(integer(row.id, "site")) ? 1 : 0) | (row.loc === "0" ? 2 : 0),
 ]);
 const nations = nationRows.filter((row) => row.id && row.name).map((row) => [integer(row.id, "nation"), row.name, row.epithet ?? "", row.abbreviation ?? "", row.era ? integer(row.era, "nation era") : 0]);
 const planes = planeRows.filter((row) => row.number && row.name).map((row) => [integer(row.number, "plane"), row.name]);
@@ -131,11 +178,16 @@ const poptypes = poptypeGroups.flatMap(([ids, name]) => ids.map((id) => [id, nam
 
 if (units.length !== 4091) throw new Error(`Expected 4,091 units, found ${units.length}.`);
 if (sites.length !== 1253) throw new Error(`Expected 1,253 sites, found ${sites.length}.`);
+if (leaderIds.size !== 627) throw new Error(`Expected 627 nation-recruitable leaders, found ${leaderIds.size}.`);
+if (troopIds.size !== 679) throw new Error(`Expected 679 nation-recruitable troops, found ${troopIds.size}.`);
+if ([...leaderIds].some((id) => !units.some(([unitId]) => unitId === id))) throw new Error("Leader table references a missing unit.");
+if ([...troopIds].some((id) => !units.some(([unitId]) => unitId === id))) throw new Error("Troop table references a missing unit.");
+if (nationHomeSiteIds.size !== 208) throw new Error(`Expected 208 referenced nation home/future sites, found ${nationHomeSiteIds.size}.`);
 if (poptypes.length !== 82 || poptypes[0][0] !== 25 || poptypes.at(-1)[0] !== 106) throw new Error("Poptype table is incomplete.");
 
 const output = {
   format: "pantokrator-atlas/compact-catalog",
-  formatVersion: 1,
+  formatVersion: 2,
   gameVersion: "6.35",
   sourceRevision: "cfac4311bc0b58053b8dead7bffbc036ba9bd5dc",
   sourceDate: "2026-05-26",
@@ -150,4 +202,14 @@ const output = {
 
 await mkdir(outputRoot, { recursive: true });
 await writeFile(path.join(outputRoot, "dom6-6.35.json"), `${JSON.stringify(output)}\n`, "utf8");
-console.log(JSON.stringify({ units: units.length, sites: sites.length, nations: nations.length, poptypes: poptypes.length, forts: forts.length, planes: planes.length }));
+console.log(JSON.stringify({
+  units: units.length,
+  nationRecruitableLeaders: leaderIds.size,
+  nationRecruitableTroops: troopIds.size,
+  sites: sites.length,
+  nationHomeSites: nationHomeSiteIds.size,
+  nations: nations.length,
+  poptypes: poptypes.length,
+  forts: forts.length,
+  planes: planes.length,
+}));

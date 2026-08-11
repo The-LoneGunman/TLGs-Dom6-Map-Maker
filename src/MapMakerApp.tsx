@@ -8,6 +8,7 @@ import {
   useState,
   type ChangeEvent,
   type CSSProperties,
+  type KeyboardEvent,
   type ReactNode,
 } from "react";
 import {
@@ -23,10 +24,12 @@ import {
   type BiomeKey,
   type ComputerPlayer,
   type EdgeKind,
+  type GateLink,
   type GateLayout,
   type GenerationSettings,
   type MagicPath,
   type MapProject,
+  type OceanLayout,
   type Plane,
   type PlaneConnectionRule,
   type PlaneKind,
@@ -45,13 +48,17 @@ import {
   calculateFairness,
   createDefaultPlaneConnections,
   createDefaultProject,
+  defaultPlaneName,
   gateCompatibility,
   generateProject,
   hashString,
+  ISLAND_CHAIN_MIN_WATER_PERCENT,
+  removeGeneratedCaveSpecificStarts,
   synchronizePlaneEdges,
 } from "./generator";
 import { ADVANCED_COMMANDS, terrainMask, validateProject } from "./dom6";
-import { auditPlaneTopology, computeProvinceTopology, connectionKey } from "./geometry";
+import { auditPlaneTopology, canAuthorPlaneEdge, connectionKey } from "./geometry";
+import { regenerateAllProvinceNames, regenerateGeneratedProvinceNames } from "./naming";
 import {
   downloadPackage,
   downloadProject,
@@ -64,22 +71,35 @@ import { MapCanvas, renderPlanePng } from "./MapCanvas";
 import { CatalogCombobox } from "./catalog/CatalogCombobox";
 import {
   BUILTIN_DOM6_CATALOG,
+  commanderUnitEntries,
   createCatalogTemplate,
   findCatalogEntry,
   formatCatalogEntry,
   mergeCatalogBundles,
   parseCatalogBundle,
+  provinceSiteEntries,
   siteCompatibility,
+  troopUnitEntries,
   type CatalogEntry,
   type Dom6CatalogBundle,
 } from "./catalog";
+import {
+  gateEndpointIsUsed,
+  gateNumberIsAvailable,
+  gatesTouchingPlane,
+  provinceAtLocalIndex,
+  withoutPlaneGateEndpoints,
+} from "./gatewayEditor";
+import { loadProjectAutosave, saveProjectAutosave, type AutosaveState } from "./autosave";
 
 type Tool = "select" | "link" | "gate" | "start" | "throne" | "site";
 type InspectorTab = "terrain" | "gameplay" | "sites" | "advanced";
 type LeftTab = "generate" | "planes" | "scenario";
+const INSPECTOR_TABS: readonly InspectorTab[] = ["terrain", "gameplay", "sites", "advanced"];
+const LEFT_TABS: readonly LeftTab[] = ["generate", "planes", "scenario"];
 
-const STORAGE_KEY = "pantokrator-atlas-project-v1";
 const CATALOG_STORAGE_KEY = "pantokrator-atlas-user-catalog-v1";
+const START_ALLOCATION_STATUS_ID = "start-allocation-status";
 const TERRAIN_KEYS = (Object.keys(TERRAIN_LABELS) as TerrainKey[]).filter((key) => key !== "freshwater");
 const BIOME_KEYS = Object.keys(BIOME_LABELS) as BiomeKey[];
 const MAGIC_PATHS = Object.keys(MAGIC_PATH_LABELS) as MagicPath[];
@@ -97,6 +117,7 @@ const TERRAIN_FLAG_LABELS: Record<TerrainFlag, string> = {
   cavewall: "Impassable cave wall",
 };
 const ADDITIVE_TERRAIN_FLAGS = TERRAIN_FLAGS.filter((flag) => flag !== "freshwater");
+const CAVE_FAMILY_KINDS = new Set<PlaneKind>(["cave", "cavern", "underworld", "hell", "abyss"]);
 const CONDITIONS: Array<{ value: PreviewCondition; label: string }> = [
   { value: "normal", label: "Normal" },
   { value: "winter", label: "Frozen / winter" },
@@ -121,7 +142,7 @@ const PLANE_KINDS: Array<{ value: PlaneKind; label: string; description: string 
   { value: "cavern", label: "Great cavern", description: "Broader subterranean regions and crystal deeps." },
   { value: "cloud", label: "Cloud realm", description: "Stormy high realm with sparse ground." },
   { value: "air", label: "Air plane", description: "Aerial and storm-biased other plane." },
-  { value: "underworld", label: "Underworld", description: "Fungal, death, and deep-earth terrain." },
+  { value: "underworld", label: "Underworld", description: "Fungal death-realms bisected by the connected River Styx." },
   { value: "hell", label: "Infernal realm", description: "Volcanic and infernal terrain." },
   { value: "abyss", label: "Abyss", description: "Void-biased hostile plane." },
   { value: "dream", label: "Dream realm", description: "Wild glamour and astral terrain." },
@@ -158,6 +179,14 @@ const GATE_LAYOUTS: Array<{ value: GateLayout; label: string; description: strin
   { value: "compatible", label: "Compatibility graph", description: "Prefer links between mechanically compatible plane archetypes." },
 ];
 
+const OCEAN_LAYOUTS: Array<{ value: OceanLayout; label: string }> = [
+  { value: "natural", label: "Natural / varied" },
+  { value: "single_continent", label: "Single continent" },
+  { value: "multiple_continents", label: "Multiple continents" },
+  { value: "island_chains", label: "Island chains" },
+  { value: "inland_sea", label: "Central inland sea" },
+];
+
 const EDGE_KINDS: Array<{ value: EdgeKind; label: string }> = [
   { value: "standard", label: "Standard" },
   { value: "road", label: "Road" },
@@ -168,6 +197,66 @@ const EDGE_KINDS: Array<{ value: EdgeKind; label: string }> = [
   { value: "impassable", label: "Impassable" },
   { value: "custom", label: "Custom value" },
 ];
+
+/** Restore every editable value shown on Generate without replacing authored map data. */
+export function resetGeneratorDefaults(draft: MapProject, activePlaneId: string): void {
+  const defaults = createDefaultProject();
+  removeGeneratedCaveSpecificStarts(draft);
+  draft.seed = defaults.seed;
+  draft.settings.players = defaults.settings.players;
+  draft.settings.provincesPerPlayer = defaults.settings.provincesPerPlayer;
+  draft.settings.waterPercent = defaults.settings.waterPercent;
+  draft.settings.oceanLayout = defaults.settings.oceanLayout;
+  draft.settings.continentCount = defaults.settings.continentCount;
+  draft.settings.specialPlaneSizePercent = defaults.settings.specialPlaneSizePercent;
+  draft.settings.provinceNameSeed = defaults.settings.provinceNameSeed;
+  draft.settings.biomeCohesion = defaults.settings.biomeCohesion;
+  draft.settings.throneCount = defaults.settings.throneCount;
+  draft.settings.startDistribution = defaults.settings.startDistribution ? { ...defaults.settings.startDistribution } : undefined;
+  draft.settings.startDegreeTarget = defaults.settings.startDegreeTarget;
+  draft.settings.caveStartNations = defaults.settings.caveStartNations ? [...defaults.settings.caveStartNations] : undefined;
+  draft.settings.resolution = defaults.settings.resolution;
+
+  if (defaults.settings.resolution !== "custom") {
+    const preset = RESOLUTION_PRESETS[defaults.settings.resolution];
+    for (const plane of draft.planes) {
+      plane.width = preset.width;
+      plane.height = preset.height;
+    }
+  }
+  const activePlane = draft.planes.find((plane) => plane.id === activePlaneId) ?? draft.planes[0];
+  if (activePlane) {
+    const wrapsByDefault = activePlane.kind !== "underworld";
+    activePlane.wrapX = wrapsByDefault;
+    activePlane.wrapY = wrapsByDefault;
+  }
+}
+
+export function updateCaveStartNations(draft: MapProject, nations: number[]): void {
+  draft.settings.caveStartNations = nations.length ? [...nations] : undefined;
+  removeGeneratedCaveSpecificStarts(draft);
+}
+
+/** Keep constrained-generation balance fallbacks visible without promoting them to export blockers. */
+export function generationBalanceWarnings(issues: ValidationIssue[]): ValidationIssue[] {
+  const spacing = issues.find((issue) => issue.severity === "warning"
+    && issue.message.startsWith("Scale-aware start spacing"));
+  const degree = issues.find((issue) => issue.severity === "warning"
+    && issue.message.startsWith("Start connection counts across the atlas vary"))
+    ?? issues.find((issue) => issue.severity === "warning"
+      && issue.message.includes(" start connection counts vary from "));
+  return [spacing, degree].filter((issue): issue is ValidationIssue => issue !== undefined);
+}
+
+export function GenerationBalanceNotice({ issues }: { issues: ValidationIssue[] }) {
+  const warnings = generationBalanceWarnings(issues);
+  if (!warnings.length) return null;
+  return <p className="warning-copy generation-balance-warning" role="status" aria-live="polite" aria-atomic="true">
+    <strong>Generation used a best-effort balance fallback.</strong>{" "}
+    {warnings.map((issue) => issue.message).join(" ")}{" "}
+    These multiplayer-balance warnings do not block export. Adjust the map size, start mix, or connection target and Generate again if you want stricter parity.
+  </p>;
+}
 
 export function MapMakerApp() {
   const [project, setProject] = useState<MapProject>(() => createDefaultProject());
@@ -183,11 +272,13 @@ export function MapMakerApp() {
   const [redoStack, setRedoStack] = useState<MapProject[]>([]);
   const [validationOpen, setValidationOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [replaceAllNamesOpen, setReplaceAllNamesOpen] = useState(false);
   const [exportProgress, setExportProgress] = useState<ExportProgress>();
   const [exportBusy, setExportBusy] = useState(false);
   const [toast, setToast] = useState<string>();
   const [zoom, setZoom] = useState(1);
   const [hydrated, setHydrated] = useState(false);
+  const [autosaveState, setAutosaveState] = useState<AutosaveState>({ backend: "none", errors: [], migrated: false });
   const [userCatalog, setUserCatalog] = useState<Dom6CatalogBundle>();
   const importRef = useRef<HTMLInputElement>(null);
   const catalogImportRef = useRef<HTMLInputElement>(null);
@@ -197,8 +288,11 @@ export function MapMakerApp() {
   const catalog = useMemo(() => mergeCatalogBundles(BUILTIN_DOM6_CATALOG, ...(userCatalog ? [userCatalog] : [])), [userCatalog]);
   const playableNations = useMemo(() => playerNationEntries(catalog.nations), [catalog.nations]);
   const startDistribution = project.settings.startDistribution ?? defaultStartDistribution(project.settings.players);
+  const caveStartNations = project.settings.caveStartNations ?? [];
   const allocatedStarts = Object.values(startDistribution).reduce((sum, value) => sum + value, 0);
   const planeConnectionRules = useMemo(() => resolvePlaneConnectionRules(project), [project]);
+  const selectedPlaneConnectionRules = planeConnectionRules.filter((rule) => rule.a === activePlane.id || rule.b === activePlane.id);
+  const activePlaneGates = gatesTouchingPlane(project.gates, activePlane.id);
   const fairness = useMemo(() => calculateFairness(project), [project]);
   const issues = useMemo(() => validateProject(project), [project]);
   const topologyAudits = useMemo(() => project.planes.map((plane) => ({
@@ -210,23 +304,35 @@ export function MapMakerApp() {
   const errorCount = issues.filter((issue) => issue.severity === "error").length;
   const warningCount = issues.filter((issue) => issue.severity === "warning").length;
   const totalProvinces = project.planes.reduce((sum, plane) => sum + plane.provinces.length, 0);
+  const autosaveLabel = autosaveState.backend === "indexeddb"
+    ? "Device autosave"
+    : autosaveState.backend === "localstorage"
+      ? "Limited autosave"
+      : hydrated ? "Autosave unavailable" : "Loading autosave";
+  const autosaveError = autosaveState.errors[0]?.message;
 
   useEffect(() => {
+    let cancelled = false;
     const timeout = window.setTimeout(() => {
-      try {
-        const saved = window.localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          const restored = parseProject(saved);
-          setProject(restored);
-          setActivePlaneId(restored.planes[0]?.id ?? "");
+      void loadProjectAutosave().then((result) => {
+        if (cancelled) return;
+        setAutosaveState(result);
+        if (result.project) {
+          setProject(result.project);
+          setActivePlaneId(result.project.planes[0]?.id ?? "");
+        } else if (result.errors.length) {
+          setToast("The autosave could not be restored; a fresh atlas was opened.");
         }
-      } catch {
-        setToast("The autosave could not be restored; a fresh atlas was opened.");
-      } finally {
-        setHydrated(true);
-      }
+      }).catch(() => {
+        if (!cancelled) setToast("The autosave could not be restored; a fresh atlas was opened.");
+      }).finally(() => {
+        if (!cancelled) setHydrated(true);
+      });
     }, 0);
-    return () => window.clearTimeout(timeout);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
   }, []);
 
   useEffect(() => {
@@ -249,7 +355,13 @@ export function MapMakerApp() {
   useEffect(() => {
     if (!hydrated) return;
     const timeout = window.setTimeout(() => {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
+      void saveProjectAutosave(project).then((state) => {
+        setAutosaveState(state);
+        if (state.backend === "none") setToast("Autosave is unavailable. Download the project to keep these changes.");
+      }).catch(() => {
+        setAutosaveState({ backend: "none", errors: [], migrated: false });
+        setToast("Autosave is unavailable. Download the project to keep these changes.");
+      });
     }, 450);
     return () => window.clearTimeout(timeout);
   }, [hydrated, project]);
@@ -291,6 +403,8 @@ export function MapMakerApp() {
     setRedoStack((stack) => [...stack.slice(-29), project]);
     setProject(previous);
     setSelectedId(undefined);
+    setLinkSource(undefined);
+    setGateSource(undefined);
   };
 
   const handleRedo = () => {
@@ -300,6 +414,8 @@ export function MapMakerApp() {
     setUndoStack((stack) => [...stack.slice(-29), project]);
     setProject(next);
     setSelectedId(undefined);
+    setLinkSource(undefined);
+    setGateSource(undefined);
   };
 
   const handleGenerate = () => {
@@ -316,11 +432,49 @@ export function MapMakerApp() {
     setSelectedId(undefined);
     setLinkSource(undefined);
     setGateSource(undefined);
-    setToast(`Generated ${next.planes.reduce((sum, plane) => sum + plane.provinces.length, 0)} provinces from seed “${next.seed}”.`);
+    const notes: string[] = [];
+    if (source.settings.oceanLayout === "island_chains"
+      && source.settings.waterPercent < ISLAND_CHAIN_MIN_WATER_PERCENT) {
+      notes.push(`Island chains used the ${ISLAND_CHAIN_MIN_WATER_PERCENT}% effective water minimum.`);
+    }
+    const nextIssues = validateProject(next);
+    const continentNote = nextIssues.find((issue) => issue.severity === "warning"
+      && issue.message.startsWith("Requested ") && issue.message.includes("major continents"));
+    if (continentNote) notes.push(continentNote.message);
+    if (generationBalanceWarnings(nextIssues).length) {
+      notes.push("Balance warning: start spacing or connection parity used a best-effort fallback; review the non-blocking details below Generate.");
+    }
+    setToast(`Generated ${next.planes.reduce((sum, plane) => sum + plane.provinces.length, 0)} provinces from seed “${next.seed}”.${notes.length ? ` ${notes.join(" ")}` : ""}`);
+  };
+
+  const handleRegenerateProvinceNames = () => {
+    let renamed = 0;
+    let preserved = 0;
+    mutate((draft) => {
+      draft.settings.provinceNameSeed = (draft.settings.provinceNameSeed ?? 0) + 1;
+      const report = regenerateGeneratedProvinceNames(draft.planes, draft.seed, draft.settings.provinceNameSeed);
+      renamed = report.generated;
+      preserved = report.authoredPreserved;
+    });
+    setToast(`Regenerated ${renamed.toLocaleString()} contextual province names; preserved ${preserved.toLocaleString()} manual names.`);
+  };
+
+  const handleRegenerateAllProvinceNames = () => {
+    let renamed = 0;
+    mutate((draft) => {
+      draft.settings.provinceNameSeed = (draft.settings.provinceNameSeed ?? 0) + 1;
+      renamed = regenerateAllProvinceNames(draft.planes, draft.seed, draft.settings.provinceNameSeed).generated;
+    });
+    setReplaceAllNamesOpen(false);
+    setToast(`Replaced all ${renamed.toLocaleString()} province names with unique contextual names. Undo restores the previous names.`);
   };
 
   const stagePlane = () => {
-    const next = addPlane(project, "underworld", { generate: false, autoSize: false });
+    const next = addPlane(project, "underworld", {
+      generate: false,
+      autoSize: true,
+      name: uniquePlaneName(project.planes, "The Underworld"),
+    });
     next.settings.planeConnections = resolvePlaneConnectionRules(next);
     commit(next);
     setActivePlaneId(next.planes.at(-1)?.id ?? activePlaneId);
@@ -417,6 +571,11 @@ export function MapMakerApp() {
         setToast("Choose a second province on this plane.");
         return;
       }
+      if (!activePlane.provinces.some((province) => province.id === linkSource.provinceId)) {
+        setLinkSource(undefined);
+        setToast("The first link endpoint no longer exists. Choose it again.");
+        return;
+      }
       if (linkSource.provinceId === provinceId) {
         setLinkSource(undefined);
         return;
@@ -429,8 +588,7 @@ export function MapMakerApp() {
         setToast("Those provinces already share a connection. Change its border type in the province inspector.");
         return;
       }
-      const topology = computeProvinceTopology(activePlane);
-      if (!topology.pairKeys.has(connectionKey(linkSource.provinceId, provinceId))) {
+      if (!canAuthorPlaneEdge(activePlane, linkSource.provinceId, provinceId)) {
         setToast("Those provinces do not share a visible border. Use a gate for remote or cross-plane travel.");
         return;
       }
@@ -450,6 +608,12 @@ export function MapMakerApp() {
       if (!gateSource) {
         setGateSource({ planeId: activePlane.id, provinceId });
         setToast("Switch planes, then choose the destination province.");
+        return;
+      }
+      const sourcePlane = project.planes.find((plane) => plane.id === gateSource.planeId);
+      if (!sourcePlane?.provinces.some((province) => province.id === gateSource.provinceId)) {
+        setGateSource(undefined);
+        setToast("The first gate endpoint no longer exists. Choose it again.");
         return;
       }
       if (gateSource.planeId === activePlane.id && gateSource.provinceId === provinceId) {
@@ -505,6 +669,7 @@ export function MapMakerApp() {
   const exportPreview = async () => {
     if (!activePlane) return;
     setExportBusy(true);
+    setExportProgress(undefined);
     try {
       const blob = await renderPlanePng(activePlane, preview);
       downloadBrowserBlob(blob, `${sanitizeMapName(project.name)}-${sanitizeMapName(activePlane.name)}-${preview}.png`);
@@ -525,6 +690,8 @@ export function MapMakerApp() {
       commit(next);
       setActivePlaneId(next.planes[0]?.id ?? "");
       setSelectedId(undefined);
+      setLinkSource(undefined);
+      setGateSource(undefined);
       setToast(`Opened ${next.name}.`);
     } catch (error) {
       setToast(error instanceof Error ? error.message : "Project import failed.");
@@ -551,7 +718,10 @@ export function MapMakerApp() {
             onChange={(event) => mutate((draft) => { draft.name = event.target.value; })}
             aria-label="Project name"
           />
-          <span className="autosave"><i /> Local autosave</span>
+          <span className={`autosave ${autosaveState.backend === "none" && hydrated ? "failed" : ""}`} role="status" aria-live="polite" aria-atomic="true" title={autosaveError}>
+            <i aria-hidden="true" /> {autosaveLabel}
+            {autosaveError && <span className="sr-only">. {autosaveError}</span>}
+          </span>
         </div>
         <div className="top-actions">
           <button className="icon-button" type="button" onClick={handleUndo} disabled={!undoStack.length} title="Undo" aria-label="Undo">↶</button>
@@ -566,16 +736,24 @@ export function MapMakerApp() {
       <div className="workbench">
         <aside className="left-panel panel">
           <div className="tab-row compact-tabs" role="tablist" aria-label="Map setup">
-            {(["generate", "planes", "scenario"] as LeftTab[]).map((tab) => (
-              <button key={tab} type="button" className={leftTab === tab ? "active" : ""} onClick={() => setLeftTab(tab)}>
+            {LEFT_TABS.map((tab) => (
+              <button key={tab} id={`setup-tab-${tab}`} type="button" role="tab" tabIndex={leftTab === tab ? 0 : -1} aria-selected={leftTab === tab} aria-controls="setup-active-panel" className={leftTab === tab ? "active" : ""} onClick={() => setLeftTab(tab)} onKeyDown={(event) => handleTabKey(event, LEFT_TABS, leftTab, setLeftTab)}>
                 {tab === "generate" ? "Generate" : tab === "planes" ? "Planes" : "Scenario"}
               </button>
             ))}
           </div>
 
           {leftTab === "generate" && (
-            <div className="panel-scroll setup-stack">
+            <div id="setup-active-panel" className="panel-scroll setup-stack" role="tabpanel" aria-labelledby="setup-tab-generate">
               <SectionHeading kicker="WORLD SEED" title="Realm generator" />
+              <button
+                className="button quiet wide"
+                type="button"
+                aria-label="Reset generator defaults"
+                title="Restore Generate-tab defaults without replacing the current map"
+                onClick={() => mutate((draft) => resetGeneratorDefaults(draft, activePlane.id))}
+              >Reset generator defaults</button>
+              <p className="microcopy">Restores the visible generator controls. Current planes, provinces, scenario setup, gate plans, and manual map edits stay in place; Undo restores the prior values.</p>
               <Field label="Seed">
                 <div className="input-with-button">
                   <input value={project.seed} onChange={(event) => mutate((draft) => { draft.seed = event.target.value; })} />
@@ -602,26 +780,71 @@ export function MapMakerApp() {
                   value={startDistribution[item.value]}
                   min={0}
                   max={32}
+                  describedBy={START_ALLOCATION_STATUS_ID}
                   onChange={(value) => mutate((draft) => {
                     const distribution = draft.settings.startDistribution ?? defaultStartDistribution(draft.settings.players);
                     draft.settings.startDistribution = { ...distribution, [item.value]: value };
                   })}
                 />)}
               </div>
-              <div className={`allocation-summary ${allocatedStarts === project.settings.players ? "valid" : "invalid"}`}>
-                <span>{allocatedStarts} of {project.settings.players} starts allocated</span>
-                {allocatedStarts !== project.settings.players && <button type="button" onClick={() => mutate((draft) => {
+              <CaveStartNationField
+                values={caveStartNations}
+                caveStartCount={startDistribution.cave}
+                hasCaveFamilyPlane={project.planes.some((plane) => CAVE_FAMILY_KINDS.has(plane.kind))}
+                entries={playableNations}
+                onChange={(values) => mutate((draft) => updateCaveStartNations(draft, values))}
+              />
+              <div id={START_ALLOCATION_STATUS_ID} className={`allocation-summary ${allocatedStarts === project.settings.players ? "valid" : "invalid"}`} role="status" aria-live="polite" aria-atomic="true">
+                <span>{allocatedStarts} of {project.settings.players} starts allocated. {allocatedStarts === project.settings.players ? "Allocation complete." : "Counts must equal the player total."}</span>
+                {allocatedStarts < project.settings.players && <button type="button" onClick={() => mutate((draft) => {
                   const distribution = draft.settings.startDistribution ?? defaultStartDistribution(draft.settings.players);
                   const nonLand = distribution.coastal + distribution.water + distribution.cave + distribution.other;
                   draft.settings.startDistribution = { ...distribution, land: Math.max(0, draft.settings.players - nonLand) };
                 })}>Put remainder on land</button>}
               </div>
-              <NumberField label="Minimum useful connections at starts" value={project.settings.startDegreeTarget ?? 4} min={1} max={8} onChange={(value) => mutate((draft) => { draft.settings.startDegreeTarget = value; })} />
-              <p className="microcopy">Land, coast, water, cave, and other counts must total the player count. Each category is placed on a compatible plane and scored against the connection target.</p>
+              <NumberField label="Target useful connections at starts" value={project.settings.startDegreeTarget ?? 4} min={1} max={8} onChange={(value) => mutate((draft) => { draft.settings.startDegreeTarget = value; })} />
+              <p className="microcopy">Land, coast, water, cave, and other counts must total the player count. Four useful connections is the recommended multiplayer baseline; targets from five to eight use the closest feasible common degree when the province geometry cannot give every start the requested value.</p>
               <Divider />
               <SectionHeading kicker="WORLD SHAPE" title={`${project.planes.length}-plane generation plan`} />
               <RangeField label="Water provinces" value={project.settings.waterPercent} suffix="%" min={0} max={60} onChange={(value) => mutate((draft) => { draft.settings.waterPercent = value; }, false)} />
+              <Field label="Overland ocean layout">
+                <select value={project.settings.oceanLayout ?? "natural"} onChange={(event) => mutate((draft) => { draft.settings.oceanLayout = event.target.value as OceanLayout; })}>
+                  {OCEAN_LAYOUTS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                </select>
+              </Field>
+              {(project.settings.oceanLayout ?? "natural") === "island_chains" && <p className="field-note">Island chains use at least {ISLAND_CHAIN_MIN_WATER_PERCENT}% water so land is genuinely separated; Generate records that effective value when the slider is lower.</p>}
+              {(project.settings.oceanLayout ?? "natural") === "multiple_continents" && <>
+                <NumberField
+                  label="Major continents"
+                  value={project.settings.continentCount ?? 3}
+                  min={2}
+                  max={6}
+                  onChange={(value) => mutate((draft) => { draft.settings.continentCount = value; })}
+                />
+                <p className="field-note">This is a topology target. If the water quota and wrapping cannot sustain every requested landmass, Generate and validation report the achieved count.</p>
+              </>}
               <RangeField label="Biome cohesion" value={project.settings.biomeCohesion} suffix="%" min={0} max={100} onChange={(value) => mutate((draft) => { draft.settings.biomeCohesion = value; }, false)} />
+              <p className="field-note">Lower cohesion creates more local variation and patchwork; higher cohesion creates larger contiguous biome regions. Minimum terrain variety remains enforced.</p>
+              <button className="button quiet wide" type="button" onClick={handleRegenerateProvinceNames}>Reroll generated names (preserve manual)</button>
+              <p className="field-note">Names follow each plane and its effective terrain, including coasts, flooded caves, and the River Styx. Names edited in the province inspector are marked manual and survive map generation and name rerolls.</p>
+              <button
+                className="text-button danger-text"
+                type="button"
+                aria-expanded={replaceAllNamesOpen}
+                aria-controls="replace-all-names-confirmation"
+                onClick={() => setReplaceAllNamesOpen((open) => !open)}
+              >Replace every province name…</button>
+              {replaceAllNamesOpen && (
+                <div id="replace-all-names-confirmation" className="warning-copy" role="group" aria-label="Confirm replacing every province name">
+                  <p>This also replaces manual and legacy names. Use it to repair duplicate names in projects created before name provenance existed. The change is Undoable.</p>
+                  <div className="catalog-actions">
+                    <button className="button quiet" type="button" onClick={() => setReplaceAllNamesOpen(false)}>Cancel</button>
+                    <button className="button quiet danger-text" type="button" onClick={handleRegenerateAllProvinceNames}>Replace every province name</button>
+                  </div>
+                </div>
+              )}
+              <NumberField label="Each bonus plane size (% of core)" value={project.settings.specialPlaneSizePercent ?? 30} min={1} max={500} onChange={(value) => mutate((draft) => { draft.settings.specialPlaneSizePercent = value; })} />
+              <p className="field-note">Players x provinces per player sizes only Surface, Cave, Cavern, and surface-like Custom core realms. Every auto-sized special plane independently uses this percentage of the combined core total; values over 100% are allowed, up to the 800-province per-plane cap.</p>
               <NumberField label="Recommended throne locations" value={project.settings.throneCount} min={0} max={64} onChange={(value) => mutate((draft) => { draft.settings.throneCount = value; })} />
               <Field label="Output resolution">
                 <select value={project.settings.resolution} onChange={(event) => commit(applyResolution(project, event.target.value as GenerationSettings["resolution"]))}>
@@ -635,8 +858,9 @@ export function MapMakerApp() {
               </div>
               <Toggle label="Wrap east / west" checked={activePlane.wrapX} onChange={(value) => updateWrap("wrapX", value)} />
               <Toggle label="Wrap north / south" checked={activePlane.wrapY} onChange={(value) => updateWrap("wrapY", value)} />
-              <button className="button quiet wide" type="button" onClick={() => setLeftTab("planes")}>Configure plane archetypes &amp; gates</button>
-              <button className="button generate-button" type="button" disabled={allocatedStarts !== project.settings.players} onClick={handleGenerate}><span>✦</span> Generate balanced atlas ({project.planes.length} plane{project.planes.length === 1 ? "" : "s"})</button>
+              <button className="button quiet wide" type="button" onClick={() => setLeftTab("planes")}>Configure plane archetypes &amp; selected links</button>
+              <button className="button generate-button" type="button" disabled={allocatedStarts !== project.settings.players} aria-describedby={START_ALLOCATION_STATUS_ID} onClick={handleGenerate}><span>✦</span> Generate balanced atlas ({project.planes.length} plane{project.planes.length === 1 ? "" : "s"})</button>
+              <GenerationBalanceNotice issues={issues} />
               <button
                 className="button quiet wide"
                 type="button"
@@ -652,19 +876,20 @@ export function MapMakerApp() {
           )}
 
           {leftTab === "planes" && (
-            <div className="panel-scroll setup-stack">
+            <div id="setup-active-panel" className="panel-scroll setup-stack" role="tabpanel" aria-labelledby="setup-tab-planes">
               <SectionHeading kicker="MULTI-REALM" title={`${project.planes.length} of ${MAX_PLANES} planes`} />
-              <div className="plane-list">
+              <div className="plane-list" role="group" aria-label="Generation plan planes">
                 {project.planes.map((plane, index) => (
                   <button
                     className={`plane-list-item ${plane.id === activePlane.id ? "active" : ""}`}
                     key={plane.id}
                     type="button"
+                    aria-pressed={plane.id === activePlane.id}
                     onClick={() => { setActivePlaneId(plane.id); setSelectedId(undefined); }}
                   >
                     <span className={`plane-gem kind-${plane.kind}`}>{index + 1}</span>
                     <span><strong>{plane.name}</strong><small>{plane.provinces.length ? `${plane.provinces.length} provinces` : "Draft — not generated"} · {plane.kind}</small></span>
-                    <i className={validateProject({ ...project, planes: [plane] }).some((issue) => issue.severity === "error") ? "bad" : "good"} />
+                    <i className={issues.some((issue) => issue.severity === "error" && issue.planeId === plane.id) ? "bad" : "good"} />
                   </button>
                 ))}
               </div>
@@ -678,14 +903,23 @@ export function MapMakerApp() {
               <Field label="Plane name"><input value={activePlane.name} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.name = event.target.value; })} /></Field>
               <Field label="Plane archetype"><select value={activePlane.kind} onChange={(event) => mutate((draft) => {
                 const plane = draft.planes.find((item) => item.id === activePlane.id)!;
-                plane.kind = event.target.value as PlaneKind;
+                const planeIndex = draft.planes.findIndex((item) => item.id === plane.id);
+                const nextKind = event.target.value as PlaneKind;
+                if (isGeneratedPlaneName(plane.name)) {
+                  plane.name = uniquePlaneName(
+                    draft.planes.filter((item) => item.id !== plane.id),
+                    defaultPlaneName(nextKind, planeIndex),
+                  );
+                }
+                plane.kind = nextKind;
                 plane.variant = defaultVariantForKind(plane.kind);
               })}>{PLANE_KINDS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></Field>
               <p className="field-note">{PLANE_KINDS.find((item) => item.value === activePlane.kind)?.description}</p>
+              {activePlane.kind !== "surface" && activePlane.kind !== "custom" && <p className="field-note">Themed artwork fills ownerless space in the editor and exported PNG preview. Native D6M has no separate background-raster layer, so Dominions renders that space with its own realm presentation.</p>}
               <Field label="Terrain variant"><select value={activePlane.variant ?? defaultVariantForKind(activePlane.kind)} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.variant = event.target.value as PlaneVariant; })}>{PLANE_VARIANTS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></Field>
               <Toggle label="Auto-size from player count" checked={activePlane.autoSize ?? project.planes[0]?.id === activePlane.id} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.autoSize = value; })} />
-              {activePlane.autoSize
-                ? <div className="resolution-card"><span>Automatic province count</span><small>{activePlane.id === project.planes[0]?.id ? "Players × provinces per player" : "45% of the main-plane target"}</small></div>
+              {(activePlane.autoSize ?? project.planes[0]?.id === activePlane.id)
+                ? <div className="resolution-card"><span>Automatic province count</span><small>{planeAutoSizeDescription(project, activePlane)}</small></div>
                 : <NumberField label="Province target" value={activePlane.provinceTarget} min={8} max={800} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.provinceTarget = value; })} />}
               <Toggle label="Wrap east / west" checked={activePlane.wrapX} onChange={(value) => updateWrap("wrapX", value)} />
               <Toggle label="Wrap north / south" checked={activePlane.wrapY} onChange={(value) => updateWrap("wrapY", value)} />
@@ -713,56 +947,61 @@ export function MapMakerApp() {
                   const nextId = project.planes[index === 0 ? 1 : index - 1]?.id;
                   mutate((draft) => {
                     draft.planes = draft.planes.filter((plane) => plane.id !== activePlane.id);
-                    draft.gates = draft.gates.filter((gate) => !gate.endpoints.some((endpoint) => endpoint.planeId === activePlane.id));
+                    draft.gates = withoutPlaneGateEndpoints(draft.gates, activePlane.id);
                     draft.specificStarts = draft.specificStarts.filter((start) => start.planeId !== activePlane.id);
                     draft.settings.planeConnections = draft.settings.planeConnections?.filter((rule) => rule.a !== activePlane.id && rule.b !== activePlane.id);
                   });
                   setActivePlaneId(nextId ?? "");
                   setSelectedId(undefined);
+                  setLinkSource(undefined);
+                  setGateSource(undefined);
                 }}>Remove this plane</button>
               )}
               <Divider />
-              <SectionHeading kicker="DEFAULT LAYER LINKS" title="Gate generation" />
-              <Field label="Connection preset"><select value={project.settings.gateLayout ?? "hub"} onChange={(event) => mutate((draft) => {
-                const layout = event.target.value as GateLayout;
-                draft.settings.gateLayout = layout;
-                draft.settings.gateDirection = "bidirectional";
-                draft.settings.planeConnections = createDefaultPlaneConnections(draft.planes, layout, draft.settings.gatePairsPerConnection ?? 1);
-              })}>{GATE_LAYOUTS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></Field>
-              <p className="field-note">{GATE_LAYOUTS.find((item) => item.value === (project.settings.gateLayout ?? "hub"))?.description}</p>
-              <NumberField label="Default pairs per enabled link" value={project.settings.gatePairsPerConnection ?? 1} min={1} max={3} onChange={(value) => mutate((draft) => {
-                draft.settings.gatePairsPerConnection = value;
-                draft.settings.gateDirection = "bidirectional";
-                draft.settings.planeConnections = resolvePlaneConnectionRules(draft).map((rule) => ({ ...rule, pairs: value }));
-              })} />
-              <div className="plane-connection-list" aria-label="Plane connection matrix">
-                {planeConnectionRules.map((rule) => {
-                  const source = project.planes.find((plane) => plane.id === rule.a);
-                  const destination = project.planes.find((plane) => plane.id === rule.b);
-                  if (!source || !destination) return null;
-                  const compatible = gateCompatibility(source.kind, destination.kind);
-                  return <div className={`plane-connection-row ${rule.enabled === false ? "disabled" : ""}`} key={`${rule.a}:${rule.b}`}>
-                    <label aria-label={`Connect ${source.name} and ${destination.name}`}><input type="checkbox" checked={rule.enabled !== false} onChange={(event) => mutate((draft) => {
-                      draft.settings.gateDirection = "bidirectional";
-                      draft.settings.planeConnections = resolvePlaneConnectionRules(draft).map((item) => item.a === rule.a && item.b === rule.b ? { ...item, enabled: event.target.checked } : item);
-                    })} /><span><strong>{source.name} ↔ {destination.name}</strong><small>{compatible}% archetype compatibility · bidirectional</small></span></label>
-                    <input type="number" min={1} max={3} value={rule.pairs} disabled={rule.enabled === false} aria-label={`Gate pairs between ${source.name} and ${destination.name}`} onChange={(event) => mutate((draft) => {
+              <SectionHeading kicker="PLANNED GENERATION LINKS" title={`Next-generation links from ${activePlane.name}`} />
+              <Field label="All-plane preset (quick seed)"><select value={project.settings.gateLayout ?? "hub"} onChange={(event) => mutate((draft) => {
+                 const layout = event.target.value as GateLayout;
+                 draft.settings.gateLayout = layout;
+                 draft.settings.gateDirection = "bidirectional";
+                 draft.settings.planeConnections = createDefaultPlaneConnections(draft.planes, layout, draft.settings.gatePairsPerConnection ?? 1);
+               })}>{GATE_LAYOUTS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></Field>
+              <p className="field-note">{GATE_LAYOUTS.find((item) => item.value === (project.settings.gateLayout ?? "hub"))?.description} Presets seed every plane; the rows below customize only {activePlane.name}. These rules are used on the next generation and do not change existing gateways. Every enabled link is bidirectional.</p>
+              <NumberField label="Default pairs for all enabled links" value={project.settings.gatePairsPerConnection ?? 1} min={1} max={3} onChange={(value) => mutate((draft) => {
+                 draft.settings.gatePairsPerConnection = value;
+                 draft.settings.gateDirection = "bidirectional";
+                 draft.settings.planeConnections = resolvePlaneConnectionRules(draft).map((rule) => ({ ...rule, pairs: value }));
+               })} />
+              <div className="plane-connection-list" aria-label={`Connections from ${activePlane.name}`}>
+                {selectedPlaneConnectionRules.map((rule) => {
+                   const source = project.planes.find((plane) => plane.id === rule.a);
+                   const destination = project.planes.find((plane) => plane.id === rule.b);
+                   if (!source || !destination) return null;
+                  const otherPlane = source.id === activePlane.id ? destination : source;
+                  const activeLabel = planeDisplayLabel(project, activePlane);
+                  const otherLabel = planeDisplayLabel(project, otherPlane);
+                  const compatible = gateCompatibility(activePlane.kind, otherPlane.kind);
+                   return <div className={`plane-connection-row ${rule.enabled === false ? "disabled" : ""}`} key={`${rule.a}:${rule.b}`}>
+                    <label className="plane-connection-toggle" aria-label={`Connect ${activeLabel} and ${otherLabel}`}><input type="checkbox" checked={rule.enabled !== false} onChange={(event) => mutate((draft) => {
+                       draft.settings.gateDirection = "bidirectional";
+                       draft.settings.planeConnections = resolvePlaneConnectionRules(draft).map((item) => item.a === rule.a && item.b === rule.b ? { ...item, enabled: event.target.checked } : item);
+                    })} /><span><strong>{otherLabel}</strong><small>Bidirectional with {activeLabel} · {compatible}% archetype compatibility</small></span></label>
+                    <label className="plane-pair-count"><span>Pairs</span><input type="number" min={1} max={3} value={rule.pairs} disabled={rule.enabled === false} aria-label={`Gate pairs between ${activeLabel} and ${otherLabel}`} onChange={(event) => mutate((draft) => {
                       const pairs = numberValue(event.target.value, 1);
                       draft.settings.planeConnections = resolvePlaneConnectionRules(draft).map((item) => item.a === rule.a && item.b === rule.b ? { ...item, pairs: Math.max(1, Math.min(3, pairs)) } : item);
-                    })} />
-                  </div>;
-                })}
-                {!planeConnectionRules.length && <p>Add another plane to configure its gate connection.</p>}
-              </div>
-              <div className="gate-summary">
-                <strong>{project.gates.filter((gate) => gate.endpoints.some((endpoint) => endpoint.planeId === activePlane.id)).length} gates touch this plane</strong>
-                <span>Use the Gate tool, choose a source, switch planes, then choose its destination.</span>
-              </div>
+                    })} /></label>
+                   </div>;
+                 })}
+                {!selectedPlaneConnectionRules.length && <p>Add another plane to configure a connection from {activePlane.name}.</p>}
+               </div>
+              <Divider />
+              <SectionHeading kicker="EXISTING GATEWAYS" title={`${activePlaneGates.length} actual gateway${activePlaneGates.length === 1 ? "" : "s"} touching ${activePlane.name}`} />
+              <p className="field-note">These are saved <code>#gate</code> records in the current project—whether generated or placed manually—and are separate from the next-generation rules above. Every endpoint sharing a number is connected bidirectionally in Dominions 6.</p>
+              <ExistingGatewaysEditor project={project} activePlane={activePlane} gates={activePlaneGates} mutateProject={mutate} onNotice={setToast} />
             </div>
           )}
 
           {leftTab === "scenario" && (
-            <div className="panel-scroll setup-stack">
+            <div id="setup-active-panel" className="panel-scroll setup-stack" role="tabpanel" aria-labelledby="setup-tab-scenario">
               <SectionHeading kicker="HOST & SCENARIO" title="Game setup" />
               <Field label="Description"><textarea rows={3} value={project.description} onChange={(event) => mutate((draft) => { draft.description = event.target.value; })} /></Field>
               <NumberField label="Minimum Dominions version (#domversion)" value={project.targetVersion} min={600} max={999} onChange={(value) => mutate((draft) => { draft.targetVersion = value; })} />
@@ -790,7 +1029,7 @@ export function MapMakerApp() {
 
         <section className="canvas-column">
           <div className="canvas-toolbar">
-            <div className="tool-group" aria-label="Map tools">
+            <div className="tool-group" role="toolbar" aria-label="Map tools">
               {TOOL_ITEMS.map((item) => (
                 <button
                   key={item.id}
@@ -799,6 +1038,7 @@ export function MapMakerApp() {
                   onClick={() => { setTool(item.id); setLinkSource(undefined); setGateSource(undefined); }}
                   title={item.hint}
                   aria-label={item.label}
+                  aria-pressed={tool === item.id}
                 ><span>{item.mark}</span><small>{item.label}</small></button>
               ))}
             </div>
@@ -812,7 +1052,7 @@ export function MapMakerApp() {
             </div>
           </div>
           <div className="map-stage">
-            <MapCanvas key={activePlane.id} plane={activePlane} selectedId={selectedId} previewCondition={preview} onSelect={handleProvinceClick} onZoomChange={setZoom} tool={tool} />
+            <MapCanvas key={activePlane.id} plane={activePlane} selectedId={selectedId} previewCondition={preview} onNavigate={setSelectedId} onActivate={handleProvinceClick} onZoomChange={setZoom} tool={tool} />
             <div className="map-title-card">
               <span>{activePlane.kind}</span>
               <strong>{activePlane.name}</strong>
@@ -826,9 +1066,9 @@ export function MapMakerApp() {
               <span><i className="legend-defense" />Guardians</span>
             </div>
           </div>
-          <div className="plane-strip" aria-label="Plane selector">
+          <div className="plane-strip" role="group" aria-label="Plane selector">
             {project.planes.map((plane, index) => (
-              <button key={plane.id} type="button" className={plane.id === activePlane.id ? "active" : ""} onClick={() => { setActivePlaneId(plane.id); setSelectedId(undefined); }}>
+              <button key={plane.id} type="button" className={plane.id === activePlane.id ? "active" : ""} aria-pressed={plane.id === activePlane.id} onClick={() => { setActivePlaneId(plane.id); setSelectedId(undefined); }}>
                 <span>{index + 1}</span><strong>{plane.name}</strong><small>{plane.provinces.length}</small>
               </button>
             ))}
@@ -842,18 +1082,18 @@ export function MapMakerApp() {
               <div className="province-header">
                 <div>
                   <p className="eyebrow">PROVINCE {selected.index}</p>
-                  <input value={selected.name} onChange={(event) => updateSelected((province) => { province.name = event.target.value; })} aria-label="Province name" />
+                  <input value={selected.name} onChange={(event) => updateSelected((province) => { province.name = event.target.value; province.nameSource = "authored"; })} aria-label="Province name" />
                 </div>
                 <span className="terrain-mask" title="Dominions terrain mask">{terrainMask(selected).toString()}</span>
               </div>
               <div className="tab-row inspector-tabs" role="tablist" aria-label="Province inspector">
-                {(["terrain", "gameplay", "sites", "advanced"] as InspectorTab[]).map((tab) => (
-                  <button key={tab} type="button" className={inspectorTab === tab ? "active" : ""} onClick={() => setInspectorTab(tab)}>
+                {INSPECTOR_TABS.map((tab) => (
+                  <button key={tab} id={`inspector-tab-${tab}`} type="button" role="tab" tabIndex={inspectorTab === tab ? 0 : -1} aria-selected={inspectorTab === tab} aria-controls="inspector-active-panel" className={inspectorTab === tab ? "active" : ""} onClick={() => setInspectorTab(tab)} onKeyDown={(event) => handleTabKey(event, INSPECTOR_TABS, inspectorTab, setInspectorTab)}>
                     {tab === "sites" ? "Sites & PD" : tab.charAt(0).toUpperCase() + tab.slice(1)}
                   </button>
                 ))}
               </div>
-              <div className="panel-scroll inspector-scroll">
+              <div id="inspector-active-panel" className="panel-scroll inspector-scroll" role="tabpanel" aria-labelledby={`inspector-tab-${inspectorTab}`}>
                 {inspectorTab === "terrain" && <TerrainInspector province={selected} update={updateSelected} />}
                 {inspectorTab === "gameplay" && <GameplayInspector catalog={catalog} project={project} planeId={activePlane.id} province={selected} update={updateSelected} mutateProject={mutate} />}
                 {inspectorTab === "sites" && <SitesDefenseInspector catalog={catalog} plane={activePlane} province={selected} update={updateSelected} />}
@@ -890,6 +1130,7 @@ export function MapMakerApp() {
 
       {exportOpen && <ExportDialog
         project={project}
+        activePlane={activePlane}
         issues={issues}
         progress={exportProgress}
         busy={exportBusy}
@@ -901,8 +1142,8 @@ export function MapMakerApp() {
         onValidate={() => { setExportOpen(false); setValidationOpen(true); }}
       />}
 
-      <input ref={importRef} className="sr-only" type="file" accept=".json,.atlas.json,application/json" onChange={importProject} />
-      <input ref={catalogImportRef} className="sr-only" type="file" accept=".json,application/json" onChange={importCatalog} />
+      <input ref={importRef} className="sr-only" type="file" tabIndex={-1} aria-hidden="true" accept=".json,.atlas.json,application/json" onChange={importProject} />
+      <input ref={catalogImportRef} className="sr-only" type="file" tabIndex={-1} aria-hidden="true" accept=".json,application/json" onChange={importCatalog} />
       <button className="import-fab" type="button" onClick={() => importRef.current?.click()} title="Open an Atlas project">Open project</button>
       {toast && <div className="toast" role="status">{toast}</div>}
     </main>
@@ -1008,39 +1249,55 @@ function GameplayInspector({ catalog, project, planeId, province, update, mutate
   );
 }
 
-function SitesDefenseInspector({ catalog, plane, province, update }: { catalog: Dom6CatalogBundle; plane: Plane; province: Province; update: (recipe: (province: Province) => void) => void }) {
-  const [showAllSites, setShowAllSites] = useState(false);
+export function SitesDefenseInspector({ catalog, plane, province, update }: { catalog: Dom6CatalogBundle; plane: Plane; province: Province; update: (recipe: (province: Province) => void) => void }) {
+  const [showTerrainMismatches, setShowTerrainMismatches] = useState(false);
+  const [showSpecialSites, setShowSpecialSites] = useState(false);
+  const [showAllGuardianUnits, setShowAllGuardianUnits] = useState(true);
   const siteStatus = (entry: CatalogEntry) => siteCompatibility(entry, province, plane);
-  const compatibleSites = showAllSites ? catalog.sites : catalog.sites.filter((entry) => siteStatus(entry).compatible);
+  const placeableSites = provinceSiteEntries(catalog.sites);
+  const placeableSiteIds = new Set(placeableSites.map((entry) => entry.id));
+  const ordinarySites = placeableSites.filter((entry) => entry.provenanceId !== "dom6inspector-6.35-cfac4311" || entry.tags?.includes("ordinary-site"));
+  const sitePool = showSpecialSites ? placeableSites : ordinarySites;
+  const siteChoices = showTerrainMismatches ? sitePool : sitePool.filter((entry) => siteStatus(entry).compatible);
+  const roleCommanders = commanderUnitEntries(catalog.units);
+  const roleTroops = troopUnitEntries(catalog.units);
+  const commanderChoices = showAllGuardianUnits ? catalog.units : roleCommanders;
+  const troopChoices = showAllGuardianUnits ? catalog.units : roleTroops;
   return (
     <div className="inspector-stack">
       <SectionHeading kicker="MAGIC SITES" title="Placed sites" />
       <Toggle label="Remove randomly generated sites" checked={province.killRandomSites} onChange={(value) => update((item) => { item.killRandomSites = value; })} />
-      <div className="catalog-filter-bar"><span>{compatibleSites.length.toLocaleString()} of {catalog.sites.length.toLocaleString()} sites shown</span><button type="button" className={showAllSites ? "active" : ""} onClick={() => setShowAllSites((value) => !value)}>{showAllSites ? "Compatible only" : "Show all"}</button></div>
+      <div className="catalog-filter-bar"><span>{showTerrainMismatches ? `Showing all ${siteChoices.length.toLocaleString()}` : `${siteChoices.length.toLocaleString()} terrain-compatible`} of {sitePool.length.toLocaleString()} {showSpecialSites ? "non-capital" : "ordinary"} province sites</span><button type="button" className={showTerrainMismatches ? "active" : ""} onClick={() => setShowTerrainMismatches((value) => !value)}>{showTerrainMismatches ? "Compatible only" : "Show terrain mismatches"}</button></div>
+      <div className="catalog-filter-bar"><span>{ordinarySites.length.toLocaleString()} ordinary + {(placeableSites.length - ordinarySites.length).toLocaleString()} non-random non-home sites available</span><button type="button" className={showSpecialSites ? "active" : ""} aria-pressed={showSpecialSites} onClick={() => setShowSpecialSites((value) => !value)}>{showSpecialSites ? "Ordinary sites only" : `Include all ${placeableSites.length.toLocaleString()} non-capital sites`}</button></div>
       <div className="site-list">
         {province.sites.map((site, index) => (
           <div className="site-row" key={site.id}>
-            <CatalogCombobox compact label={`Site ${index + 1}`} value={site.value} entries={includeSelectedEntry(compatibleSites, catalog.sites, site.value)} getEntryStatus={siteStatus} placeholder="Search site name or ID" onCommit={(value) => update((item) => { item.sites[index]!.value = value; })} />
+            <CatalogCombobox compact label={`Site ${index + 1}`} value={site.value} entries={includeSelectedEntry(siteChoices, catalog.sites, site.value)} getEntryStatus={siteStatus} placeholder={`Search ${sitePool.length.toLocaleString()} ${showSpecialSites ? "non-capital" : "ordinary"} sites by name or ID`} isValueAllowed={(value) => {
+              const known = findCatalogEntry(catalog.sites, value);
+              return !known || placeableSiteIds.has(known.id);
+            }} rejectedMessage="Nation home sites and Thrones of Ascension cannot be placed with this picker." onCommit={(value) => update((item) => { item.sites[index]!.value = value; })} />
             <label title="Known at game start"><input type="checkbox" checked={site.known} onChange={(event) => update((item) => { item.sites[index]!.known = event.target.checked; })} />Known</label>
-            <button type="button" onClick={() => update((item) => { item.sites.splice(index, 1); })} aria-label="Remove site">×</button>
+            <button type="button" onClick={() => update((item) => { item.sites.splice(index, 1); })} aria-label={`Remove site ${index + 1}`}>×</button>
           </div>
         ))}
       </div>
       <button className="button quiet wide" type="button" onClick={() => update((item) => { item.sites.push({ id: `site-${Date.now().toString(36)}`, value: "", known: false }); })}>+ Place magic site</button>
-      <p className="microcopy">Hidden sites use <code>#feature</code>; known sites use <code>#knownfeature</code>. Exact site compatibility depends on the vanilla site selected.</p>
+      <p className="microcopy">The default picker includes the complete {ordinarySites.length.toLocaleString()}-site ordinary pool (rarity 0-4); the expanded {placeableSites.length.toLocaleString()}-site pool also includes verified non-random sites that are not nation homes. Nation home/capital sites and Thrones of Ascension stay excluded; fixed thrones are selected under Gameplay. Hidden sites use <code>#feature</code>; known sites use <code>#knownfeature</code>.</p>
       <Divider />
       <SectionHeading kicker="UNIQUE INITIAL DEFENSE" title="Guardian groups" />
       <div className="info-card amber"><strong>Map-only boundary</strong><p>These commanders and squads are unique initial independents. Persistent purchasable PD composition is defined by a vanilla poptype or nation; a wholly new PD roster requires enabling a separate mod.</p></div>
+      <div className="catalog-filter-bar"><span>{showAllGuardianUnits ? `All ${catalog.units.length.toLocaleString()} vanilla units available; role filters cover ${roleCommanders.length.toLocaleString()} commanders / ${roleTroops.length.toLocaleString()} troops` : `${roleCommanders.length.toLocaleString()} nation-recruitable commanders / ${roleTroops.length.toLocaleString()} nation-recruitable troops`}</span><button type="button" className={!showAllGuardianUnits ? "active" : ""} aria-pressed={!showAllGuardianUnits} onClick={() => setShowAllGuardianUnits((value) => !value)}>{showAllGuardianUnits ? "Use role-focused lists" : `Search all ${catalog.units.length.toLocaleString()} units`}</button></div>
+      <p className="microcopy">Role-focused lists come from the pinned Inspector leader/troop recruitment tables, not unit-name guesses. Dominions map commands can instantiate unusual monster IDs in either role, so the full-catalog search remains available.</p>
       {province.defenders.map((defense, defenseIndex) => (
         <div className="defense-card" key={`${defense.commander}-${defenseIndex}`}>
-          <div className="card-heading"><strong>Guardian group {defenseIndex + 1}</strong><button type="button" onClick={() => update((item) => { item.defenders.splice(defenseIndex, 1); })}>Remove</button></div>
-          <CatalogCombobox label="Commander" value={defense.commander} entries={catalog.units} placeholder="Search unit name or ID" onCommit={(value) => update((item) => { item.defenders[defenseIndex]!.commander = value; })} />
+          <div className="card-heading"><strong>Guardian group {defenseIndex + 1}</strong><button type="button" aria-label={`Remove guardian group ${defenseIndex + 1}`} onClick={() => update((item) => { item.defenders.splice(defenseIndex, 1); })}>Remove</button></div>
+          <CatalogCombobox label="Commander" value={defense.commander} entries={includeSelectedEntry(commanderChoices, catalog.units, defense.commander)} placeholder={`Search ${commanderChoices.length.toLocaleString()} ${showAllGuardianUnits ? "vanilla units" : "known commanders"} by name or ID`} onCommit={(value) => update((item) => { item.defenders[defenseIndex]!.commander = value; })} />
           <Field label="Commander display name"><input value={defense.commanderName ?? ""} onChange={(event) => update((item) => { item.defenders[defenseIndex]!.commanderName = event.target.value || undefined; })} /></Field>
           {defense.squads.map((squad, squadIndex) => (
             <div className="squad-row" key={squad.id}>
-              <input type="number" min={1} value={squad.count} aria-label="Squad count" onChange={(event) => update((item) => { item.defenders[defenseIndex]!.squads[squadIndex]!.count = numberValue(event.target.value, 1); })} />
-              <CatalogCombobox compact label={`Squad ${squadIndex + 1} unit`} value={squad.unit} entries={catalog.units} placeholder="Search unit name or ID" onCommit={(value) => update((item) => { item.defenders[defenseIndex]!.squads[squadIndex]!.unit = value; })} />
-              <button type="button" onClick={() => update((item) => { item.defenders[defenseIndex]!.squads.splice(squadIndex, 1); })} aria-label="Remove squad">×</button>
+              <input type="number" min={1} value={squad.count} aria-label={`Guardian group ${defenseIndex + 1}, squad ${squadIndex + 1} count`} onChange={(event) => update((item) => { item.defenders[defenseIndex]!.squads[squadIndex]!.count = numberValue(event.target.value, 1); })} />
+              <CatalogCombobox compact label={`Squad ${squadIndex + 1} unit`} value={squad.unit} entries={includeSelectedEntry(troopChoices, catalog.units, squad.unit)} placeholder={`Search ${troopChoices.length.toLocaleString()} ${showAllGuardianUnits ? "vanilla units" : "known troops"} by name or ID`} onCommit={(value) => update((item) => { item.defenders[defenseIndex]!.squads[squadIndex]!.unit = value; })} />
+              <button type="button" onClick={() => update((item) => { item.defenders[defenseIndex]!.squads.splice(squadIndex, 1); })} aria-label={`Remove guardian group ${defenseIndex + 1}, squad ${squadIndex + 1}`}>×</button>
             </div>
           ))}
           <button className="text-button" type="button" onClick={() => update((item) => { item.defenders[defenseIndex]!.squads.push({ id: `squad-${Date.now().toString(36)}`, unit: "", count: 10 }); })}>+ Add squad</button>
@@ -1054,7 +1311,7 @@ function SitesDefenseInspector({ catalog, plane, province, update }: { catalog: 
               <Field label="Specific items (one per line)"><textarea rows={3} value={(defense.items ?? []).join("\n")} onChange={(event) => update((item) => { item.defenders[defenseIndex]!.items = lines(event.target.value); })} /></Field>
               <Toggle label="Clear commander's innate magic first" checked={defense.clearMagic ?? false} onChange={(value) => update((item) => { item.defenders[defenseIndex]!.clearMagic = value || undefined; })} />
               <div className="bodyguard-fields">
-                <CatalogCombobox label="Bodyguard unit" value={defense.bodyguard} entries={catalog.units} placeholder="Search unit name or ID" onCommit={(value) => update((item) => {
+                <CatalogCombobox label="Bodyguard unit" value={defense.bodyguard} entries={includeSelectedEntry(troopChoices, catalog.units, defense.bodyguard)} placeholder={`Search ${troopChoices.length.toLocaleString()} ${showAllGuardianUnits ? "vanilla units" : "known troops"} by name or ID`} onCommit={(value) => update((item) => {
                   const group = item.defenders[defenseIndex]!;
                   group.bodyguard = value || undefined;
                   if (!value) group.bodyguardCount = undefined;
@@ -1083,7 +1340,7 @@ function AdvancedInspector({ project, planeId, province, update, mutateProject }
       <div className="edge-list">{incident.map((edge) => {
         const otherId = edge.a === province.id ? edge.b : edge.a;
         const other = plane.provinces.find((item) => item.id === otherId);
-        return <div className="edge-row" key={edge.id}><span>{other?.index}. {other?.name}</span><select value={edge.kind} onChange={(event) => mutateProject((draft) => { const target = draft.planes.find((item) => item.id === planeId)!.edges.find((item) => item.id === edge.id)!; target.kind = event.target.value as EdgeKind; })}>{EDGE_KINDS.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}</select></div>;
+        return <div className="edge-row" key={edge.id}><span>{other?.index}. {other?.name}</span><select value={edge.kind} aria-label={`Border type to province ${other?.index ?? "unknown"}, ${other?.name ?? "missing province"}`} onChange={(event) => mutateProject((draft) => { const target = draft.planes.find((item) => item.id === planeId)!.edges.find((item) => item.id === edge.id)!; target.kind = event.target.value as EdgeKind; })}>{EDGE_KINDS.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}</select></div>;
       })}</div>
       <Divider />
       <SectionHeading kicker="BATTLE SCENE" title="Province battlefield" />
@@ -1101,26 +1358,146 @@ function AdvancedInspector({ project, planeId, province, update, mutateProject }
   );
 }
 
+export function ExistingGatewaysEditor({ project, activePlane, gates, mutateProject, onNotice }: {
+  project: MapProject;
+  activePlane: Plane;
+  gates: GateLink[];
+  mutateProject: (recipe: (draft: MapProject) => void) => void;
+  onNotice: (message: string) => void;
+}) {
+  if (!gates.length) {
+    return <div className="existing-gateway-empty">
+      <strong>No existing gateways touch {activePlane.name}.</strong>
+      <span>Generate the atlas, or use the Gate tool to choose a source province, switch planes, and choose its destination.</span>
+    </div>;
+  }
+
+  const activeLabel = planeDisplayLabel(project, activePlane);
+  return <div className="existing-gateway-list" aria-label={`Existing gateways touching ${activeLabel}`}>
+    {gates.map((gate, gateIndex) => {
+      const headingId = `existing-gateway-${gateIndex}-heading`;
+      return <article className="existing-gateway-card" aria-labelledby={headingId} key={gate.id}>
+        <div className="existing-gateway-heading">
+          <div>
+            <p className="eyebrow">SHARED DOMINIONS NUMBER</p>
+            <h3 id={headingId}>Gateway <code>#gate {gate.gateNumber}</code></h3>
+          </div>
+          <button className="text-button danger-text" type="button" aria-label={`Delete gateway with shared number ${gate.gateNumber}`} onClick={() => mutateProject((draft) => {
+            draft.gates = draft.gates.filter((item) => item.id !== gate.id);
+          })}>Delete gateway</button>
+        </div>
+        <label className="existing-gateway-number">
+          <span>Shared gate number</span>
+          <input key={`${gate.id}:${gate.gateNumber}`} type="number" min={1} step={1} defaultValue={gate.gateNumber} aria-label={`Shared Dominions gate number for gateway ${gateIndex + 1}`} onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
+            if (event.key === "Escape") {
+              event.currentTarget.value = String(gate.gateNumber);
+              event.currentTarget.blur();
+            }
+          }} onBlur={(event) => {
+            const gateNumber = Number(event.currentTarget.value);
+            if (gateNumber === gate.gateNumber) return;
+            if (!gateNumberIsAvailable(project.gates, gate.id, gateNumber)) {
+              const duplicate = project.gates.some((item) => item.id !== gate.id && item.gateNumber === gateNumber);
+              event.currentTarget.value = String(gate.gateNumber);
+              onNotice(duplicate
+                ? `Gate number ${gateNumber} is already used by another gateway.`
+                : "Gate numbers must be positive whole numbers within JavaScript's safe integer range.");
+              return;
+            }
+            mutateProject((draft) => {
+              const item = draft.gates.find((candidate) => candidate.id === gate.id);
+              if (item && gateNumberIsAvailable(draft.gates, gate.id, gateNumber)) item.gateNumber = gateNumber;
+            });
+          }} />
+        </label>
+        <p className="gateway-card-note">One shared number connects all {gate.endpoints.length} endpoints. Duplicate numbers are reported by validation.</p>
+        <div className="gateway-endpoint-list">
+          {gate.endpoints.map((endpoint, endpointIndex) => {
+            const endpointPlane = project.planes.find((plane) => plane.id === endpoint.planeId);
+            const endpointProvince = endpointPlane?.provinces.find((province) => province.id === endpoint.provinceId);
+            const provinces = endpointPlane ? [...endpointPlane.provinces].sort((left, right) => left.index - right.index) : [];
+            const endpointPlaneLabel = endpointPlane ? planeDisplayLabel(project, endpointPlane) : `Missing plane (${endpoint.planeId})`;
+            return <div className={`gateway-endpoint-row ${endpoint.planeId === activePlane.id ? "active-plane" : ""}`} key={`${endpoint.planeId}:${endpointIndex}`}>
+              <div className="gateway-endpoint-meta">
+                <span>Endpoint {endpointIndex + 1}{endpoint.planeId === activePlane.id ? " · selected plane" : ""}</span>
+                <strong>{endpointPlaneLabel}</strong>
+                <small>{endpointProvince ? `Local #${endpointProvince.index} · ${endpointProvince.name} · ID ${endpointProvince.id}` : `Stored province ID ${endpoint.provinceId} is missing`}</small>
+              </div>
+              {endpointPlane ? <label className="gateway-endpoint-select">
+                <span>Local province index on {endpointPlaneLabel}</span>
+                <select value={endpointProvince?.index ?? ""} aria-label={`Endpoint ${endpointIndex + 1} local province index on ${endpointPlaneLabel}`} onChange={(event) => {
+                  const province = provinceAtLocalIndex(endpointPlane, numberValue(event.target.value, -1));
+                  if (!province) return;
+                  if (gateEndpointIsUsed(gate, endpoint.planeId, province.id, endpointIndex)) {
+                    onNotice(`${endpointPlane.name} province #${province.index} is already an endpoint of this gateway.`);
+                    return;
+                  }
+                  mutateProject((draft) => {
+                    const item = draft.gates.find((candidate) => candidate.id === gate.id);
+                    const draftEndpoint = item?.endpoints[endpointIndex];
+                    const plane = draft.planes.find((candidate) => candidate.id === endpoint.planeId);
+                    if (draftEndpoint && plane?.provinces.some((candidate) => candidate.id === province.id)) {
+                      draftEndpoint.provinceId = province.id;
+                    }
+                  });
+                }}>
+                  {!endpointProvince && <option value="">Missing province · ID {endpoint.provinceId}</option>}
+                  {provinces.map((province) => {
+                    const used = gateEndpointIsUsed(gate, endpoint.planeId, province.id, endpointIndex);
+                    return <option value={province.index} disabled={used} key={province.id}>#{province.index} — {province.name}{used ? " — already used" : ""}</option>;
+                  })}
+                </select>
+              </label> : <p className="gateway-endpoint-warning">This endpoint cannot be reassigned because its plane is missing. Delete this gateway, or restore the plane through project JSON.</p>}
+            </div>;
+          })}
+        </div>
+      </article>;
+    })}
+  </div>;
+}
+
 function ValidationDrawer({ issues, fairness, onClose, onSelectIssue }: { issues: ValidationIssue[]; fairness: ReturnType<typeof calculateFairness>; onClose: () => void; onSelectIssue: (issue: ValidationIssue) => void }) {
-  return <div className="drawer-backdrop"><aside className="validation-drawer" aria-modal="true" role="dialog" aria-label="Map validation">
+  const dialogRef = useDialogFocus<HTMLElement>(onClose);
+  return <div className="drawer-backdrop"><aside ref={dialogRef} className="validation-drawer" tabIndex={-1} aria-modal="true" role="dialog" aria-label="Map validation">
     <div className="dialog-heading"><div><p className="eyebrow">EXPORT READINESS</p><h2>Compatibility & fairness</h2></div><button type="button" onClick={onClose} aria-label="Close">×</button></div>
     <div className="score-hero"><div className={`score-ring ${scoreClass(fairness.overall)}`} style={{ "--score": fairness.overall } as CSSProperties}><strong>{fairness.overall}</strong><small>overall</small></div><div><h3>Multiplayer balance</h3><p>{fairness.notes[0]}</p></div></div>
-    <div className="metric-grid">{([['Start spacing', fairness.startSeparation], ['Expansion parity', fairness.expansionParity], ['Throne access', fairness.throneAccess], ['Terrain variety', fairness.terrainVariety], ['Connectivity', fairness.connectivity]] as Array<[string, number]>).map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong><i><b style={{ width: `${value}%` }} /></i></div>)}</div>
+    <div className="metric-grid">{([['Start spacing', fairness.startSeparation], ['Expansion parity', fairness.expansionParity], ['Nearby throne parity', fairness.throneAccess], ['Terrain variety', fairness.terrainVariety], ['Connectivity', fairness.connectivity]] as Array<[string, number]>).map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong><i><b style={{ width: `${value}%` }} /></i></div>)}</div>
     <div className="validation-list">{issues.map((issue) => <button key={issue.id} type="button" className={`issue ${issue.severity}`} onClick={() => onSelectIssue(issue)}><span>{issue.severity === "error" ? "!" : issue.severity === "warning" ? "△" : "✓"}</span><p><strong>{issue.severity}</strong>{issue.message}</p></button>)}</div>
   </aside></div>;
 }
 
-function ExportDialog({ project, issues, progress, busy, onClose, onInstall, onZip, onProject, onPreview, onValidate }: { project: MapProject; issues: ValidationIssue[]; progress?: ExportProgress; busy: boolean; onClose: () => void; onInstall: () => void; onZip: () => void; onProject: () => void; onPreview: () => void; onValidate: () => void }) {
+export function ExportDialog({ project, activePlane, issues, progress, busy, onClose, onInstall, onZip, onProject, onPreview, onValidate }: { project: MapProject; activePlane: Plane; issues: ValidationIssue[]; progress?: ExportProgress; busy: boolean; onClose: () => void; onInstall: () => void; onZip: () => void; onProject: () => void; onPreview: () => void; onValidate: () => void }) {
   const errors = issues.filter((issue) => issue.severity === "error").length;
-  return <div className="modal-backdrop"><section className="export-dialog" role="dialog" aria-modal="true" aria-label="Install or export map">
+  const dialogRef = useDialogFocus<HTMLElement>(onClose, busy);
+  const progressPercent = Math.max(0, Math.min(100, progress?.percent ?? 0));
+  const progressMessage = progress?.message ?? "Preparing the export";
+  const progressPlane = Math.max(1, progress?.plane ?? 1);
+  const progressPlaneCount = Math.max(1, progress?.planeCount ?? project.planes.length);
+  useEffect(() => {
+    if (!busy) return;
+    const frame = window.requestAnimationFrame(() => dialogRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [busy, dialogRef]);
+  return <div className="modal-backdrop"><section ref={dialogRef} className="export-dialog" tabIndex={-1} role="dialog" aria-modal="true" aria-busy={busy} aria-label="Install or export map">
     <div className="dialog-heading"><div><p className="eyebrow">DOMINIONS 6 PACKAGE</p><h2>Install a playable atlas</h2></div><button type="button" disabled={busy} onClick={onClose} aria-label="Close">×</button></div>
     <div className="package-summary"><div className="package-glyph">D6</div><div><strong>{sanitizeMapName(project.name)}.map</strong><span>{project.planes.length} plane{project.planes.length === 1 ? "" : "s"} · {project.planes.reduce((sum, plane) => sum + plane.provinces.length, 0)} provinces · {formatBytes(estimatedPackageBytes(project))}</span></div><i className={errors ? "bad" : "good"}>{errors ? "!" : "✓"}</i></div>
     {errors ? <div className="export-blocked"><strong>{errors} compatibility blocker{errors === 1 ? "" : "s"}</strong><p>Resolve export errors before building the package.</p><button className="button quiet" type="button" onClick={onValidate}>Review validation</button></div> : <div className="export-options">
-      <button className="export-option primary-option" type="button" onClick={onInstall} disabled={busy}><span className="option-icon">↳</span><span><strong>Install directly</strong><small>Choose the Dominions 6 <code>maps</code> folder once; the ready-to-play folder is written there.</small></span><b>Recommended</b></button>
-      <button className="export-option" type="button" onClick={onZip} disabled={busy}><span className="option-icon">↓</span><span><strong>Download ready ZIP</strong><small>Extract the included folder into your Dominions 6 user-data <code>maps</code> directory.</small></span></button>
+      <button className="export-option primary-option" type="button" onClick={onInstall} disabled={busy}><span className="option-icon" aria-hidden="true">↳</span><span><strong>Install directly</strong><small>Choose the Dominions 6 <code>maps</code> folder once; the ready-to-play folder is written there.</small></span><b>Recommended</b></button>
+      <button className="export-option" type="button" onClick={onZip} disabled={busy}><span className="option-icon" aria-hidden="true">↓</span><span><strong>Download ready ZIP</strong><small>Extract the included folder into your Dominions 6 user-data <code>maps</code> directory.</small></span></button>
     </div>}
-    {busy && progress && <div className="export-progress"><div><span>{progress.message}</span><strong>{progress.percent}%</strong></div><i><b style={{ width: `${progress.percent}%` }} /></i><small>Plane {Math.max(1, progress.plane)} of {progress.planeCount}</small></div>}
-    <div className="secondary-exports"><button type="button" onClick={onProject} disabled={busy}>Editable project JSON</button><button type="button" onClick={onPreview} disabled={busy}>High-res {project.planes[0]?.width}×{project.planes[0]?.height} preview</button></div>
+    {busy && <div
+      className="export-progress"
+      role="progressbar"
+      aria-live="polite"
+      aria-atomic="true"
+      aria-label="Export progress"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={progressPercent}
+      aria-valuetext={`${progressMessage}. ${progressPercent}%. Plane ${progressPlane} of ${progressPlaneCount}.`}
+    ><div><span>{progressMessage}</span><strong>{progressPercent}%</strong></div><i aria-hidden="true"><b style={{ width: `${progressPercent}%` }} /></i><small>Plane {progressPlane} of {progressPlaneCount}</small></div>}
+    <div className="secondary-exports"><button type="button" onClick={onProject} disabled={busy}>Editable project JSON</button><button type="button" onClick={onPreview} disabled={busy}>High-res {activePlane.width}×{activePlane.height} preview of {planeDisplayLabel(project, activePlane)}</button></div>
     <p className="export-note"><strong>Zero-mod export.</strong> Native <code>.d6m</code> files let Dominions render condition changes. The package also includes host settings, the editable project, and a balance report.</p>
   </section></div>;
 }
@@ -1128,29 +1505,80 @@ function ExportDialog({ project, issues, progress, busy, onClose, onInstall, onZ
 function SectionHeading({ kicker, title }: { kicker: string; title: string }) { return <div className="section-heading"><p className="eyebrow">{kicker}</p><h2>{title}</h2></div>; }
 function Divider() { return <div className="divider" />; }
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="field"><span>{label}</span>{children}</label>; }
-function NumberField({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (value: number) => void }) { return <Field label={label}><input type="number" value={value} min={min} max={max} onChange={(event) => onChange(numberValue(event.target.value, min))} /></Field>; }
+function NumberField({ label, value, min, max, describedBy, onChange }: { label: string; value: number; min: number; max: number; describedBy?: string; onChange: (value: number) => void }) { return <Field label={label}><input type="number" value={value} min={min} max={max} aria-describedby={describedBy} onChange={(event) => onChange(numberValue(event.target.value, min))} /></Field>; }
 function OptionalNumberField({ label, value, min, max, disabled = false, onChange }: { label: string; value?: number; min: number; max?: number; disabled?: boolean; onChange: (value?: number) => void }) { return <Field label={label}><input type="number" value={value ?? ""} min={min} max={max} disabled={disabled} placeholder="Auto" onChange={(event) => onChange(optionalNumber(event.target.value))} /></Field>; }
 function RangeField({ label, value, suffix, min, max, onChange }: { label: string; value: number; suffix: string; min: number; max: number; onChange: (value: number) => void }) { return <label className="range-field"><span>{label}<strong>{value}{suffix}</strong></span><input type="range" min={min} max={max} value={value} onChange={(event) => onChange(numberValue(event.target.value, min))} /></label>; }
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) { return <label className="toggle-row"><span>{label}</span><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} /><i /></label>; }
 function CheckCard({ label, checked, onChange, compact = false }: { label: string; checked: boolean; onChange: (value: boolean) => void; compact?: boolean }) { return <label className={`check-card ${compact ? "compact" : ""} ${checked ? "checked" : ""}`}><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} /><i>{checked ? "✓" : ""}</i><span>{label}</span></label>; }
 
-function CatalogIdSetField({ label, values, entries, onChange }: { label: string; values: number[]; entries: CatalogEntry[]; onChange: (values: number[]) => void }) {
+export function CaveStartNationField({ values, caveStartCount, hasCaveFamilyPlane, entries, onChange }: {
+  values: number[];
+  caveStartCount: number;
+  hasCaveFamilyPlane: boolean;
+  entries: CatalogEntry[];
+  onChange: (values: number[]) => void;
+}) {
+  const exceedsCapacity = values.length > caveStartCount;
+  return <section className="cave-start-nation-config" aria-label="Deterministic cave-start nations">
+    <CatalogIdSetField
+      label="Deterministic cave-start nations"
+      values={values}
+      entries={entries}
+      ordered
+      emptyMessage="None selected — Dominions native cave preference remains in control."
+      isAllowedId={(id) => Number.isSafeInteger(id) && id >= 5}
+      onChange={onChange}
+    />
+    <p className="microcopy">Leave this empty for Dominions native cave preference. After any selection change, choose Generate to create one distinct cave capital and <code>#specstart</code> per configured nation in the priority shown. Validation blocks export until those assignments are current.</p>
+    {hasCaveFamilyPlane && caveStartCount === 0 && <div className="info-card cave-start-zero-info">
+      <strong>No generic cave capital will be generated</strong>
+      <p>A cave-family plane exists, but Cave starts is 0. Dominions native cave preference has no cave slot to use; starts remain exactly as allocated above.</p>
+    </div>}
+    {exceedsCapacity && <p className="warning-copy cave-start-capacity" role="alert">{values.length} nations selected for {caveStartCount} requested cave start{caveStartCount === 1 ? "" : "s"}. {caveStartCount > 0 ? `Only the first ${caveStartCount} can be assigned; increase Cave starts or remove lower-priority nations.` : "None can be assigned until Cave starts is increased."}</p>}
+  </section>;
+}
+
+function CatalogIdSetField({ label, values, entries, emptyMessage = "Unrestricted", ordered = false, isAllowedId = isPlayerNationId, onChange }: {
+  label: string;
+  values: number[];
+  entries: CatalogEntry[];
+  emptyMessage?: string;
+  ordered?: boolean;
+  isAllowedId?: (id: number) => boolean;
+  onChange: (values: number[]) => void;
+}) {
   const [draft, setDraft] = useState("");
   const add = (value: string) => {
     setDraft(value);
     const id = catalogId(value, entries);
-    if (id === undefined || !isPlayerNationId(id) || values.includes(id)) return;
-    onChange([...values, id].sort((left, right) => left - right));
+    if (id === undefined || !isAllowedId(id) || values.includes(id)) return;
+    const next = [...values, id];
+    onChange(ordered ? next : next.sort((left, right) => left - right));
     setDraft("");
+  };
+  const move = (index: number, offset: -1 | 1) => {
+    const destination = index + offset;
+    if (destination < 0 || destination >= values.length) return;
+    const next = [...values];
+    [next[index], next[destination]] = [next[destination]!, next[index]!];
+    onChange(next);
   };
   return <div className="catalog-id-field">
     <CatalogCombobox key={values.join(",")} label={`Add ${label.toLocaleLowerCase()}`} value={draft} entries={entries} onCommit={add} placeholder="Search nation name or ID" />
-    <div className="catalog-chip-list" aria-label={label}>
-      {values.map((id) => {
+    <div className={`catalog-chip-list ${ordered ? "ordered" : ""}`} aria-label={label}>
+      {values.map((id, index) => {
         const entry = findCatalogEntry(entries, id);
-        return <span className="catalog-chip" key={id}><span>{entry ? formatCatalogEntry(entry) : `Custom nation #${id}`}</span><button type="button" aria-label={`Remove nation ${id}`} onClick={() => onChange(values.filter((value) => value !== id))}>×</button></span>;
+        const name = entry ? formatCatalogEntry(entry) : `Custom nation #${id}`;
+        return <span className={`catalog-chip ${ordered ? "ordered" : ""}`} key={id}>
+          <span className="catalog-chip-label">{ordered ? `${index + 1}. ` : ""}{name}</span>
+          <span className="catalog-chip-actions">
+            {ordered && <button type="button" disabled={index === 0} aria-label={`Move nation ${id} earlier`} onClick={() => move(index, -1)}>↑</button>}
+            {ordered && <button type="button" disabled={index === values.length - 1} aria-label={`Move nation ${id} later`} onClick={() => move(index, 1)}>↓</button>}
+            <button type="button" aria-label={`Remove nation ${id}`} onClick={() => onChange(values.filter((value) => value !== id))}>×</button>
+          </span>
+        </span>;
       })}
-      {!values.length && <small>Unrestricted</small>}
+      {!values.length && <small>{emptyMessage}</small>}
     </div>
   </div>;
 }
@@ -1242,6 +1670,46 @@ function defaultVariantForKind(kind: PlaneKind): PlaneVariant {
   return variants[kind];
 }
 
+/** Return a collision-free human name without changing imported plane IDs. */
+export function uniquePlaneName(planes: Plane[], preferred: string): string {
+  const used = new Set(planes.map((plane) => plane.name.trim().toLocaleLowerCase()));
+  if (!used.has(preferred.trim().toLocaleLowerCase())) return preferred;
+  for (let suffix = 2; suffix <= MAX_PLANES + 1; suffix += 1) {
+    const candidate = `${preferred} ${suffix}`;
+    if (!used.has(candidate.toLocaleLowerCase())) return candidate;
+  }
+  return `${preferred} ${planes.length + 1}`;
+}
+
+function isGeneratedPlaneName(name: string): boolean {
+  const value = name.trim();
+  if (value === "Pantokrator's Realm" || /^Plane \d+$/.test(value)) return true;
+  const defaults = (["cave", "cavern", "cloud", "air", "underworld", "hell", "abyss", "dream", "elemental"] as PlaneKind[])
+    .map((kind) => defaultPlaneName(kind, 1));
+  return defaults.some((base) => value === base || (value.startsWith(`${base} `) && /^\d+$/.test(value.slice(base.length + 1))));
+}
+
+/** Plane number disambiguates duplicate names in imported projects and gate UI. */
+function planeDisplayLabel(project: MapProject, plane: Plane): string {
+  const index = project.planes.findIndex((candidate) => candidate.id === plane.id);
+  return `Plane ${Math.max(0, index) + 1} · ${plane.name}`;
+}
+
+export function planeAutoSizeDescription(project: MapProject, plane: Plane): string {
+  const planeIndex = project.planes.findIndex((item) => item.id === plane.id);
+  if (plane.kind === "cave" || plane.kind === "cavern") {
+    const autoCavePlanes = project.planes.filter((item, index) =>
+      (item.autoSize ?? index === 0) && (item.kind === "cave" || item.kind === "cavern")).length;
+    return `Cave starts × provinces/player, divided across ${Math.max(1, autoCavePlanes)} auto-sized core Cave/Cavern plane${autoCavePlanes === 1 ? "" : "s"}; minimum 18 provinces per plane`;
+  }
+  if (planeIndex === 0) return `(Land + coastal + water starts) × provinces/player; minimum 18 provinces`;
+  if (plane.kind === "surface" || (plane.kind === "custom" && plane.ownershipMode !== "sparse"
+    && !["fungal", "crystal", "volcanic", "storm", "infernal", "void"].includes(plane.variant ?? "temperate"))) {
+    return "Surface-like core share of players × provinces/player; minimum 18 provinces";
+  }
+  return `Bonus realm: ${project.settings.specialPlaneSizePercent ?? 30}% of the combined generated core total; minimum 18, maximum 800 provinces`;
+}
+
 function resolvePlaneConnectionRules(project: MapProject): PlaneConnectionRule[] {
   const defaults = createDefaultPlaneConnections(
     project.planes,
@@ -1264,7 +1732,7 @@ function resolvePlaneConnectionRules(project: MapProject): PlaneConnectionRule[]
   });
 }
 
-function includeSelectedEntry(filtered: CatalogEntry[], all: CatalogEntry[], value: string | number | undefined): CatalogEntry[] {
+export function includeSelectedEntry(filtered: CatalogEntry[], all: CatalogEntry[], value: string | number | undefined): CatalogEntry[] {
   const selected = findCatalogEntry(all, value);
   if (!selected || filtered.some((entry) => entry.id === selected.id)) return filtered;
   return [selected, ...filtered];
@@ -1277,12 +1745,83 @@ function catalogId(value: string, entries: CatalogEntry[]): number | undefined {
   return numeric !== undefined && Number.isSafeInteger(numeric) && numeric >= 0 ? numeric : undefined;
 }
 
-function isPlayerNationId(id: number): boolean {
-  return ![0, 2, 4].includes(id);
+export function isPlayerNationId(id: number): boolean {
+  return Number.isSafeInteger(id) && id >= 5;
 }
 
 function playerNationEntries(entries: CatalogEntry[]): CatalogEntry[] {
   return entries.filter((entry) => isPlayerNationId(entry.id) && (entry.era === undefined || entry.era > 0));
+}
+
+function handleTabKey<T extends string>(event: KeyboardEvent<HTMLButtonElement>, tabs: readonly T[], active: T, select: (tab: T) => void) {
+  const currentIndex = Math.max(0, tabs.indexOf(active));
+  let nextIndex: number | undefined;
+  if (event.key === "ArrowRight" || event.key === "ArrowDown") nextIndex = (currentIndex + 1) % tabs.length;
+  else if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+  else if (event.key === "Home") nextIndex = 0;
+  else if (event.key === "End") nextIndex = tabs.length - 1;
+  if (nextIndex === undefined) return;
+  event.preventDefault();
+  select(tabs[nextIndex]!);
+  event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[nextIndex]?.focus();
+}
+
+export function dialogShouldClose(key: string, closeDisabled: boolean): boolean {
+  return key === "Escape" && !closeDisabled;
+}
+
+/**
+ * Return the focus index needed to keep Tab inside a dialog. `-1` means the
+ * dialog container itself when the busy state has no enabled descendants.
+ */
+export function resolveDialogTabIndex(
+  focusableCount: number,
+  activeIndex: number,
+  shiftKey: boolean,
+): number | undefined {
+  if (focusableCount <= 0) return -1;
+  if (activeIndex < 0) return shiftKey ? focusableCount - 1 : 0;
+  if (shiftKey && activeIndex === 0) return focusableCount - 1;
+  if (!shiftKey && activeIndex === focusableCount - 1) return 0;
+  return undefined;
+}
+
+function useDialogFocus<T extends HTMLElement>(onClose: () => void, closeDisabled = false) {
+  const dialogRef = useRef<T>(null);
+  const closeRef = useRef(onClose);
+  const closeDisabledRef = useRef(closeDisabled);
+  useEffect(() => { closeRef.current = onClose; }, [onClose]);
+  useEffect(() => { closeDisabledRef.current = closeDisabled; }, [closeDisabled]);
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+    const focusableSelector = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+    const frame = window.requestAnimationFrame(() => {
+      const dialog = dialogRef.current;
+      (dialog?.querySelector<HTMLElement>(focusableSelector) ?? dialog)?.focus();
+    });
+    const handleKey = (event: globalThis.KeyboardEvent) => {
+      if (dialogShouldClose(event.key, closeDisabledRef.current)) {
+        event.preventDefault();
+        closeRef.current();
+        return;
+      }
+      if (event.key !== "Tab" || !dialogRef.current) return;
+      const focusable = [...dialogRef.current.querySelectorAll<HTMLElement>(focusableSelector)].filter((element) => element.offsetParent !== null);
+      const activeIndex = focusable.findIndex((element) => element === document.activeElement);
+      const targetIndex = resolveDialogTabIndex(focusable.length, activeIndex, event.shiftKey);
+      if (targetIndex === undefined) return;
+      event.preventDefault();
+      if (targetIndex < 0) dialogRef.current.focus();
+      else focusable[targetIndex]?.focus();
+    };
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", handleKey);
+      previous?.focus();
+    };
+  }, []);
+  return dialogRef;
 }
 
 function numberValue(value: string, fallback: number): number { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : fallback; }

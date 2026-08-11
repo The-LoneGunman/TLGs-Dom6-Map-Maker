@@ -30,6 +30,12 @@ export type PlaneVariant =
   | "infernal"
   | "void";
 
+/**
+ * Controls whether every D6M pixel belongs to a province or whether the plane
+ * can contain native owner-0 negative space between authored regions.
+ */
+export type PlaneOwnershipMode = "solid" | "sparse";
+
 export type StartType = "land" | "coastal" | "water" | "cave" | "other";
 
 export interface StartDistribution {
@@ -51,6 +57,14 @@ export interface PlaneConnectionRule {
 
 export type GateDirection = "bidirectional" | "forward" | "reverse";
 export type GateLayout = "hub" | "chain" | "ring" | "compatible";
+
+/** Large-scale overland land/sea arrangement. Missing means natural. */
+export type OceanLayout =
+  | "natural"
+  | "single_continent"
+  | "multiple_continents"
+  | "island_chains"
+  | "inland_sea";
 
 export type TerrainKey =
   | "plains"
@@ -179,6 +193,8 @@ export interface Province {
   gridX: number;
   gridY: number;
   name: string;
+  /** Missing on schema-v1 imports is conservatively treated as user-authored. */
+  nameSource?: "generated" | "authored";
   biome: BiomeKey;
   /** Generated/visual primary; terrainFlags can add any legal combination. */
   terrain: TerrainKey;
@@ -224,6 +240,8 @@ export interface Plane {
   height: number;
   wrapX: boolean;
   wrapY: boolean;
+  /** Missing defaults to solid for surface/custom planes and sparse otherwise. */
+  ownershipMode?: PlaneOwnershipMode;
   /** Optional per-plane overrides; missing inherits the project-level flag. */
   mapNoHide?: boolean;
   noDeepCaves?: boolean;
@@ -258,6 +276,8 @@ export interface SpecificStart {
   nation: number;
   planeId: string;
   provinceId: string;
+  /** Absent means imported or deliberately authored by the user. */
+  source?: "generated-cave";
 }
 
 export interface ComputerPlayer {
@@ -269,6 +289,14 @@ export interface GenerationSettings {
   players: number;
   provincesPerPlayer: number;
   waterPercent: number;
+  /** Missing in schema-v1 projects preserves the original natural generator. */
+  oceanLayout?: OceanLayout;
+  /** Desired major landmasses for multiple_continents; ignored by other modes. */
+  continentCount?: number;
+  /** Per auto-sized bonus plane, as a percentage of the combined core realm total. */
+  specialPlaneSizePercent?: number;
+  /** Deterministic reroll counter for generated province names. */
+  provinceNameSeed?: number;
   biomeCohesion: number;
   throneCount: number;
   siteFrequency?: number;
@@ -276,6 +304,12 @@ export interface GenerationSettings {
   startDistribution?: StartDistribution;
   /** Preferred traversable connection count at starts; defaults to four. */
   startDegreeTarget?: number;
+  /**
+   * Ordered playable nation IDs to bind to generated cave-category starts.
+   * The catalog does not carry an authoritative cave-capability flag, so the
+   * user explicitly configures vanilla or mod nations here.
+   */
+  caveStartNations?: number[];
   gateLayout?: GateLayout;
   gateDirection?: GateDirection;
   gatePairsPerConnection?: number;
