@@ -25,18 +25,76 @@ This guide covers the recommended workflow, every major option in the interface,
 
 ## Quick start
 
-### Run the program locally
+### 1. Obtain the program from GitHub
+
+Pantokrator Atlas currently runs from its GitHub source repository; it is not installed through Steam or a standalone Windows installer.
+
+Repository: [The-LoneGunman/TLGs-Dom6-Map-Maker](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker)
+
+If the repository is private, the owner must first invite your GitHub account as a collaborator. Sign in to that authorized account in GitHub or GitHub Desktop before trying to download it. Someone without repository access cannot install the program from this link; the owner must grant access or publish a release/public copy.
+
+Choose one acquisition method:
+
+#### GitHub Desktop on Windows
+
+1. Install [GitHub Desktop](https://desktop.github.com/) and sign in.
+2. Open the repository link above in your browser.
+3. Select **Code -> Open with GitHub Desktop**, or in GitHub Desktop choose **File -> Clone repository -> URL** and enter:
+
+   ```text
+   https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker.git
+   ```
+
+4. Choose a local folder and select **Clone**.
+5. Use **Fetch origin** and **Pull origin** in GitHub Desktop whenever you want the newest version.
+
+#### Download a source ZIP
+
+1. Sign in to GitHub and open the repository.
+2. Choose **Code -> Download ZIP**.
+3. Extract the ZIP to a normal writable folder such as Documents. Do not run it from inside the compressed archive.
+4. To update later, download a new ZIP and replace the old source folder after backing up any files you deliberately added there. Atlas projects should be backed up with **Editable project JSON**, not kept as source-code changes.
+
+#### Git command line
+
+If Git is installed:
+
+```powershell
+git clone https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker.git
+cd "TLGs-Dom6-Map-Maker"
+```
+
+Later updates use:
+
+```powershell
+git pull --ff-only
+```
+
+### 2. Install the runtime and dependencies
+
+Install [Node.js](https://nodejs.org/) **22.13.0 or newer**. GitHub Desktop users still need Node.js because the application runs locally through Node and npm.
+
+Open PowerShell or a terminal in the cloned/extracted project folder, then run:
+
+```powershell
+npm install
+```
+
+This downloads the JavaScript dependencies declared by the project. Internet access is required the first time and whenever dependencies change.
+
+### 3. Start Pantokrator Atlas
 
 From the project folder:
 
 ```powershell
-npm install
 npm run dev
 ```
 
-Open the local address shown by the development server, normally `http://localhost:3000/`.
+Keep that terminal open while using the application. Open the local address shown by the development server, normally [http://localhost:3000/](http://localhost:3000/). Stop the server with **Ctrl+C** in the terminal.
 
-### Make your first map
+If port 3000 is already occupied, the development server may show a different local port; open the exact address printed in the terminal.
+
+### 4. Make your first map
 
 1. In **Generate**, enter a seed, player count, provinces per player, and a start allocation whose total equals the player count.
 2. Open **Planes** and add every plane you want. Configure each plane's archetype, variant, size, wrapping, and planned links.
