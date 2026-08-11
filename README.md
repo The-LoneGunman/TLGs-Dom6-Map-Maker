@@ -2,6 +2,8 @@
 
 Pantokrator Atlas is a local-first Dominions 6 map maker. It creates deterministic, multiplayer-friendly native `.d6m` maps, supports one to eight linked planes, and exports a complete ready-to-play map folder without requiring a mod.
 
+New to the program? Start with the [complete user guide](docs/USER_GUIDE.md) for the recommended workflow and a reference for every generator, plane, scenario, province, validation, and export option.
+
 ## Included map features
 
 - Coherent procedural biomes with controlled terrain variety and plane-specific site/population themes
