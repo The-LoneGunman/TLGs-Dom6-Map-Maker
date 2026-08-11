@@ -46,3 +46,19 @@ test("role-focused lists preserve an already selected unusual vanilla monster", 
   assert.equal(entries.length, 1);
   assert.equal(entries[0]?.name, "Spectral Commander");
 });
+
+test("guardian creation is disabled on every authored start type", () => {
+  const project = createDefaultProject("catalog-ui-protected-start");
+  const plane = project.planes[0]!;
+  const province = plane.provinces.find((entry) => !entry.start)!;
+  const html = renderToStaticMarkup(createElement(SitesDefenseInspector, {
+    catalog: BUILTIN_DOM6_CATALOG,
+    plane,
+    province,
+    protectedStart: true,
+    update() {},
+  }));
+
+  assert.match(html, /<button[^>]+disabled=""[^>]*>\+ Add guardian group<\/button>/);
+  assert.match(html, /disabled on generic, team, and nation-specific starts/);
+});

@@ -17,7 +17,7 @@ Release readiness and known blockers are tracked in the [2026-08-11 full bug and
 - Deterministic plane-, terrain-, coast-, flooded-cave-, and Styx-aware province names with project-wide uniqueness, capital-name protection, and a reroll that preserves manual edits
 - Ordered deterministic cave-start nations, bound to generated cave capitals with `#specstart` when special starts are enabled
 - Configurable minimum start degree and scale-aware capital spacing: starts never share a one-ring province, larger maps seek progressively wider separation, and any infeasible shared-degree or preferred-distance target is reported as an accessible best-effort warning
-- Start exclusion zones for generated thrones, gates, and unique independent guardians
+- Start exclusion zones for generated thrones, gates, and unique independent guardians; assigning a nation-specific capital atomically removes all conflicting independent-province setup
 - Preferred, avoided, and catalog-verified fixed throne locations
 - Up to eight planes connected through compatible, hub, chain, ring, or explicit gate graphs
 - Standard, road, river, bridge, mountain, impassable, and custom borders

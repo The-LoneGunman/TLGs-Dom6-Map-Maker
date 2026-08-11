@@ -6,6 +6,7 @@ import {
   isCaveTerrain,
   isWaterProvince,
   isWaterTerrain,
+  nationSpecificStartFeatureConflicts,
   planeFileSuffix,
   sanitizeMapName,
   type Edge,
@@ -934,7 +935,18 @@ export function validateProject(project: MapProject): ValidationIssue[] {
     const plane = project.planes.find((item) => item.id === start.planeId);
     const province = plane?.provinces.find((item) => item.id === start.provinceId);
     if (!plane || !province) add("error", `Nation-specific start for nation ${start.nation} references a missing province.`);
-    else if (province.noStart || isBlockedProvince(province)) add("error", `${province.name}: a nation-specific start cannot use no-start or blocked terrain.`, plane.id, province.id);
+    else {
+      if (province.noStart || isBlockedProvince(province)) add("error", `${province.name}: a nation-specific start cannot use no-start or blocked terrain.`, plane.id, province.id);
+      const conflicts = nationSpecificStartFeatureConflicts(province);
+      if (conflicts.length) {
+        add(
+          "error",
+          `${province.name}: a nation-specific start still contains province setup that can interfere with its capital (${conflicts.join(", ")}). Reassign the specific start to clear it.`,
+          plane.id,
+          province.id,
+        );
+      }
+    }
     if (specificNations.has(start.nation)) add("error", `Nation ${start.nation} has more than one nation-specific start.`);
     specificNations.add(start.nation);
     const provinceKey = `${start.planeId}:${start.provinceId}`;

@@ -501,6 +501,93 @@ export function isBlockedProvince(province: Pick<Province, "terrain" | "terrainF
   return effectiveProvinceTerrainFlags(province).has("cavewall");
 }
 
+/**
+ * Return province-authored setup that is unsafe or misleading on a forced
+ * nation capital. Terrain, geography, climate, names, and the generic start
+ * marker are deliberately not included: those describe the map rather than
+ * an independent province setup that could carry into the capital.
+ */
+export function nationSpecificStartFeatureConflicts(province: Province): string[] {
+  const conflicts: string[] = [];
+  if (province.teamStart !== undefined) conflicts.push("team start");
+  if (province.manySites) conflicts.push("many-sites marker");
+  if (province.throne === "preferred" || province.throne === "fixed" || province.fixedThrone) conflicts.push("throne setup");
+  if (province.sites.length) conflicts.push("placed magic sites");
+  if (province.killRandomSites) conflicts.push("random-site removal");
+  if (province.owner !== undefined) conflicts.push("owner");
+  if (province.poptype !== undefined) conflicts.push("population type");
+  if (province.population !== undefined) conflicts.push("population override");
+  if (province.unrest !== undefined) conflicts.push("unrest override");
+  if (province.fort !== undefined) conflicts.push("fortification");
+  if (province.temple) conflicts.push("temple");
+  if (province.lab) conflicts.push("laboratory");
+  if (province.provinceDefense !== undefined) conflicts.push("owned province defense");
+  if (province.defenders.length) conflicts.push("guardian groups");
+  if (Object.values(province.battle ?? {}).some((value) => value !== undefined && value !== "")) conflicts.push("battle-scene overrides");
+  if (province.rawDirectives.trim()) conflicts.push("raw province directives");
+  return conflicts;
+}
+
+/** Clear independent-province setup before a province becomes a #specstart. */
+export function clearProvinceForNationSpecificStart(province: Province): void {
+  province.noStart = false;
+  province.manySites = false;
+  province.teamStart = undefined;
+  province.throne = "avoid";
+  province.fixedThrone = undefined;
+  province.sites = [];
+  province.killRandomSites = false;
+  province.owner = undefined;
+  province.poptype = undefined;
+  province.population = undefined;
+  province.unrest = undefined;
+  province.fort = undefined;
+  province.temple = false;
+  province.lab = false;
+  province.provinceDefense = undefined;
+  province.defenders = [];
+  province.battle = {};
+  province.rawDirectives = "";
+}
+
+/**
+ * Atomically add, replace, or remove a forced nation start. Adding an
+ * assignment also removes any older assignment for that nation and scrubs
+ * independent-province features from the destination capital.
+ */
+export function setNationSpecificStart(
+  project: MapProject,
+  planeId: string,
+  provinceId: string,
+  nation?: number,
+  source?: SpecificStart["source"],
+): boolean {
+  if (nation === undefined) {
+    project.specificStarts = project.specificStarts.filter((start) => !(start.planeId === planeId && start.provinceId === provinceId));
+    return true;
+  }
+  if (!Number.isSafeInteger(nation) || nation < 5) return false;
+  const province = project.planes.find((plane) => plane.id === planeId)?.provinces.find((item) => item.id === provinceId);
+  if (!province) return false;
+
+  project.specificStarts = project.specificStarts.filter((start) => (
+    start.nation !== nation && !(start.planeId === planeId && start.provinceId === provinceId)
+  ));
+  clearProvinceForNationSpecificStart(province);
+  const assignment: SpecificStart = { nation, planeId, provinceId };
+  if (source) assignment.source = source;
+  project.specificStarts.push(assignment);
+  return true;
+}
+
+/** Reapply capital cleanup after generation-time balancing mutates provinces. */
+export function clearAllNationSpecificStartFeatures(project: MapProject): void {
+  for (const start of project.specificStarts) {
+    const province = project.planes.find((plane) => plane.id === start.planeId)?.provinces.find((item) => item.id === start.provinceId);
+    if (province) clearProvinceForNationSpecificStart(province);
+  }
+}
+
 export function cloneProject(project: MapProject): MapProject {
   const clone = JSON.parse(JSON.stringify(project)) as MapProject;
   for (const plane of clone.planes ?? []) {

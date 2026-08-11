@@ -3,6 +3,7 @@ import {
   MAX_PLANES,
   RESOLUTION_PRESETS,
   SCHEMA_VERSION,
+  clearAllNationSpecificStartFeatures,
   cloneProject,
   effectiveProvinceTerrainFlags,
   isBlockedProvince,
@@ -10,6 +11,7 @@ import {
   isCaveProvince,
   isWaterProvince,
   isWaterTerrain,
+  setNationSpecificStart,
   type BiomeKey,
   type Edge,
   type EdgeKind,
@@ -495,6 +497,10 @@ export function generateProject(project: MapProject): MapProject {
     markProvinceSizes(plane);
   }
   balanceGlobalStartRegions(next);
+  // Start balancing can write population/economy values after #specstart
+  // assignment. Reapply the clean-capital invariant as the final strategic
+  // mutation so generated and preserved manual specific starts behave alike.
+  clearAllNationSpecificStartFeatures(next);
   regenerateGeneratedProvinceNames(next.planes, next.seed, next.settings.provinceNameSeed);
   next.updatedAt = new Date().toISOString();
   return next;
@@ -534,12 +540,7 @@ function assignConfiguredCaveStarts(project: MapProject) {
       const candidate = caveStarts[caveCursor++]!;
       const key = globalProvinceKey(candidate.plane.id, candidate.province.id);
       if (usedProvinces.has(key)) continue;
-      project.specificStarts.push({
-        nation,
-        planeId: candidate.plane.id,
-        provinceId: candidate.province.id,
-        source: "generated-cave",
-      });
+      setNationSpecificStart(project, candidate.plane.id, candidate.province.id, nation, "generated-cave");
       usedNations.add(nation);
       usedProvinces.add(key);
       break;

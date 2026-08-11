@@ -577,9 +577,9 @@ Fire, Air, Water, Earth, Astral, Death, Nature, Glamour, Blood, and Holy add ran
 
 - **Generic player start:** emits `#start`, clears No random start, and avoids thrones.
 - **Team-start group:** emits `#teamstart`; use a non-negative integer smaller than the number of teams selected by the host.
-- **Specific-start nation:** emits `#specstart` for a playable nation and the province's global cross-plane number.
+- **Specific-start nation:** emits `#specstart` for a playable nation and the province's global cross-plane number. Assigning it clears independent guardians, placed sites, throne setup, ownership, economy/PD overrides, forts, labs, temples, battle overrides, raw province directives, and any team-start marker. It preserves terrain, geography, climate, province name, and an existing generic-start marker. Undo is available if you selected the wrong province.
 
-Generic, team, and nation-specific starts all count as start locations in safety validation. Starts must remain at least three global movement steps apart and may not have blocking or condition-dependent starting borders.
+Generic, team, and nation-specific starts all count as start locations in safety validation and in the live fairness calculation. Starts must remain at least three global movement steps apart and may not have blocking or condition-dependent starting borders. After any manual start edit, spacing, two-ring expansion, nearby-throne access, local connection degree, and the overall score recalculate immediately across ordinary borders and cross-plane gates. The start-allocation score remains based on generated generic slots, so a nation or team annotation does not falsely change the requested land/coastal/water/cave counts.
 
 #### Thrones
 
@@ -630,7 +630,7 @@ Guardian groups are explicit initial independent defenders, not replenishing pos
 - Multiple groups create multiple commander blocks.
 - Empty commanders or squads are validation errors.
 - Specific items use item names, not numeric IDs.
-- Guardians are disabled on generic starts to protect the nation's starting army and pretender. Avoid custom defenders on team and specific starts as well.
+- Guardians are disabled on generic, team, and nation-specific starts to protect the nation's starting army and pretender. Assigning a nation-specific start also removes any guardians already present, and validation blocks stale imported/manual capital content until that start is reassigned through the editor.
 
 Generated Surface/Cave/Cavern groups are ordinary independents. Cloud, Air, Underworld, Infernal, Abyss, Dream, Elemental, and similar bonus realms use stronger, themed commanders and multiple large squads to make expansion a deliberate challenge.
 

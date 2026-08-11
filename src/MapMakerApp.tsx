@@ -21,6 +21,7 @@ import {
   cloneProject,
   effectiveProvinceTerrainFlags,
   sanitizeMapName,
+  setNationSpecificStart,
   type BiomeKey,
   type ComputerPlayer,
   type EdgeKind,
@@ -1096,7 +1097,13 @@ export function MapMakerApp() {
               <div id="inspector-active-panel" className="panel-scroll inspector-scroll" role="tabpanel" aria-labelledby={`inspector-tab-${inspectorTab}`}>
                 {inspectorTab === "terrain" && <TerrainInspector province={selected} update={updateSelected} />}
                 {inspectorTab === "gameplay" && <GameplayInspector catalog={catalog} project={project} planeId={activePlane.id} province={selected} update={updateSelected} mutateProject={mutate} />}
-                {inspectorTab === "sites" && <SitesDefenseInspector catalog={catalog} plane={activePlane} province={selected} update={updateSelected} />}
+                {inspectorTab === "sites" && <SitesDefenseInspector
+                  catalog={catalog}
+                  plane={activePlane}
+                  province={selected}
+                  protectedStart={selected.start || selected.teamStart !== undefined || project.specificStarts.some((start) => start.planeId === activePlane.id && start.provinceId === selected.id)}
+                  update={updateSelected}
+                />}
                 {inspectorTab === "advanced" && <AdvancedInspector project={project} planeId={activePlane.id} province={selected} update={updateSelected} mutateProject={mutate} />}
               </div>
             </>
@@ -1221,10 +1228,10 @@ function GameplayInspector({ catalog, project, planeId, province, update, mutate
       <CatalogCombobox label="Specific-start nation" value={specific?.nation} entries={playableNations} placeholder="Search playable nation name or ID" onCommit={(value) => {
         const nation = optionalNumber(value);
         mutateProject((draft) => {
-          draft.specificStarts = draft.specificStarts.filter((start) => !(start.planeId === planeId && start.provinceId === province.id));
-          if (nation !== undefined && isPlayerNationId(nation)) draft.specificStarts.push({ nation, planeId, provinceId: province.id });
+          setNationSpecificStart(draft, planeId, province.id, nation !== undefined && isPlayerNationId(nation) ? nation : undefined);
         });
       }} />
+      <p className="microcopy">Assigning a nation-specific start clears independent guardians, placed sites, throne setup, ownership, economy/PD overrides, forts, labs, temples, battle overrides, and raw province directives. Terrain, geography, climate, province name, and any generic-start marker remain intact.</p>
       <Field label="Throne treatment"><select value={province.throne} onChange={(event) => update((item) => { item.throne = event.target.value as Province["throne"]; if (item.throne !== "fixed") item.fixedThrone = undefined; })}>
         <option value="none">Neutral</option><option value="preferred">Preferred location</option><option value="avoid">Avoid location</option><option value="fixed">Fixed throne site (advanced)</option>
       </select></Field>
@@ -1249,7 +1256,7 @@ function GameplayInspector({ catalog, project, planeId, province, update, mutate
   );
 }
 
-export function SitesDefenseInspector({ catalog, plane, province, update }: { catalog: Dom6CatalogBundle; plane: Plane; province: Province; update: (recipe: (province: Province) => void) => void }) {
+export function SitesDefenseInspector({ catalog, plane, province, protectedStart = false, update }: { catalog: Dom6CatalogBundle; plane: Plane; province: Province; protectedStart?: boolean; update: (recipe: (province: Province) => void) => void }) {
   const [showTerrainMismatches, setShowTerrainMismatches] = useState(false);
   const [showSpecialSites, setShowSpecialSites] = useState(false);
   const [showAllGuardianUnits, setShowAllGuardianUnits] = useState(true);
@@ -1325,8 +1332,8 @@ export function SitesDefenseInspector({ catalog, plane, province, update }: { ca
           </details>
         </div>
       ))}
-      <button className="button quiet wide" type="button" disabled={province.start} onClick={() => update((item) => { item.defenders.push({ commander: "", squads: [{ id: `squad-${Date.now().toString(36)}`, unit: "", count: 10 }] }); })}>+ Add guardian group</button>
-      {province.start && <p className="warning-copy">Initial guardians are disabled on starts because Dominions’ <code>#land</code> command would erase the starting army and pretender.</p>}
+      <button className="button quiet wide" type="button" disabled={protectedStart} onClick={() => update((item) => { item.defenders.push({ commander: "", squads: [{ id: `squad-${Date.now().toString(36)}`, unit: "", count: 10 }] }); })}>+ Add guardian group</button>
+      {protectedStart && <p className="warning-copy">Initial guardians are disabled on generic, team, and nation-specific starts because Dominions’ <code>#land</code> command would erase the starting army and pretender.</p>}
     </div>
   );
 }
