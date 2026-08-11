@@ -31,6 +31,8 @@ Pantokrator Atlas currently runs from its GitHub source repository; it is not in
 
 Repository: [The-LoneGunman/TLGs-Dom6-Map-Maker](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker)
 
+> **Current build warning:** this is a source/testing build, not yet a seamless public release. Review the [full bug and release audit](FULL_AUDIT_2026-08-11.md) before relying on it for a campaign. Until the P1 findings are fixed, use only one Pantokrator Atlas tab at a time and download **Editable project JSON** backups frequently.
+
 If the repository is private, the owner must first invite your GitHub account as a collaborator. Sign in to that authorized account in GitHub or GitHub Desktop before trying to download it. Someone without repository access cannot install the program from this link; the owner must grant access or publish a release/public copy.
 
 Choose one acquisition method:
@@ -74,20 +76,20 @@ git pull --ff-only
 
 Install [Node.js](https://nodejs.org/) **22.13.0 or newer**. GitHub Desktop users still need Node.js because the application runs locally through Node and npm.
 
-Open PowerShell or a terminal in the cloned/extracted project folder, then run:
+Open PowerShell, Command Prompt, or a terminal in the cloned/extracted project folder, then run:
 
 ```powershell
-npm install
+npm.cmd ci
 ```
 
-This downloads the JavaScript dependencies declared by the project. Internet access is required the first time and whenever dependencies change.
+This installs the exact JavaScript dependencies recorded in the committed lockfile. Internet access is required the first time and whenever dependencies change.
 
 ### 3. Start Pantokrator Atlas
 
 From the project folder:
 
 ```powershell
-npm run dev
+npm.cmd run dev
 ```
 
 Keep that terminal open while using the application. Open the local address shown by the development server, normally [http://localhost:3000/](http://localhost:3000/). Stop the server with **Ctrl+C** in the terminal.
@@ -120,7 +122,7 @@ The recommended order is:
 
 If you regenerate accidentally, use **Undo** immediately. Generate participates in the 30-state project history.
 
-Also add all planned planes before manually creating gateways. **Add plane to plan** clears the existing actual-gateway list because those gateways may no longer refer to a valid atlas layout. Removing a plane removes its specific starts and its gateway endpoints; groups left with fewer than two endpoints are removed.
+Also add all planned planes before manually creating gateways. Due to a current defect, **Add plane to plan** clears the entire existing actual-gateway list, including unrelated manually authored gateways; use **Undo** immediately if this happens unexpectedly. Removing a plane removes its specific starts and its gateway endpoints; groups left with fewer than two endpoints are removed.
 
 ## Screen layout
 
@@ -574,7 +576,7 @@ Fire, Air, Water, Earth, Astral, Death, Nature, Glamour, Blood, and Holy add ran
 #### Starts
 
 - **Generic player start:** emits `#start`, clears No random start, and avoids thrones.
-- **Team-start group:** emits `#teamstart`; accepted groups are 0-7 and should match the host's team setup.
+- **Team-start group:** emits `#teamstart`; use a non-negative integer smaller than the number of teams selected by the host.
 - **Specific-start nation:** emits `#specstart` for a playable nation and the province's global cross-plane number.
 
 Generic, team, and nation-specific starts all count as start locations in safety validation. Starts must remain at least three global movement steps apart and may not have blocking or condition-dependent starting borders.
@@ -736,13 +738,13 @@ Clicking a validation issue that identifies a plane/province navigates to it whe
 
 ### Autosave
 
-The current atlas is saved about 450 ms after project changes.
+An autosave is scheduled 450 ms after the last project change, and the asynchronous storage write completes sometime after that. Closing or reloading during this interval can lose the latest edit. The green autosave badge identifies the selected storage backend; it does not prove that the latest change is durable.
 
 - **Device autosave:** IndexedDB, the preferred large-project store.
 - **Limited autosave:** localStorage fallback with a smaller quota.
 - **Autosave unavailable:** no browser copy could be written; download project JSON immediately.
 
-Autosave belongs to this browser and site profile. It is not cloud synchronization, and clearing browser data removes it. Only one current-project autosave is retained. Undo history is session-only and does not return after a reload.
+Autosave belongs to this browser and site profile. It is not cloud synchronization, and clearing browser data removes it. All Pantokrator Atlas tabs on the same origin share one current-project slot, so the last tab to write replaces the only durable autosave copy. Use one tab at a time and download Editable project JSON backups frequently. There is currently no **New atlas** or **Clear autosave** command; **Reset generator defaults** preserves the existing planes, provinces, gateways, and manual edits. Undo history is session-only and does not return after a reload.
 
 ### Undo and Redo
 
@@ -755,6 +757,8 @@ There is no global Ctrl/Cmd+Z shortcut; use the visible buttons.
 Choose **Install / export -> Editable project JSON** for a portable backup named `<map-name>.atlas.json`. Every playable package also includes `atlas_project.json`.
 
 Choose **Open project** and select either file to reopen it. The importer accepts Pantokrator Atlas schema-v1 JSON. It does not open ZIP, `.map`, `.d6m`, custom catalog JSON, or arbitrary JSON.
+
+Current staged-plane exception: after choosing **Add plane to plan**, the new plane has no provinces until generation. The current importer rejects that draft state. Generate immediately after staging all planes before reloading the page or depending on that JSON backup. If you staged a plane accidentally, use Undo before leaving the page.
 
 Project JSON is editable source, not a playable map. Custom catalogs are stored separately and should be backed up separately.
 
@@ -781,7 +785,7 @@ Choose **Install directly** and select the top-level Dominions user-data `maps` 
 
 In Dominions, use **Tools & Manuals -> Open User Data Directory** to find the correct location, then select its `maps` folder in the picker.
 
-Direct reinstall removes obsolete Atlas-generated `_planeN.map` and `_planeN.d6m` files when the new atlas has fewer planes. It does not broadly delete unrelated assets.
+Back up an existing same-named map folder before direct reinstall. Installation is not yet atomic: a permission, quota, memory, or encoding failure can leave the previous folder partially updated. Direct reinstall removes obsolete Atlas-generated `_planeN.map` and `_planeN.d6m` files when the new atlas has fewer planes. It does not broadly delete unrelated assets.
 
 ### Download ready ZIP
 
@@ -799,7 +803,7 @@ Exports the active plane at its configured resolution using the currently select
 
 ### Filename normalization
 
-Folder and file stems are normalized to a safe letters/underscores name with a maximum of 64 characters. The export dialog shows the actual result. A normalization warning does not block export.
+Folder and file stems are normalized to a letters/underscores name with a maximum of 64 characters. The export dialog shows the actual result. On Windows, avoid the reserved names `CON`, `PRN`, `AUX`, and `NUL`; the current normalizer does not rewrite them. A normalization warning does not block export.
 
 ### Browser limitations
 
@@ -825,6 +829,7 @@ Validation and export dialogs trap focus. Escape closes them unless package expo
 
 | Message or symptom | Meaning and response |
 |---|---|
+| PowerShell says `npm.ps1 cannot be loaded` | Windows execution policy blocked the PowerShell shim. Run `npm.cmd ci` and `npm.cmd run dev`, or use Command Prompt. Do not weaken the machine's execution policy merely to start Atlas. |
 | Generate is disabled | The five start categories do not total Players. Correct them or use Put remainder on land. |
 | Compatibility blocker / playable export unavailable | Open Validate and resolve every red Error. Warnings and fairness alone do not block export. |
 | Scale-aware spacing below preferred | The hard three-step floor was retained but the larger preferred target did not fit. Increase provinces/player, simplify start categories, change wrapping, or generate again. |
@@ -843,6 +848,8 @@ Validation and export dialogs trap focus. Escape closes them unless package expo
 | Removed planes still appear | Delete/replace the old folder before extracting a new ZIP, or use direct reinstall. |
 | ZIP is slow or memory-heavy | Use direct install, lower resolution, or reduce plane sizes/count. |
 | Autosave unavailable / storage full | Download Editable project JSON immediately. |
+| Latest edit disappeared after reload | Reload may have occurred before the delayed async autosave completed, or another same-origin tab replaced the shared slot. Use one tab and keep frequent Editable project JSON backups. |
+| Planned plane disappears after reopen / JSON will not open | A newly staged plane is empty until Generate and the current importer rejects that draft. Generate immediately after adding planned planes, or Undo the staging action before leaving. |
 | JSON will not open | Use a schema-v1 Atlas `.atlas.json` or package `atlas_project.json`, not a ZIP/map/D6M/catalog file. |
 | Filename changed | Export normalized it. Use the folder/file stem shown in the package summary. |
 | Unknown catalog ID | Enable matching custom content. Catalog metadata does not install a mod. |
@@ -870,6 +877,6 @@ Pantokrator Atlas aims to be honest about what a standalone map can do:
 
 ## Official references
 
-- [Dominions 6 Map Making Manual](https://illwinter.com/dom6/dom6mapman.pdf)
+- [Dominions 6 Map Editing Manual, version 6.26](https://illwinter.com/dom6/dom6mapman.pdf)
 - [Dominions 6 File Formats](https://illwinter.com/dom6/dom6fileformats.pdf)
 - [Dominions 6 Modding Manual](https://illwinter.com/dom6/dom6modman.pdf)

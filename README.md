@@ -4,6 +4,8 @@ Pantokrator Atlas is a local-first Dominions 6 map maker. It creates determinist
 
 New to the program? Start with the [complete user guide](docs/USER_GUIDE.md) for the recommended workflow and a reference for every generator, plane, scenario, province, validation, and export option.
 
+Release readiness and known blockers are tracked in the [2026-08-11 full bug and release audit](docs/FULL_AUDIT_2026-08-11.md). Resolve its P1 findings before treating the current build as a seamless public release.
+
 ## Included map features
 
 - Coherent procedural biomes with controlled terrain variety and plane-specific site/population themes
