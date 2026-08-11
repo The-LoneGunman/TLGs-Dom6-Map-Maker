@@ -6,7 +6,7 @@
 
 **Release decision:** **Hold release until the P1 findings are fixed.**
 
-No P0 catastrophic security issue was found. The audit found **5 P1 release blockers**, **16 P2 defects or material release risks**, and several P3 hardening and polish items. The ordinary-size path is already strong: the production build, TypeScript, lint, 154 automated checks, ordinary eight-plane generation, responsive layout, keyboard editing, and structurally inspected D6M packages all pass. The blockers occur mainly at persistence boundaries, imported-project boundaries, and the advertised upper limits.
+No P0 catastrophic security issue was found. The audit found **5 P1 release blockers**, **17 P2 defects or material release risks**, and several P3 hardening and polish items. The ordinary-size path is already strong: the production build, TypeScript, lint, 154 automated checks in the established development checkout, ordinary eight-plane generation, responsive layout, keyboard editing, and structurally inspected D6M packages all pass. A clean lockfile install exposed an undeclared test runner, documented as P2-17. The blockers occur mainly at persistence boundaries, imported-project boundaries, and the advertised upper limits.
 
 ## Severity definitions
 
@@ -99,7 +99,8 @@ The maximum project eventually had zero validation errors, zero duplicate names,
 | P2-13 | **Direct install is non-atomic.** [`installPackage`](../src/export.ts#L84-L116) deletes obsolete planes, overwrites map/support files, and only then finishes D6M rendering/writing. A quota, permission, or encode failure can leave a previously working map partially updated. | Render/stage everything first, write D6Ms before their `.map` references, commit atomically where possible, preserve backups, and delete stale files last. Inject failures at each stage in tests. |
 | P2-14 | **Windows-reserved names remain valid-looking export stems.** `CON`, `PRN`, `AUX`, and `NUL` survive [`sanitizeMapName`](../src/domain.ts#L425-L432), so direct install or ZIP extraction can fail. | Detect reserved device basenames case-insensitively and prefix/suffix them; display the normalized result before export. |
 | P2-15 | **Custom-catalog storage recovery can throw a second time.** The load catch and Reset call `localStorage.removeItem` without guarding the same denied-storage condition around [`MapMakerApp.tsx`](../src/MapMakerApp.tsx#L338-L350) and [`MapMakerApp.tsx`](../src/MapMakerApp.tsx#L503-L506). | Use a guarded storage adapter for get/set/remove and keep session-only custom data usable when persistence is unavailable. |
-| P2-16 | **The installed development/runtime toolchain has known advisories.** `npm audit --omit=dev` reports zero production-package advisories, but the complete graph reports 41: 35 high, 3 moderate, 3 low. Direct affected tools include React Server DOM 19.2.6, Vite 8.0.13, vinext beta, Cloudflare tooling, Wrangler, and lint/build packages. Users run this local dev stack as the app. | Upgrade React Server DOM to a patched release and update the Vite/vinext stack when compatible; bind locally; then rerun build, browser, import, and export regression suites. |
+| P2-16 | **The installed development/runtime toolchain has known advisories.** In a fresh `npm.cmd ci` on 2026-08-11, `npm audit --omit=dev` reported zero production-package advisories, but the complete graph reported 17: 15 high and 2 low. Direct or user-run affected tools include React Server DOM 19.2.6, Vite 8.0.13, vinext beta, Cloudflare tooling, and Wrangler. Users run this local dev stack as the app. | Upgrade React Server DOM to a patched release and update the Vite/vinext/Cloudflare stack when compatible; bind locally; then rerun build, browser, import, and export regression suites. |
+| P2-17 | **A clean clone cannot run the advertised full test script.** After `npm.cmd ci`, `npm.cmd test` completed the production build and both rendered-HTML tests, then stopped with `'tsx' is not recognized`. The script invokes `tsx --test tests/*.test.ts`, but `tsx` is absent from both dependencies and devDependencies in [`package.json`](../package.json). The established development checkout passed because it retained an undeclared local runner. | Declare and lock a compatible `tsx` dev dependency, or replace it with a declared/native TypeScript test path. Add a clean-clone CI job that runs `npm ci`, `npm test`, typecheck, and lint from an empty dependency directory. |
 
 ## P3 hardening and quality backlog
 
@@ -120,7 +121,7 @@ The maximum project eventually had zero validation errors, zero duplicate names,
 The audit did not merely search for failures. It independently verified these release-critical paths:
 
 - Production build, TypeScript, and lint pass.
-- `npm test` passes **154/154 checks**: 2 rendered-HTML tests plus 152 TypeScript tests.
+- In the established development checkout, `npm test` passes **154/154 checks**: 2 rendered-HTML tests plus 152 TypeScript tests. In a fresh `npm.cmd ci` checkout, the build and 2 rendered tests pass, then the undeclared `tsx` runner blocks the 152 TypeScript tests (P2-17).
 - All 121 plane-kind/variant combinations generate deterministically.
 - Player limits 2, 6, 16, and 32; provinces/player 8, 16, and 30; plane counts 1-8; and supported start categories were exercised.
 - Compatible start plans retained exact categories, hard three-move spacing, and no shared capital surroundings.
@@ -143,7 +144,7 @@ The audit did not merely search for failures. It independently verified these re
 4. Unify all authored-start safety validation and eliminate silent gateway/manual-edit loss.
 5. Harden numeric arguments, custom-catalog validation, filenames, and install atomicity.
 6. Restore special-plane guardian guarantees and improve throne/Styx/start-plan preflight quality.
-7. Upgrade the local runtime toolchain, then rerun every audit corpus and a live Dominions load test.
+7. Declare the clean-install test runner, upgrade the local runtime toolchain, then rerun every audit corpus and a live Dominions load test.
 
 ## Remaining external smoke test
 
