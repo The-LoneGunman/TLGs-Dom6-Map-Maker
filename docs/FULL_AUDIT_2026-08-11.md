@@ -1,11 +1,11 @@
 # Pantokrator Atlas audit and remediation record
 
 **Original audit snapshot:** 2026-08-11
-**Remediation status updated:** 2026-08-11
+**Remediation status updated:** 2026-08-12
 
 **Scope:** generation, multiplayer balance, all plane families, UI workflows, accessibility, persistence, project/catalog import, validation, Dominions map compilation, D6M encoding, direct install, ZIP packaging, dependencies, and documentation
 
-**Current release decision:** **The five engineering P1 blockers from the original snapshot are resolved and regression-tested. A seamless-release claim still waits on the external Dominions 6 smoke test described at the end of this record.**
+**Current release decision:** **The engineering release blockers found through the original and post-merge audits are resolved and regression-tested. A compact generated package was accepted by the installed Dominions 6 engine through its scripted new-game path. A representative eight-plane in-game gate/turn smoke remains the final manual release check.**
 
 No P0 catastrophic security issue was found. The original audit found **5 P1 release blockers**, **17 P2 defects or material release risks**, and several P3 hardening and polish items. This document preserves their original evidence and reproductions for traceability; those historical descriptions are not a statement that every item remains present in the current tree.
 
@@ -19,11 +19,21 @@ No P0 catastrophic security issue was found. The original audit found **5 P1 rel
 | P1-4 silent multi-tab overwrite | **Resolved.** Autosave uses revision fingerprints and compare-and-set writes. A detected stale tab pauses automatic saves behind a persistent Load newer copy / Keep this copy choice. |
 | P1-5 main-thread generation freeze | **Resolved.** Generation runs in a disposable module worker with visible progress, cancellation, stale-result rejection, and complete-result-only commit. |
 
+### 2026-08-12 post-merge blocker pass
+
+A fresh parallel generation, persistence/export, and live-browser audit found and resolved four additional blockers plus one mobile access defect:
+
+- Start-blocked auto-sized core planes no longer consume the province capacity needed by eligible cores; a deterministic 12-player mixed-plane regression retains every requested category and the hard spacing floor.
+- A first or only Dream, Air, Cloud, Elemental, or special Custom plane can now receive generated Other starts; realm eligibility no longer depends on array position.
+- Schema-v1 import rejects unknown fields at every structured nesting level instead of retaining attacker-controlled hidden payloads for autosave or package traversal.
+- Direct install refuses to touch a nonempty colliding folder unless a bounded, parseable `atlas_project.json` proves that the same normalized Atlas root owns it. Refusal occurs before any stage, write, removal, or backup mutation.
+- At narrow viewport widths, the only **Open project** control is now a readable 112×44-pixel, safe-area-aware touch target.
+
 The original P2 set has also been substantially remediated: all authored start types now share capital cleanup/validation, staging preserves gateways, destructive replacement is confirmed with backup access, New atlas exists, slider history is coalesced, imported command values and custom catalogs use the active validation data, impossible start plans are preflighted, special-plane guardian capacity produces persistent warnings, temperature flags are exclusive, reserved Windows basenames are rewritten, the test runner is declared, and direct install uses staging, backups, rollback, binary-first publication, and cleanup-last ordering.
 
 Current known limitations and release gates:
 
-- A representative compact package and an eight-plane package still need to be installed, loaded, visually inspected, and advanced through at least one AI turn in Dominions 6. Structural `.map`/D6M checks do not replace that external game test.
+- The compact package passed the installed engine's scripted new-game loader. A representative eight-plane package still needs to be installed, visually inspected, and advanced through at least one AI turn in Dominions 6; structural `.map`/D6M checks do not replace that richer external game test.
 - ZIP assembly is still in-memory. The export dialog now warns before cautionary sizes and disables only ZIP when the estimated peak crosses the safety ceiling; direct install remains the large-atlas path.
 - Browser file access has no atomic rename. Direct install therefore provides transaction-like staging and rollback, not filesystem-level atomicity, and reports retained recovery files if rollback itself is denied.
 - Autosave is one browser-local recovery slot, not cloud sync or a recent-project library. Revision conflicts are explicit; portable Editable project JSON remains the durable backup format.
@@ -147,7 +157,7 @@ This table is retained as the original defect ledger. Most rows now have impleme
 The audit did not merely search for failures. It independently verified these release-critical paths:
 
 - Production build, TypeScript, and lint pass.
-- The lockfile declares the TypeScript test runner that the full `npm test` command invokes. The current full run passes the production build, 3 rendered-output checks, and 259 TypeScript tests (262 total); typecheck and lint also pass. Focused regressions cover worker cancellation, bounded project import, autosave conflicts and races, start reservation/protection, direct-install rollback, ZIP memory gating, and destructive UI workflows.
+- The lockfile declares the TypeScript test runner that the full `npm test` command invokes. The current full run passes the production build, 3 rendered-output checks, and 267 TypeScript tests (270 total); typecheck and lint also pass. Focused regressions cover worker cancellation, bounded project import, autosave conflicts and races, start reservation/protection and capacity, direct-install ownership/rollback, ZIP memory gating, and destructive UI workflows.
 - All 121 plane-kind/variant combinations generate deterministically.
 - Player limits 2, 6, 16, and 32; provinces/player 8, 16, and 30; plane counts 1-8; and supported start categories were exercised.
 - Compatible start plans retained exact categories, hard three-move spacing, and no shared capital surroundings.
@@ -172,8 +182,10 @@ The numbered plan below was the original implementation order. Items 1-6 and the
 4. Unify all authored-start safety validation and eliminate silent gateway/manual-edit loss.
 5. Harden numeric arguments, custom-catalog validation, filenames, and install atomicity.
 6. Restore special-plane guardian guarantees and improve throne/Styx/start-plan preflight quality.
-7. Declare the clean-install test runner, upgrade the compatible local runtime toolchain, then rerun every audit corpus and a live Dominions load test. The runner/toolchain/full-suite portion is complete; the two blocked Vinext transitive advisories and the external game smoke remain.
+7. Declare the clean-install test runner, upgrade the compatible local runtime toolchain, then rerun every audit corpus and a live Dominions load test. The runner/toolchain/full-suite portion and compact engine-load smoke are complete; the two blocked Vinext transitive advisories and a representative eight-plane in-game smoke remain.
 
 ## Remaining external smoke test
 
-The installed Dominions 6 executable was discovered locally, but this audit was intentionally read-only outside the repository: it did not write a candidate package into the user's Dominions data directory or launch the game. Install a compact one-plane package and a representative eight-plane package, load both in Dominions 6, inspect all planes/gates/starts/thrones, and start at least one AI turn before calling the release seamless.
+On 2026-08-12, the audit generated and installed an isolated compact package named `Atlas_Release_Smoke_20260812`. The installed Dominions 6 executable accepted its `.map`/`.d6m` through the documented scripted `--newgame` path and created a game-state file plus its generated underworld map pair. The uniquely named smoke map/save were then removed; existing maps and saves were not touched. This closes the compact package-load check.
+
+Before calling the public release seamless, still install a representative eight-plane package, inspect every plane plus actual gate/start/throne placement in the game UI, and complete at least one AI-hosted turn. The headless command-line host did not complete that richer check unattended, so it is not claimed here.

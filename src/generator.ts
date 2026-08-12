@@ -468,18 +468,29 @@ export function generateProject(project: MapProject): MapProject {
     normalized.provinceTarget = clamp(Math.round(normalized.provinceTarget), 8, 800);
     return normalized;
   });
-  const autoSurfaceCoreCount = next.planes.filter((plane) => plane.autoSize && isSurfaceCorePlaneForSizing(plane)).length;
-  const autoCaveCoreCount = next.planes.filter((plane) => plane.autoSize && isTrueCaveCorePlane(plane)).length;
-  const overlandStarts = requestedStarts.land + requestedStarts.coastal + requestedStarts.water;
   const coreTargets = new Map<number, number>();
+  // Work out per-core start shares against the intended auto-sized budget,
+  // not against stale provinceTarget values left by a previous generation.
+  // Otherwise an earlier/default first plane can monopolize starts merely
+  // because it still carries a larger historical target.
+  const corePlanningPlanes = next.planes.map((plane) => (
+    plane.autoSize && isCorePlaneForSizing(plane)
+      ? { ...plane, provinces: [], provinceTarget: next.settings.provincesPerPlayer }
+      : plane
+  ));
+  const coreStartTargets = generatedStartPlaneTargets({ planes: corePlanningPlanes }, requestedStarts);
   next.planes.forEach((plane, index) => {
     if (!isCorePlaneForSizing(plane)) return;
     if (!plane.autoSize) {
       coreTargets.set(index, plane.provinceTarget);
     } else if (isTrueCaveCorePlane(plane)) {
-      coreTargets.set(index, Math.max(18, Math.round(requestedStarts.cave * next.settings.provincesPerPlayer / Math.max(1, autoCaveCoreCount))));
+      const allocatedStarts = coreStartTargets.get("cave")?.get(plane.id) ?? 0;
+      coreTargets.set(index, Math.max(18, Math.round(allocatedStarts * next.settings.provincesPerPlayer)));
     } else {
-      coreTargets.set(index, Math.max(18, Math.round(overlandStarts * next.settings.provincesPerPlayer / Math.max(1, autoSurfaceCoreCount))));
+      const allocatedStarts = (coreStartTargets.get("land")?.get(plane.id) ?? 0)
+        + (coreStartTargets.get("coastal")?.get(plane.id) ?? 0)
+        + (coreStartTargets.get("water")?.get(plane.id) ?? 0);
+      coreTargets.set(index, Math.max(18, Math.round(allocatedStarts * next.settings.provincesPerPlayer)));
     }
   });
   const coreTotal = [...coreTargets.values()].reduce((sum, value) => sum + clamp(value, 8, 800), 0)
@@ -2889,8 +2900,8 @@ export function preflightStartPlan(project: MapProject): string[] {
   const hasOtherRealm = eligibleGeneratedStartPlaneIndexes(project, "other").length > 0;
   const hasAnyOverland = project.planes.some(isSurfaceCorePlaneForSizing);
   const hasAnyCaveRealm = project.planes.some((plane) => ARCHETYPE_PROFILES[plane.kind].caveFamily);
-  const hasAnyOtherRealm = project.planes.some((plane, index) => index > 0
-    && !isSurfaceCorePlaneForSizing(plane) && !ARCHETYPE_PROFILES[plane.kind].caveFamily);
+  const hasAnyOtherRealm = project.planes.some((plane) =>
+    !isSurfaceCorePlaneForSizing(plane) && !ARCHETYPE_PROFILES[plane.kind].caveFamily);
   const issues: string[] = [];
 
   if (!hasOverland && requested.land > 0) issues.push(hasAnyOverland
@@ -4815,8 +4826,7 @@ function eligibleGeneratedStartPlaneIndexes(project: Pick<MapProject, "planes">,
       ? trueCaves
       : available.filter((index) => ARCHETYPE_PROFILES[project.planes[index]!.kind].caveFamily);
   }
-  return available.filter((index) => index > 0
-    && !isSurfaceCorePlaneForSizing(project.planes[index]!)
+  return available.filter((index) => !isSurfaceCorePlaneForSizing(project.planes[index]!)
     && !ARCHETYPE_PROFILES[project.planes[index]!.kind].caveFamily);
 }
 
