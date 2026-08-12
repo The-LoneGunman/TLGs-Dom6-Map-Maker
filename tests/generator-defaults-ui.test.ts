@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MapMakerApp, resetGeneratorDefaults, uniquePlaneName } from "../src/MapMakerApp";
+import { MapMakerApp, PlaneStartPolicyControl, markerAnnotationsForPlane, resetGeneratorDefaults, uniquePlaneName } from "../src/MapMakerApp";
 import { addPlane, createDefaultProject } from "../src/generator";
 import { RESOLUTION_PRESETS, cloneProject, type GenerationSettings } from "../src/domain";
 
@@ -41,6 +41,7 @@ test("reset generator defaults has an exact settings-only map-preserving contrac
   project.planes[0]!.width = 721;
   project.planes[0]!.height = 654;
   project.planes[0]!.wrapX = false;
+  project.planes[0]!.noGeneratedStarts = true;
   activePlane.width = 812;
   activePlane.height = 733;
   activePlane.wrapX = false;
@@ -100,6 +101,45 @@ test("reset generator defaults has an exact settings-only map-preserving contrac
   expectedActive.wrapY = true;
   assert.deepEqual(project, expected, "only controls visible on Generate are reset");
   assert.deepEqual(project.specificStarts, [before.specificStarts[0]], "reset removes generated cave assignments but preserves manual #specstart");
+  assert.equal(project.planes[0]!.noGeneratedStarts, true, "Generate-tab reset preserves per-plane start policy");
+});
+
+test("per-plane generated-start policy is opt-in and explains manual-start behavior", () => {
+  const allowed = renderToStaticMarkup(createElement(PlaneStartPolicyControl, {
+    plane: {},
+    onChange() {},
+  }));
+  assert.match(allowed, /Block generated starts on this plane/);
+  assert.match(allowed, /type="checkbox"/);
+  assert.doesNotMatch(allowed, /checked=""/);
+  assert.match(allowed, /aria-describedby="plane-generated-start-policy-help"/);
+  assert.match(allowed, /Applies on the next Generate only/);
+  assert.match(allowed, /Manual generic, team, and nation-specific starts remain available/);
+  assert.match(allowed, /directly connected provinces/);
+
+  const blocked = renderToStaticMarkup(createElement(PlaneStartPolicyControl, {
+    plane: { noGeneratedStarts: true },
+    onChange() {},
+  }));
+  assert.match(blocked, /type="checkbox"[^>]*checked=""/);
+});
+
+test("map marker annotations expose nation starts and all gate numbers on the selected plane", () => {
+  const project = createDefaultProject("marker-annotation-fixture");
+  const plane = project.planes[0]!;
+  const province = plane.provinces[0]!;
+  project.specificStarts = [{ nation: 27, planeId: plane.id, provinceId: province.id }];
+  project.gates = [71, 22, 71].map((gateNumber, index) => ({
+    id: `gate-${index}`,
+    gateNumber,
+    endpoints: [
+      { planeId: plane.id, provinceId: province.id },
+      { planeId: plane.id, provinceId: plane.provinces[index + 1]!.id },
+    ],
+  }));
+  const annotations = markerAnnotationsForPlane(project, plane.id);
+  assert.equal(annotations.get(province.id)?.specificStartNation, 27);
+  assert.deepEqual(annotations.get(province.id)?.gateNumbers, [22, 71]);
 });
 
 test("reset generator defaults control is clearly labeled", () => {

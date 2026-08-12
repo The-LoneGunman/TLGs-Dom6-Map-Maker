@@ -237,6 +237,8 @@ export interface Plane {
   variant?: PlaneVariant;
   /** Whether provinceTarget follows players * provincesPerPlayer on generation. */
   autoSize?: boolean;
+  /** Missing/false allows generated starts; true reserves this plane for neutral expansion. */
+  noGeneratedStarts?: boolean;
   provinceTarget: number;
   width: number;
   height: number;
@@ -433,12 +435,12 @@ export function planeFileSuffix(index: number): string {
 export function sanitizeMapName(value: string): string {
   const cleaned = value
     .normalize("NFKD")
-    .replace(/[^a-zA-Z_]+/g, "_")
+    .replace(/[^a-zA-Z0-9_]+/g, "_")
     .replace(/_+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 64);
   const fallback = cleaned || "pantokrator_atlas";
-  return /^(?:CON|PRN|AUX|NUL)$/i.test(fallback) ? `${fallback}_map` : fallback;
+  return /^(?:CON|PRN|AUX|NUL|CLOCK|CONIN|CONOUT|COM[1-9]|LPT[1-9])$/i.test(fallback) ? `${fallback}_map` : fallback;
 }
 
 export function isWaterTerrain(terrain: TerrainKey): boolean {

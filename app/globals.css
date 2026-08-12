@@ -505,6 +505,7 @@ code { color: var(--gold-pale); font-size: 0.92em; }
 
 .map-legend { position: absolute; bottom: 14px; left: 16px; display: flex; gap: 12px; padding: 7px 9px; border-radius: 5px; background: rgba(9, 15, 16, 0.68); color: #b7c0b8; font-size: 8px; backdrop-filter: blur(8px); pointer-events: none; }
 .map-legend span { display: flex; align-items: center; gap: 4px; }
+.map-legend b { color: #f0dfaa; font-size: 9px; letter-spacing: .02em; }
 .map-legend i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; }
 .map-legend i.legend-border { width: 12px; height: 0; border-top: 1px solid #aeb8b1; border-radius: 0; }
 .legend-start { background: #f5d67c; }

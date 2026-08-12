@@ -122,11 +122,13 @@ test("project import preserves valid generation policies and rejects unknown val
   const project = createDefaultProject("policy-import");
   project.settings.economyBalance = "soft";
   project.settings.overlandTopology = "strategic";
+  project.planes[0]!.noGeneratedStarts = true;
   project.generationWarnings = ["A constrained manual realm retained fewer guardians than requested."];
 
   const parsed = parseProject(JSON.stringify(project));
   assert.equal(parsed.settings.economyBalance, "soft");
   assert.equal(parsed.settings.overlandTopology, "strategic");
+  assert.equal(parsed.planes[0]!.noGeneratedStarts, true);
   assert.deepEqual(parsed.generationWarnings, project.generationWarnings);
 
   assert.throws(() => parseProject(serializedMutation((draft) => {
@@ -138,4 +140,7 @@ test("project import preserves valid generation policies and rejects unknown val
   assert.throws(() => parseProject(serializedMutation((draft) => {
     draft.generationWarnings = [42];
   })), /project\.generationWarnings\[0\] must be a string/);
+  assert.throws(() => parseProject(serializedMutation((draft) => {
+    draft.planes[0]!.noGeneratedStarts = "yes";
+  })), /project\.planes\[0\]\.noGeneratedStarts must be a boolean/);
 });

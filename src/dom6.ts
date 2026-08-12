@@ -729,13 +729,21 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
         add("error", `A connection has unknown edge kind ${String(edge.kind)}.`, plane.id, edge.a);
         continue;
       }
-      const special = edgeSpecial(edge);
-      if (!integerInRange(special, 0, 255)) add("error", "A special connection value must be a whole-number bitmask from 0 to 255.", plane.id, edge.a);
+      if (edge.kind === "custom" && (edge.special === undefined || !integerInRange(edge.special, 0, 255))) {
+        add("error", "A custom connection requires a safe whole-number bitmask from 0 to 255.", plane.id, edge.a);
+      }
     }
 
     for (const province of plane.provinces) {
       if (!TERRAIN_KEY_SET.has(province.terrain)) add("error", `${province.name}: unknown terrain ${String(province.terrain)}.`, plane.id, province.id);
       const degree = adjacency.get(province.id)?.length ?? 0;
+      const isStartProvince = protectedStartIds.has(province.id);
+      const adjacentStartId = isStartProvince
+        ? undefined
+        : adjacency.get(province.id)?.find((provinceId) => protectedStartIds.has(provinceId));
+      const startRingName = isStartProvince
+        ? province.name
+        : plane.provinces.find((item) => item.id === adjacentStartId)?.name;
       if (protectedStartIds.has(province.id)) {
         if (province.noStart) add("error", `${province.name} is marked both Start and No start.`, plane.id, province.id);
         if (isBlockedProvince(province)) add("error", `${province.name} is a start on blocked terrain.`, plane.id, province.id);
@@ -801,18 +809,36 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
         }
         const knownSite = findCatalogEntry(catalog.sites, site.value);
         if (!knownSite) add("warning", `${province.name}: magic site ${site.value} is not in the active catalog.`, plane.id, province.id);
-        else if (!siteCompatibility(knownSite, province, plane).compatible) add("warning", `${province.name}: ${knownSite.name} is not normally compatible with this province terrain.`, plane.id, province.id);
-      }
-      if (province.throne === "preferred" || province.throne === "fixed") {
-        if (protectedStartIds.has(province.id)) {
-          add("warning", `${province.name} is both a throne location and a start; prefer a throne at least two connections away.`, plane.id, province.id);
-        } else {
-          const adjacentStart = adjacency.get(province.id)?.find((provinceId) => protectedStartIds.has(provinceId));
-          if (adjacentStart) {
-            const startName = plane.provinces.find((item) => item.id === adjacentStart)?.name ?? "a start";
-            add("warning", `${province.name} is a throne location adjacent to start province ${startName}; prefer a throne at least two connections away.`, plane.id, province.id);
+        else {
+          if (!siteCompatibility(knownSite, province, plane).compatible) add("warning", `${province.name}: ${knownSite.name} is not normally compatible with this province terrain.`, plane.id, province.id);
+          if (knownSite.tags?.includes("throne") && (isStartProvince || adjacentStartId)) {
+            add(
+              "error",
+              isStartProvince
+                ? `${province.name} contains the throne site ${knownSite.name} on a player start; capitals must remain free of thrones.`
+                : `${province.name} contains the throne site ${knownSite.name} adjacent to start province ${startRingName ?? "a start"}; the entire start one-ring must remain free of thrones.`,
+              plane.id,
+              province.id,
+            );
           }
         }
+      }
+      if (province.throne === "preferred" || province.throne === "fixed") {
+        if (isStartProvince) {
+          add("error", `${province.name} is both a throne location and a player start; capitals must remain free of thrones.`, plane.id, province.id);
+        } else if (adjacentStartId) {
+          add("error", `${province.name} is a throne location adjacent to start province ${startRingName ?? "a start"}; the entire start one-ring must remain free of thrones.`, plane.id, province.id);
+        }
+      }
+      if ((isStartProvince || adjacentStartId) && hasRawIndependentDefenderDirectives(province.rawDirectives)) {
+        add(
+          "error",
+          isStartProvince
+            ? `${province.name} is a player start with raw independent-defender directives; capitals must remain free of guardian and special-unit commands.`
+            : `${province.name} has raw independent-defender directives adjacent to player start ${startRingName ?? "a start"}; the entire start one-ring must remain free of guardian and special-unit commands.`,
+          plane.id,
+          province.id,
+        );
       }
       if (province.provinceDefense !== undefined && (province.owner === undefined || isIndependentOwner(province.owner))) {
         add("warning", `${province.name}: #defence only works for a nation-owned province; independent guardians use commander/unit groups.`, plane.id, province.id);
@@ -841,13 +867,25 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
           else if (squad.unit.trim() && !findCatalogEntry(catalog.units, squad.unit)) add("warning", `${province.name}: squad unit ${squad.unit} is not in the active unit catalog.`, plane.id, province.id);
         }
       }
+      if (!isStartProvince && province.defenders.length) {
+        if (adjacentStartId) {
+          const description = powerfulGuardianForce(province)
+            ? "a powerful independent guardian force"
+            : "independent guardian groups";
+          add(
+            "error",
+            `${province.name} has ${description} adjacent to player start ${startRingName ?? "a start"}; the entire start one-ring must remain free of independent defenders.`,
+            plane.id,
+            province.id,
+          );
+          continue;
+        }
+      }
       if (!protectedStartIds.has(province.id) && province.defenders.length && powerfulGuardianForce(province)) {
         const nearestStart = protectedStartDistances.length
           ? Math.min(...protectedStartDistances.map((distances) => distances.get(province.id) ?? Infinity))
           : Infinity;
-        if (nearestStart === 1) {
-          add("error", `${province.name} has a powerful independent guardian force adjacent to a player start; move it outside the start's two-ring.`, plane.id, province.id);
-        } else if (nearestStart === 2) {
+        if (nearestStart === 2) {
           add("warning", `${province.name} has a powerful independent guardian force only two moves from a player start; prefer at least three moves of expansion room.`, plane.id, province.id);
         }
       }
@@ -1174,13 +1212,19 @@ function provinceIndex(plane: Plane, id: string): number {
 }
 
 function siteArg(value: string): string {
-  const trimmed = value.trim();
-  return /^-?\d+$/.test(trimmed) ? trimmed : quote(trimmed);
+  return catalogReferenceArg(value);
 }
 
 function unitArg(value: string): string {
+  return catalogReferenceArg(value);
+}
+
+function catalogReferenceArg(value: string): string {
   const trimmed = value.trim();
-  return /^-?\d+$/.test(trimmed) ? trimmed : quote(trimmed);
+  const numeric = positiveIntegerReferenceValue(trimmed);
+  return numeric !== undefined
+    ? String(numeric)
+    : quote(trimmed);
 }
 
 function rgbArgs(value: string): string {
@@ -1224,10 +1268,29 @@ function integerInRange(value: number, minimum: number, maximum: number): boolea
 }
 
 function invalidPositiveNumericReference(value: string): boolean {
+  const numeric = numericReferenceValue(value);
+  if (numeric === undefined) return false;
+  return positiveIntegerReferenceValue(value) === undefined;
+}
+
+/**
+ * Recognize an entirely numeric catalog reference before deciding whether it
+ * can instead be treated as a named mod entry. Only unsigned integer syntax
+ * (with an optional catalog-search # prefix) is accepted for IDs; signed,
+ * decimal, exponent, non-positive, and unsafe values are rejected by
+ * validation. Arbitrary nonnumeric mod names remain valid.
+ */
+function numericReferenceValue(value: string): number | undefined {
   const trimmed = value.trim().replace(/^#/, "");
-  if (!/^[+-]?\d+$/.test(trimmed)) return false;
+  if (!/^[+-]?(?:(?:\d+(?:\.\d*)?)|(?:\.\d+))(?:[eE][+-]?\d+)?$/.test(trimmed)) return undefined;
+  return Number(trimmed);
+}
+
+function positiveIntegerReferenceValue(value: string): number | undefined {
+  const trimmed = value.trim().replace(/^#/, "");
+  if (!/^\d+$/.test(trimmed)) return undefined;
   const numeric = Number(trimmed);
-  return !Number.isSafeInteger(numeric) || numeric < 1;
+  return Number.isSafeInteger(numeric) && numeric >= 1 ? numeric : undefined;
 }
 
 function isIndependentOwner(nation: number): boolean {
@@ -1274,6 +1337,10 @@ function powerfulGuardianForce(province: Province): boolean {
       || Object.values(group.magic ?? {}).some((level) => (level ?? 0) > 0));
 }
 
+function hasRawIndependentDefenderDirectives(raw: string): boolean {
+  return raw.split(/\r?\n/).some((line) => /^\s*#(?:commander|comname|bodyguards|units|xp|randomequip|additem|clearmagic|mag_[a-z_]+)\b/i.test(line));
+}
+
 function blocksReliableStartMovement(edge: Edge): boolean {
   // Bits 1, 2, and 4 are pass, river, and impassable respectively. Combined
   // special codes such as 33 and 36 retain the same movement behavior.
@@ -1284,7 +1351,7 @@ function classifyStart(plane: Plane, province: Province): StartType {
   if (isWaterProvince(province)) return "water";
   if (isCaveProvince(province) || ["cave", "cavern", "underworld", "hell", "abyss"].includes(plane.kind)) return "cave";
   if (province.startType && province.startType !== "water" && province.startType !== "cave") return province.startType;
-  if (plane.kind !== "surface") return "other";
+  if (!isSurfaceLikeStartPlane(plane)) return "other";
   const provinceById = new Map(plane.provinces.map((item) => [item.id, item]));
   const coastal = plane.edges.some((edge) => {
     if (edge.a !== province.id && edge.b !== province.id) return false;
@@ -1292,6 +1359,13 @@ function classifyStart(plane: Plane, province: Province): StartType {
     return !!other && isWaterProvince(other);
   });
   return coastal ? "coastal" : "land";
+}
+
+/** Keep manual-start validation aligned with generator core-plane semantics. */
+function isSurfaceLikeStartPlane(plane: Plane): boolean {
+  if (plane.kind === "surface") return true;
+  if (plane.kind !== "custom" || resolvePlaneOwnershipMode(plane) !== "solid") return false;
+  return !["fungal", "crystal", "volcanic", "storm", "infernal", "void"].includes(plane.variant ?? "temperate");
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

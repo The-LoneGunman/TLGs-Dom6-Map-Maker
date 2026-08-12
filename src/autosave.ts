@@ -33,6 +33,12 @@ export interface AutosaveConflict {
   /** Undefined means a backend could not be read safely. Null means no record exists. */
   currentRevision: AutosaveRevision | null | undefined;
   backend: AutosaveBackend;
+  /** Distinguishes an ordinary stale-tab save from two durable copies that need an explicit choice. */
+  reason?: "revision-changed" | "divergent-copies" | "conditional-write-unavailable";
+  /** Present when both persistence backends contain different valid projects. */
+  alternateBackend?: Exclude<AutosaveBackend, "none">;
+  /** Backend-specific tokens used to resolve a conflict without an unconditional overwrite. */
+  backendRevisions?: Partial<Record<Exclude<AutosaveBackend, "none">, AutosaveRevision | null>>;
 }
 
 export interface LoadedProjectAutosave extends AutosaveState {
@@ -57,6 +63,10 @@ export interface AutosaveDrivers {
   localstorage?: AutosaveDriver;
 }
 
+export interface AutosaveLockManager {
+  request<T>(name: string, callback: () => T): Promise<T>;
+}
+
 export interface SaveProjectAutosaveOptions {
   /**
    * Refuse the write unless durable state still has this revision. Pass null
@@ -64,6 +74,13 @@ export interface SaveProjectAutosaveOptions {
    * legacy write.
    */
   expectedRevision?: AutosaveRevision | null;
+  /** Explicit conflict resolution: replace only if both copies are still exactly the ones reviewed. */
+  expectedBackendRevisions?: Partial<Record<Exclude<AutosaveBackend, "none">, AutosaveRevision | null>>;
+}
+
+export interface LoadProjectAutosaveOptions {
+  /** Lets conflict UI inspect the other preserved copy without deleting either one. */
+  preferredBackend?: Exclude<AutosaveBackend, "none">;
 }
 
 /**
@@ -73,6 +90,7 @@ export interface SaveProjectAutosaveOptions {
  */
 export async function loadProjectAutosave(
   drivers: AutosaveDrivers = createBrowserAutosaveDrivers(),
+  options: LoadProjectAutosaveOptions = {},
 ): Promise<LoadedProjectAutosave> {
   const errors: AutosaveIssue[] = [];
   let indexedDbAvailable = false;
@@ -124,6 +142,40 @@ export async function loadProjectAutosave(
     errors.push(unavailableIssue("localstorage", "localStorage is unavailable in this browser context."));
   }
 
+  if (
+    indexedDbProject
+    && indexedDbSerialized
+    && localStorageProject
+    && localStorageSerialized
+    && indexedDbSerialized !== localStorageSerialized
+  ) {
+    const useIndexedDb = options.preferredBackend
+      ? options.preferredBackend === "indexeddb"
+      : projectTimestamp(indexedDbProject) > projectTimestamp(localStorageProject);
+    const selectedProject = useIndexedDb ? indexedDbProject : localStorageProject;
+    const selectedSerialized = useIndexedDb ? indexedDbSerialized : localStorageSerialized;
+    const selectedBackend = useIndexedDb ? "indexeddb" : "localstorage";
+    const alternateBackend = useIndexedDb ? "localstorage" : "indexeddb";
+    return {
+      project: selectedProject,
+      backend: selectedBackend,
+      errors,
+      migrated: false,
+      revision: autosaveRevision(selectedSerialized),
+      conflict: {
+        expectedRevision: autosaveRevision(selectedSerialized),
+        currentRevision: autosaveRevision(useIndexedDb ? localStorageSerialized : indexedDbSerialized),
+        backend: selectedBackend,
+        alternateBackend,
+        reason: "divergent-copies",
+        backendRevisions: {
+          indexeddb: autosaveRevision(indexedDbSerialized),
+          localstorage: autosaveRevision(localStorageSerialized),
+        },
+      },
+    };
+  }
+
   if (indexedDbProject && (
     !localStorageProject
     || indexedDbSerialized === localStorageSerialized
@@ -131,7 +183,20 @@ export async function loadProjectAutosave(
   )) {
     if (localStorageSerialized && drivers.localstorage) {
       try {
-        await drivers.localstorage.remove();
+        const removed = await removeIfUnchanged(
+          drivers.localstorage,
+          autosaveRevision(localStorageSerialized),
+        );
+        if (!removed.removed) {
+          const latest = await inspectAutosave(drivers);
+          return loadedConflict(
+            indexedDbProject,
+            "indexeddb",
+            autosaveRevision(indexedDbSerialized!),
+            latest,
+            errors,
+          );
+        }
       } catch (error) {
         errors.push(issue("localstorage", "remove", error));
       }
@@ -148,11 +213,38 @@ export async function loadProjectAutosave(
   if (localStorageProject && localStorageSerialized) {
     if (drivers.indexeddb) {
       try {
-        await drivers.indexeddb.set(localStorageSerialized);
+        const saved = await compareAndSetValue(
+          drivers.indexeddb,
+          revisionForStoredValue(indexedDbRaw),
+          localStorageSerialized,
+        );
+        if (!saved.saved) {
+          const latest = await inspectAutosave(drivers);
+          return loadedConflict(
+            localStorageProject,
+            "localstorage",
+            autosaveRevision(localStorageSerialized),
+            latest,
+            errors,
+          );
+        }
         indexedDbAvailable = true;
         if (drivers.localstorage) {
           try {
-            await drivers.localstorage.remove();
+            const removed = await removeIfUnchanged(
+              drivers.localstorage,
+              autosaveRevision(localStorageSerialized),
+            );
+            if (!removed.removed) {
+              const latest = await inspectAutosave(drivers);
+              return loadedConflict(
+                localStorageProject,
+                "indexeddb",
+                autosaveRevision(localStorageSerialized),
+                latest,
+                errors,
+              );
+            }
           } catch (error) {
             errors.push(issue("localstorage", "remove", error));
           }
@@ -201,14 +293,22 @@ export async function saveProjectAutosave(
   }
   const nextRevision = autosaveRevision(serialized);
   const expectedRevision = options.expectedRevision;
-  const guarded = expectedRevision !== undefined;
+  const expectedBackendRevisions = options.expectedBackendRevisions;
+  const resolvingConflict = expectedBackendRevisions !== undefined;
+  const guarded = expectedRevision !== undefined || resolvingConflict;
   let snapshot: AutosaveSnapshot | undefined;
 
   if (guarded) {
     snapshot = await inspectAutosave(drivers);
     errors.push(...snapshot.errors);
-    if (!snapshot.readSafe || snapshot.revision !== expectedRevision) {
-      return conflictState(expectedRevision, snapshot, errors);
+    const backendMismatch = resolvingConflict && (["indexeddb", "localstorage"] as const).some((backend) =>
+      snapshot!.backendRevisions[backend] !== expectedBackendRevisions[backend]);
+    if (
+      !snapshot.readSafe
+      || backendMismatch
+      || (!resolvingConflict && (snapshot.divergentCopies || snapshot.revision !== expectedRevision))
+    ) {
+      return conflictState(expectedRevision ?? snapshot.revision, snapshot, errors);
     }
   }
 
@@ -217,10 +317,10 @@ export async function saveProjectAutosave(
       if (guarded) {
         const result = await compareAndSetValue(
           drivers.indexeddb,
-          snapshot!.backendRevisions.indexeddb ?? null,
+          (resolvingConflict ? expectedBackendRevisions.indexeddb : snapshot!.backendRevisions.indexeddb) ?? null,
           serialized,
         );
-        if (!result.saved) return conflictAfterRace(expectedRevision, drivers, errors);
+        if (!result.saved) return conflictAfterRace(expectedRevision ?? snapshot!.revision, drivers, errors);
       } else {
         await drivers.indexeddb.set(serialized);
       }
@@ -229,9 +329,9 @@ export async function saveProjectAutosave(
           if (guarded) {
             const result = await removeIfUnchanged(
               drivers.localstorage,
-              snapshot!.backendRevisions.localstorage ?? null,
+              (resolvingConflict ? expectedBackendRevisions.localstorage : snapshot!.backendRevisions.localstorage) ?? null,
             );
-            if (!result.removed) return conflictAfterRace(expectedRevision, drivers, errors);
+            if (!result.removed) return conflictAfterRace(expectedRevision ?? snapshot!.revision, drivers, errors);
           } else {
             await drivers.localstorage.remove();
           }
@@ -252,10 +352,10 @@ export async function saveProjectAutosave(
       if (guarded) {
         const result = await compareAndSetValue(
           drivers.localstorage,
-          snapshot!.backendRevisions.localstorage ?? null,
+          (resolvingConflict ? expectedBackendRevisions.localstorage : snapshot!.backendRevisions.localstorage) ?? null,
           serialized,
         );
-        if (!result.saved) return conflictAfterRace(expectedRevision, drivers, errors);
+        if (!result.saved) return conflictAfterRace(expectedRevision ?? snapshot!.revision, drivers, errors);
       } else {
         await drivers.localstorage.set(serialized);
       }
@@ -278,7 +378,9 @@ export function createBrowserAutosaveDrivers(): AutosaveDrivers {
     // Access may be denied by browser privacy policy; the caller reports it as unavailable.
   }
   try {
-    if (typeof localStorage !== "undefined") drivers.localstorage = createLocalStorageDriver(localStorage);
+    if (typeof localStorage !== "undefined") {
+      drivers.localstorage = createLocalStorageDriver(localStorage, browserAutosaveLockManager());
+    }
   } catch {
     // Access may throw before the first operation in sandboxed/opaque origins.
   }
@@ -330,7 +432,10 @@ export function createIndexedDbDriver(factory: IDBFactory): AutosaveDriver {
   };
 }
 
-export function createLocalStorageDriver(storage: Pick<Storage, "getItem" | "setItem" | "removeItem">): AutosaveDriver {
+export function createLocalStorageDriver(
+  storage: Pick<Storage, "getItem" | "setItem" | "removeItem">,
+  lockManager: AutosaveLockManager | null | undefined = browserAutosaveLockManager(),
+): AutosaveDriver {
   return {
     async get() {
       return storage.getItem(LEGACY_PROJECT_AUTOSAVE_KEY);
@@ -342,16 +447,26 @@ export function createLocalStorageDriver(storage: Pick<Storage, "getItem" | "set
       storage.removeItem(LEGACY_PROJECT_AUTOSAVE_KEY);
     },
     async compareAndSet(expectedRevision, value) {
-      const current = storage.getItem(LEGACY_PROJECT_AUTOSAVE_KEY);
-      if (revisionForStoredValue(current) !== expectedRevision) return { saved: false, current };
-      storage.setItem(LEGACY_PROJECT_AUTOSAVE_KEY, value);
-      return { saved: true, current: value };
+      if (!lockManager) {
+        return { saved: false, current: storage.getItem(LEGACY_PROJECT_AUTOSAVE_KEY) };
+      }
+      return lockManager.request(LEGACY_PROJECT_AUTOSAVE_KEY, () => {
+        const current = storage.getItem(LEGACY_PROJECT_AUTOSAVE_KEY);
+        if (revisionForStoredValue(current) !== expectedRevision) return { saved: false, current };
+        storage.setItem(LEGACY_PROJECT_AUTOSAVE_KEY, value);
+        return { saved: true, current: value };
+      });
     },
     async removeIfRevision(expectedRevision) {
-      const current = storage.getItem(LEGACY_PROJECT_AUTOSAVE_KEY);
-      if (revisionForStoredValue(current) !== expectedRevision) return { removed: false, current };
-      storage.removeItem(LEGACY_PROJECT_AUTOSAVE_KEY);
-      return { removed: true, current: null };
+      if (!lockManager) {
+        return { removed: false, current: storage.getItem(LEGACY_PROJECT_AUTOSAVE_KEY) };
+      }
+      return lockManager.request(LEGACY_PROJECT_AUTOSAVE_KEY, () => {
+        const current = storage.getItem(LEGACY_PROJECT_AUTOSAVE_KEY);
+        if (revisionForStoredValue(current) !== expectedRevision) return { removed: false, current };
+        storage.removeItem(LEGACY_PROJECT_AUTOSAVE_KEY);
+        return { removed: true, current: null };
+      });
     },
   };
 }
@@ -482,6 +597,7 @@ interface AutosaveSnapshot {
   backendRevisions: Partial<Record<Exclude<AutosaveBackend, "none">, AutosaveRevision | null>>;
   errors: AutosaveIssue[];
   readSafe: boolean;
+  divergentCopies: boolean;
 }
 
 interface AutosaveCandidate {
@@ -557,6 +673,7 @@ async function inspectAutosave(drivers: AutosaveDrivers): Promise<AutosaveSnapsh
     },
     errors,
     readSafe,
+    divergentCopies: Boolean(indexeddb.project && localstorage.project && indexeddb.raw !== localstorage.raw),
   };
 }
 
@@ -567,9 +684,9 @@ async function compareAndSetValue(
 ): Promise<{ saved: boolean; current: string | null }> {
   if (driver.compareAndSet) return driver.compareAndSet(expectedRevision, value);
   const current = await driver.get();
-  if (revisionForStoredValue(current) !== expectedRevision) return { saved: false, current };
-  await driver.set(value);
-  return { saved: true, current: value };
+  // A read followed by a separate write is not a compare-and-set operation:
+  // another tab can win in between. Refuse guarded writes from legacy drivers.
+  return { saved: false, current };
 }
 
 async function removeIfUnchanged(
@@ -578,9 +695,32 @@ async function removeIfUnchanged(
 ): Promise<{ removed: boolean; current: string | null }> {
   if (driver.removeIfRevision) return driver.removeIfRevision(expectedRevision);
   const current = await driver.get();
-  if (revisionForStoredValue(current) !== expectedRevision) return { removed: false, current };
-  await driver.remove();
-  return { removed: true, current: null };
+  // As above, never emulate conditional deletion with a racy get/remove pair.
+  return { removed: false, current };
+}
+
+function loadedConflict(
+  project: MapProject,
+  backend: Exclude<AutosaveBackend, "none">,
+  revision: AutosaveRevision,
+  snapshot: AutosaveSnapshot,
+  errors: AutosaveIssue[],
+): LoadedProjectAutosave {
+  return {
+    project,
+    backend,
+    errors: [...errors, ...snapshot.errors],
+    migrated: false,
+    revision,
+    conflict: {
+      expectedRevision: revision,
+      currentRevision: snapshot.readSafe ? snapshot.revision : undefined,
+      backend: snapshot.backend,
+      alternateBackend: snapshot.backend === "none" ? undefined : snapshot.backend,
+      reason: snapshot.divergentCopies ? "divergent-copies" : "revision-changed",
+      backendRevisions: snapshot.backendRevisions,
+    },
+  };
 }
 
 function conflictState(
@@ -597,8 +737,23 @@ function conflictState(
       expectedRevision,
       currentRevision: snapshot.readSafe ? snapshot.revision : undefined,
       backend: snapshot.backend,
+      reason: snapshot.divergentCopies ? "divergent-copies" : "revision-changed",
+      backendRevisions: snapshot.backendRevisions,
     },
   };
+}
+
+function browserAutosaveLockManager(): AutosaveLockManager | undefined {
+  try {
+    if (typeof navigator === "undefined" || !navigator.locks) return undefined;
+    return {
+      request<T>(name: string, callback: () => T): Promise<T> {
+        return navigator.locks.request(name, callback);
+      },
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 async function conflictAfterRace(

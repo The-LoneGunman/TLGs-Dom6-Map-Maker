@@ -850,6 +850,13 @@ test("generated thrones and gates honor generic and specific start exclusion zon
       for (const throne of plane.provinces.filter((province) => province.throne === "preferred")) {
         assert.ok((distances.get(throne.id) ?? 0) >= 2);
       }
+      for (const province of plane.provinces) {
+        const distance = distances.get(province.id) ?? 99;
+        if (distance > 1) continue;
+        assert.equal(province.defenders.length, 0, `guardian remained ${distance} moves from a start`);
+        assert.ok(province.throne !== "preferred" && province.throne !== "fixed",
+          `throne remained ${distance} moves from a start`);
+      }
       for (const gate of project.gates) {
         for (const endpoint of gate.endpoints.filter((item) => item.planeId === plane.id)) {
           assert.ok((distances.get(endpoint.provinceId) ?? 0) >= 2);
@@ -859,13 +866,36 @@ test("generated thrones and gates honor generic and specific start exclusion zon
   }
 });
 
-test("multiplayer map file stems contain only manual-safe letters and underscores", () => {
+test("manual team and nation-specific starts immediately participate in live fairness", () => {
+  const project = createDefaultProject("manual-start-live-fairness");
+  const plane = project.planes[0]!;
+  for (const province of plane.provinces) {
+    province.start = false;
+    province.teamStart = undefined;
+  }
+  project.specificStarts = [];
+  const first = plane.provinces[0]!;
+  const adjacentId = adjacencyFor(plane, { traversableOnly: true }).get(first.id)![0]!;
+  const adjacent = plane.provinces.find((province) => province.id === adjacentId)!;
+  first.teamStart = 0;
+  project.specificStarts = [{ nation: 5, planeId: plane.id, provinceId: adjacent.id }];
+
+  const fairness = calculateFairness(project);
+  assert.ok(fairness.startSeparation < 100);
+  assert.ok(fairness.notes.some((note) => note.includes("closer than the hard three-move")));
+});
+
+test("multiplayer map file stems contain only manual-safe letters, digits, and underscores", () => {
   assert.equal(createDefaultProject("catalog-version").targetVersion, 635);
-  assert.equal(sanitizeMapName("Map 6 - King's-Road"), "Map_King_s_Road");
-  assert.match(sanitizeMapName("123 ---"), /^[A-Za-z_]+$/);
-  for (const reserved of ["CON", "con", "PRN", "AUX", "NUL"]) {
+  assert.equal(sanitizeMapName("Map 6 - King's-Road"), "Map_6_King_s_Road");
+  assert.equal(sanitizeMapName("123 ---"), "123");
+  assert.match(sanitizeMapName("Realm 42"), /^[A-Za-z0-9_]+$/);
+  for (const reserved of ["CON", "con", "PRN", "AUX", "NUL", "COM1", "com9", "LPT1", "lpt9"]) {
     assert.equal(sanitizeMapName(reserved), `${reserved}_map`);
   }
+  assert.equal(sanitizeMapName("CLOCK$"), "CLOCK_map");
+  assert.equal(sanitizeMapName("CONIN$"), "CONIN_map");
+  assert.equal(sanitizeMapName("CONOUT$"), "CONOUT_map");
 });
 
 test("start-plan preflight rejects impossible plane-family allocations before generation", () => {
@@ -879,4 +909,109 @@ test("start-plan preflight rejects impossible plane-family allocations before ge
 
   withDream.settings.startDistribution = { land: 4, coastal: 0, water: 0, cave: 2, other: 0 };
   assert.ok(preflightStartPlan(withDream).some((message) => message.includes("need a Cave")));
+});
+
+test("per-plane reservations exclude every generated start pool and preflight impossible allocations", () => {
+  let project = createDefaultProject("reserved-start-plane");
+  Object.assign(project.settings, {
+    players: 4,
+    provincesPerPlayer: 12,
+    startDistribution: { land: 4, coastal: 0, water: 0, cave: 0, other: 0 },
+  });
+  project.planes[0]!.autoSize = false;
+  project.planes[0]!.provinceTarget = 48;
+  project.planes[0]!.noGeneratedStarts = true;
+  const manualSpecific = {
+    nation: 5,
+    planeId: project.planes[0]!.id,
+    provinceId: project.planes[0]!.provinces[0]!.id,
+  };
+  project.specificStarts = [manualSpecific];
+  project = addPlane(project, "surface", { generate: false, autoSize: false, provinceTarget: 48 });
+  assert.deepEqual(preflightStartPlan(project), []);
+
+  const generated = generateProject(project);
+  assert.equal(generated.planes[0]!.provinces.some((province) => province.start), false);
+  assert.equal(generated.planes[1]!.provinces.filter((province) => province.start).length, 4);
+  assert.deepEqual(generated.specificStarts, [manualSpecific], "the reservation must not remove an authored #specstart");
+
+  project.planes[1]!.noGeneratedStarts = true;
+  const issues = preflightStartPlan(project);
+  assert.equal(issues.length, 1);
+  assert.match(issues[0]!, /enabled for generated starts/);
+  const impossible = generateProject(project);
+  assert.equal(impossible.planes.flatMap((plane) => plane.provinces).some((province) => province.start), false);
+});
+
+test("true Cave planes take configured cave nations ahead of Underworld fallbacks", () => {
+  let project = createDefaultProject("true-cave-start-priority");
+  Object.assign(project.settings, {
+    players: 4,
+    provincesPerPlayer: 12,
+    startDistribution: { land: 2, coastal: 0, water: 0, cave: 2, other: 0 },
+    caveStartNations: [15, 59],
+  });
+  project = addPlane(project, "underworld", { generate: false, autoSize: false, provinceTarget: 48 });
+  project = addPlane(project, "cave", { generate: false, autoSize: false, provinceTarget: 48 });
+  const generated = generateProject(project);
+  const cave = generated.planes.find((plane) => plane.kind === "cave")!;
+  assert.equal(cave.provinces.filter((province) => province.startType === "cave").length, 2);
+  assert.equal(generated.planes.find((plane) => plane.kind === "underworld")!.provinces.some((province) => province.start), false);
+  assert.ok(generated.specificStarts.every((start) => start.planeId === cave.id));
+
+  cave.noGeneratedStarts = true;
+  const reallocated = generateProject(generated);
+  const reservedCave = reallocated.planes.find((plane) => plane.kind === "cave")!;
+  const underworld = reallocated.planes.find((plane) => plane.kind === "underworld")!;
+  assert.equal(reservedCave.provinces.some((province) => province.start), false);
+  assert.equal(underworld.provinces.filter((province) => province.startType === "cave").length, 2);
+  assert.ok(reallocated.specificStarts.filter((start) => start.source === "generated-cave")
+    .every((start) => start.planeId === underworld.id));
+});
+
+test("special Custom realms cannot absorb land starts and are valid other-plane targets", () => {
+  let project = createDefaultProject("special-custom-start-family");
+  Object.assign(project.settings, {
+    players: 4,
+    provincesPerPlayer: 12,
+    startDistribution: { land: 0, coastal: 0, water: 0, cave: 0, other: 4 },
+  });
+  project.planes[0]!.noGeneratedStarts = true;
+  project = addPlane(project, "custom", {
+    generate: false,
+    autoSize: false,
+    provinceTarget: 64,
+    variant: "infernal",
+  });
+  const generated = generateProject(project);
+  const custom = generated.planes[1]!;
+  assert.equal(custom.provinces.filter((province) => province.startType === "other").length, 4);
+  assert.equal(custom.provinces.some((province) => province.startType === "land"), false);
+});
+
+test("equal multi-core planes balance allocations and retain final hard spacing", () => {
+  for (const seed of ["multi-core-surface-temperate-0", "multi-core-surface-temperate-1", "multi-core-surface-temperate-2"]) {
+    let project = createDefaultProject(seed);
+    Object.assign(project.settings, {
+      players: 6,
+      provincesPerPlayer: 16,
+      startDistribution: { land: 6, coastal: 0, water: 0, cave: 0, other: 0 },
+    });
+    project.planes[0]!.autoSize = true;
+    project = addPlane(project, "surface", { generate: false, autoSize: true });
+    const generated = generateProject(project);
+    const counts = generated.planes.map((plane) => plane.provinces.filter((province) => province.start).length);
+    assert.ok(Math.max(...counts) - Math.min(...counts) <= 1, `${seed}: ${counts.join("/")}`);
+    for (const plane of generated.planes) {
+      const starts = plane.provinces.filter((province) => province.start);
+      const movement = adjacencyFor(plane, { traversableOnly: true });
+      for (let left = 0; left < starts.length; left += 1) {
+        const distances = shortestDistances(movement, starts[left]!.id);
+        for (let right = left + 1; right < starts.length; right += 1) {
+          assert.ok((distances.get(starts[right]!.id) ?? 0) >= 3,
+            `${seed}: starts ${starts[left]!.index}/${starts[right]!.index} are too close on ${plane.name}`);
+        }
+      }
+    }
+  }
 });

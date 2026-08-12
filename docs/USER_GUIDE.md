@@ -135,6 +135,8 @@ The application has four main areas:
 
 Selecting a plane in the Planes list or the strip below the map makes it active. Selecting a province opens it in the inspector.
 
+The map marker legend distinguishes all authored gameplay markers instead of collapsing them into a generic symbol: **S/#/N** means generic/team/nation-specific start, **♜/♛/×** means preferred/fixed/avoided throne, **✦/M** means a placed site/many-sites terrain, **G** means guardian groups, and **◎** means a gateway endpoint. A province can show several badges at once. The selected-province screen-reader status announces the same marker meanings and relevant group, nation, site, guardian, and gate numbers.
+
 The **Project** name in the header becomes the map title and the basis for the exported folder and filenames. Export shows the safe normalized file stem before writing anything; changing the displayed project name does not rename an already installed folder on disk.
 
 ## Generate tab
@@ -176,7 +178,7 @@ Resets the seed and the options visible in Generate to their initial values with
 - Sets every plane to 3840 x 2160.
 - Resets wrapping on the active plane: both axes on normally, both off for Underworld.
 - Removes generated cave-nation specific-start assignments, which must be regenerated.
-- Preserves current planes, provinces, Scenario settings, gate plan, actual gateways, manual map edits, and manual specific starts.
+- Preserves current planes and their **Block generated starts** choices, provinces, Scenario settings, gate plan, actual gateways, manual map edits, and manual specific starts.
 - Is Undoable and does not itself generate.
 
 ### Seed
@@ -205,7 +207,7 @@ Each category accepts 0-32. The five values must total Players exactly, or Gener
 
 **Put remainder on land** appears when too few starts are allocated and fills the unassigned slots with Land starts.
 
-Make sure the required plane families exist. For example, Cave starts need a cave-family plane and Other starts need an appropriate bonus realm. An impossible category displays a persistent **Generation plan cannot place all starts** summary and disables Generate until you add a compatible plane or change the allocation; the same condition remains an export-validation error for imported projects.
+Make sure the required plane families exist and permit generated starts. For example, Cave starts need an eligible cave-family plane (preferring Cave/Cavern) and Other starts need an eligible bonus realm. A plane whose **Block generated starts on this plane** option is checked is not eligible for any automatically allocated start category. An impossible category displays a persistent **Generation plan cannot place all starts** summary and disables Generate until you permit starts on a compatible plane, add one, or change the allocation; the same condition remains an export-validation error for imported projects.
 
 ### Deterministic cave-start nations
 
@@ -417,6 +419,20 @@ Variants reweight climate, terrain, site paths, population pools, guardian theme
 
 With auto-size on, the plane uses the formulas under [Automatic plane sizing](#automatic-plane-sizing). Turning it off reveals **Province target**, range 8-800.
 
+### Block generated starts on this plane
+
+Unchecked by default. When checked, the next **Generate balanced atlas** does not allocate generic generated starts to that plane. Use this to reserve a dangerous bonus realm, keep a thematic plane neutral, or direct the requested start categories into other compatible planes. If the remaining eligible planes cannot satisfy the allocation, the Generate tab names the impossible categories and disables Generate instead of silently ignoring the policy.
+
+This is a generation policy, not a permanent ban:
+
+- Existing starts are not removed merely by checking it; Generate rebuilds generated starts according to the new plan.
+- You can still add generic, team, or nation-specific starts manually afterward.
+- Importing, cloning, Undo/Redo, autosave, and project JSON preserve the choice.
+- **Reset generator defaults** leaves it unchanged because that reset is limited to Generate-tab controls.
+- A new plane allows generated starts unless you check the option.
+
+Whether a start was generated or placed manually, its capital province and every province directly connected to it form a protected capital zone. Generation does not place neutral guardians, special defender units, or thrones in that zone. Assigning a nation-specific start also clears conflicting capital content already on the capital as described under [Starts](#starts).
+
 ### Wrap settings
 
 Create movement and ownership seams across the selected axis. Underworld defaults to no wrap so its Styx remains a permanent barrier with controlled crossings.
@@ -610,7 +626,7 @@ Fire, Air, Water, Earth, Astral, Death, Nature, Glamour, Blood, and Holy add ran
 - **Team-start group:** emits `#teamstart`; use a non-negative integer smaller than the number of teams selected by the host.
 - **Specific-start nation:** emits `#specstart` for a playable nation and the province's global cross-plane number. Assigning it clears independent guardians, placed sites, throne setup, ownership, economy/PD overrides, forts, labs, temples, battle overrides, raw province directives, and any team-start marker. It preserves terrain, geography, climate, province name, and an existing generic-start marker. Undo is available if you selected the wrong province.
 
-Generic, team, and nation-specific starts all count as start locations in safety validation and in the live fairness calculation. Starts must remain at least three global movement steps apart and may not have blocking or condition-dependent starting borders. After any manual start edit, spacing, two-ring expansion, nearby-throne access, local connection degree, and the overall score recalculate immediately across ordinary borders and cross-plane gates. The start-allocation score remains based on generated generic slots, so a nation or team annotation does not falsely change the requested land/coastal/water/cave counts.
+Generic, team, and nation-specific starts all count as start locations in safety validation and in the live fairness calculation. Starts must remain at least three global movement steps apart and may not have blocking or condition-dependent starting borders. Their provinces and directly connected neighbors are protected from generated guardians, special defender units, and thrones. After any manual start edit, spacing, two-ring expansion, nearby-throne access, local connection degree, and the overall score recalculate immediately across ordinary borders and cross-plane gates. The start-allocation score remains based on generated generic slots, so a nation or team annotation does not falsely change the requested land/coastal/water/cave counts.
 
 #### Thrones
 
@@ -662,7 +678,7 @@ Guardian groups are explicit initial independent defenders, not replenishing pos
 - Multiple groups create multiple commander blocks.
 - Empty commanders or squads are validation errors.
 - Specific items use item names, not numeric IDs.
-- Guardians are disabled on generic, team, and nation-specific starts to protect the nation's starting army and pretender. Assigning a nation-specific start also removes any guardians already present, and validation blocks stale imported/manual capital content until that start is reassigned through the editor.
+- Guardians are disabled on generic, team, and nation-specific starts to protect the nation's starting army and pretender. Generation also leaves every directly connected province free of guardian and special-defender groups. Assigning a nation-specific start removes conflicting capital content already present, and validation blocks stale imported/manual capital content until that start is reassigned through the editor.
 
 Generated Surface/Cave/Cavern groups are ordinary independents. Cloud, Air, Underworld, Infernal, Abyss, Dream, Elemental, and similar bonus realms use stronger, themed commanders and multiple large squads to make expansion a deliberate challenge.
 
@@ -730,7 +746,7 @@ Pickers search names, aliases, tags, and numeric IDs and show up to 12 ranked ma
 - **Download template:** downloads the required schema and provenance structure.
 - **Reset custom entries:** removes device-stored additions and returns to bundled-only lookup.
 
-Custom catalogs are stored separately on the device and are not embedded game content. Importing an ID does not install a `.dm` mod or make it exist in Dominions. Keep a copy of custom catalog JSON and enable matching game content when required.
+Custom-catalog imports are limited to 8 MiB and are rejected before the browser reads a larger file. Custom catalogs are stored separately on the device and are not embedded game content. Importing an ID does not install a `.dm` mod or make it exist in Dominions. Keep a copy of custom catalog JSON and enable matching game content when required.
 
 ## Validation and balance report
 
@@ -778,7 +794,7 @@ An autosave is scheduled 200 ms after the last project change, and the asynchron
 - **Limited autosave:** localStorage fallback with a smaller quota.
 - **Autosave unavailable:** no browser copy could be written; download project JSON immediately.
 
-Autosave belongs to this browser and site profile. It is not cloud synchronization, and clearing browser data removes it. All Pantokrator Atlas tabs on the same origin share one current-project slot. Saves use a compare-and-set revision check: if another tab changed that slot, automatic saving pauses and a persistent conflict bar asks you to **Load newer copy** or explicitly **Keep this copy**. This prevents a stale tab from silently replacing the detected newer revision, but it is still one recovery slot rather than a recent-project library. **New atlas** deliberately replaces the current autosave after a backup-oriented confirmation and clears history; **Reset generator defaults** preserves the existing planes, provinces, gateways, and manual edits. There is no separate Clear autosave command. Undo history is session-only and does not return after a reload.
+Autosave belongs to this browser and site profile. It is not cloud synchronization, and clearing browser data removes it. All Pantokrator Atlas tabs on the same origin share one current-project slot. Saves use a compare-and-set revision check: if another tab changed that slot, automatic saving pauses and a persistent conflict bar asks you to **Load newer copy** or explicitly **Keep this copy**. If IndexedDB and localStorage contain two different valid projects, both copies remain preserved while **Inspect other copy** lets you compare them; **Keep this copy** replaces them only if neither reviewed revision changed in the meantime. This prevents a stale tab or load-time migration from silently replacing a valid copy, but autosave is still one recovery slot rather than a recent-project library. **New atlas** deliberately replaces the current autosave after a backup-oriented confirmation and clears history; **Reset generator defaults** preserves the existing planes, provinces, gateways, and manual edits. There is no separate Clear autosave command. Undo history is session-only and does not return after a reload.
 
 ### Undo and Redo
 
@@ -790,9 +806,9 @@ There is no global Ctrl/Cmd+Z shortcut; use the visible buttons.
 
 Choose **Install / export -> Editable project JSON** for a portable backup named `<map-name>.atlas.json`. Every playable package also includes `atlas_project.json`.
 
-Choose **Open project** and select either file to reopen it. The importer accepts Pantokrator Atlas schema-v1 JSON. It does not open ZIP, `.map`, `.d6m`, custom catalog JSON, or arbitrary JSON.
+Choose **Open project** and select either file to reopen it. The importer accepts Pantokrator Atlas schema-v1 JSON up to 16 MiB, with at most 8 planes and 800 provinces per plane. Larger or structurally excessive files are rejected before they can consume unbounded browser memory. It does not open ZIP, `.map`, `.d6m`, custom catalog JSON, or arbitrary JSON.
 
-Current staged-plane exception: after choosing **Add plane to plan**, the new plane has no provinces until generation. The current importer rejects that draft state. Generate immediately after staging all planes before reloading the page or depending on that JSON backup. If you staged a plane accidentally, use Undo before leaving the page.
+After choosing **Add plane to plan**, the new plane has no provinces until generation. That planned state round-trips through autosave and project JSON, but it remains a playable-export error until you configure the plan and Generate.
 
 Project JSON is editable source, not a playable map. Custom catalogs are stored separately and should be backed up separately.
 
@@ -840,7 +856,7 @@ Exports the active plane at its configured resolution using the currently select
 
 ### Filename normalization
 
-Folder and file stems are normalized to a letters/underscores name with a maximum of 64 characters. The export dialog shows the actual result. Windows device basenames `CON`, `PRN`, `AUX`, and `NUL` are automatically suffixed with `_map`. A normalization warning does not block export.
+Folder and file stems preserve ASCII letters, digits, and underscores, with a maximum of 64 characters. The export dialog shows the actual result. Windows device basenames `CON`, `PRN`, `AUX`, `NUL`, `CLOCK$`, `CONIN$`, `CONOUT$`, `COM1`-`COM9`, and `LPT1`-`LPT9` are normalized to safe `_map` names. A normalization warning does not block export.
 
 ### Browser limitations
 
@@ -867,7 +883,7 @@ Validation, replacement-confirmation, and export dialogs trap focus. Escape clos
 | Message or symptom | Meaning and response |
 |---|---|
 | PowerShell says `npm.ps1 cannot be loaded` | Windows execution policy blocked the PowerShell shim. Run `npm.cmd ci` and `npm.cmd run dev`, or use Command Prompt. Do not weaken the machine's execution policy merely to start Atlas. |
-| Generate is disabled | The five start categories do not total Players. Correct them or use Put remainder on land. |
+| Generate is disabled | The five start categories may not total Players, or every compatible plane for a requested category may block generated starts. Read the persistent generation-plan summary, correct the counts, or permit starts on a suitable plane. |
 | Compatibility blocker / playable export unavailable | Open Validate and resolve every red Error. Warnings and fairness alone do not block export. |
 | Scale-aware spacing below preferred | The hard three-step floor was retained but the larger preferred target did not fit. Increase provinces/player, simplify start categories, change wrapping, or generate again. |
 | Start connection counts vary | Identical exits could not fit without breaking harder safety rules. Lower the connection target or enlarge the core realms. |

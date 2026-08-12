@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   autosaveRevision,
+  createLocalStorageDriver,
   loadProjectAutosave,
   saveProjectAutosave,
   type AutosaveDriver,
   type AutosaveDrivers,
+  type AutosaveLockManager,
 } from "../src/autosave";
 import { createDefaultProject } from "../src/generator";
 
@@ -38,6 +40,31 @@ class MemoryDriver implements AutosaveDriver {
     if (this.failRemove) throw this.failRemove;
     this.value = null;
   }
+
+  async compareAndSet(
+    expectedRevision: string | null,
+    value: string,
+  ): Promise<{ saved: boolean; current: string | null }> {
+    this.events.push("set");
+    if (this.failSet) throw this.failSet;
+    if ((this.value === null ? null : autosaveRevision(this.value)) !== expectedRevision) {
+      return { saved: false, current: this.value };
+    }
+    this.value = value;
+    return { saved: true, current: value };
+  }
+
+  async removeIfRevision(
+    expectedRevision: string | null,
+  ): Promise<{ removed: boolean; current: string | null }> {
+    this.events.push("remove");
+    if (this.failRemove) throw this.failRemove;
+    if ((this.value === null ? null : autosaveRevision(this.value)) !== expectedRevision) {
+      return { removed: false, current: this.value };
+    }
+    this.value = null;
+    return { removed: true, current: null };
+  }
 }
 
 class RaceOnSecondReadDriver extends MemoryDriver {
@@ -51,6 +78,15 @@ class RaceOnSecondReadDriver extends MemoryDriver {
     this.reads += 1;
     if (this.reads === 2) this.value = this.replacement;
     return super.get();
+  }
+
+  override async compareAndSet(
+    expectedRevision: string | null,
+    value: string,
+  ): Promise<{ saved: boolean; current: string | null }> {
+    this.reads += 1;
+    if (this.reads === 2) this.value = this.replacement;
+    return super.compareAndSet(expectedRevision, value);
   }
 }
 
@@ -100,7 +136,7 @@ test("autosave catches and reports failures from both persistence backends", asy
   assert.match(state.errors[1]!.message, /storage full/);
 });
 
-test("restore prefers the newer IndexedDB project and removes a stale legacy slot", async () => {
+test("restore preserves divergent durable copies and reports an explicit conflict", async () => {
   const expected = createDefaultProject("autosave-restore-idb");
   expected.updatedAt = "2026-08-10T12:00:00.000Z";
   const stale = createDefaultProject("stale-local-copy");
@@ -113,11 +149,13 @@ test("restore prefers the newer IndexedDB project and removes a stale legacy slo
   assert.equal(state.project?.seed, expected.seed);
   assert.equal(state.backend, "indexeddb");
   assert.equal(state.migrated, false);
-  assert.deepEqual(localstorage.events, ["get", "remove"]);
-  assert.equal(localstorage.value, null);
+  assert.equal(state.conflict?.reason, "divergent-copies");
+  assert.equal(state.conflict?.alternateBackend, "localstorage");
+  assert.deepEqual(localstorage.events, ["get"]);
+  assert.equal(JSON.parse(localstorage.value!).seed, stale.seed);
 });
 
-test("restore does not lose a newer local fallback when IndexedDB retained an older project", async () => {
+test("restore selects but does not silently migrate a newer divergent fallback", async () => {
   const stale = createDefaultProject("stale-indexeddb-copy");
   stale.updatedAt = "2026-08-09T12:00:00.000Z";
   const expected = createDefaultProject("newer-local-fallback");
@@ -128,13 +166,14 @@ test("restore does not lose a newer local fallback when IndexedDB retained an ol
   const state = await loadProjectAutosave(drivers(indexeddb, localstorage));
 
   assert.equal(state.project?.seed, expected.seed);
-  assert.equal(state.backend, "indexeddb");
-  assert.equal(state.migrated, true);
-  assert.equal(JSON.parse(indexeddb.value!).seed, expected.seed);
-  assert.equal(localstorage.value, null);
+  assert.equal(state.backend, "localstorage");
+  assert.equal(state.migrated, false);
+  assert.equal(state.conflict?.reason, "divergent-copies");
+  assert.equal(JSON.parse(indexeddb.value!).seed, stale.seed);
+  assert.equal(JSON.parse(localstorage.value!).seed, expected.seed);
 });
 
-test("a differing local fallback wins timestamp ties instead of reviving stale IndexedDB data", async () => {
+test("a differing fallback wins timestamp ties without destroying either reviewed copy", async () => {
   const stale = createDefaultProject("same-millisecond-stale-idb");
   const expected = createDefaultProject("same-millisecond-local-fallback");
   stale.updatedAt = expected.updatedAt = "2026-08-10T12:00:00.000Z";
@@ -144,8 +183,11 @@ test("a differing local fallback wins timestamp ties instead of reviving stale I
   const state = await loadProjectAutosave(drivers(indexeddb, localstorage));
 
   assert.equal(state.project?.seed, expected.seed);
-  assert.equal(state.backend, "indexeddb");
-  assert.equal(state.migrated, true);
+  assert.equal(state.backend, "localstorage");
+  assert.equal(state.migrated, false);
+  assert.equal(state.conflict?.reason, "divergent-copies");
+  assert.equal(JSON.parse(indexeddb.value!).seed, stale.seed);
+  assert.equal(JSON.parse(localstorage.value!).seed, expected.seed);
 });
 
 test("restore migrates a schema-v1 localStorage project only after IndexedDB accepts it", async () => {
@@ -287,7 +329,6 @@ test("a record changed after preflight is detected by compare-before-set", async
 
   assert.equal(result.conflict?.currentRevision, autosaveRevision(concurrentRaw));
   assert.equal(indexeddb.value, concurrentRaw);
-  assert.ok(!indexeddb.events.includes("set"));
 });
 
 test("a guarded write retains optimistic checks when falling back to localStorage", async () => {
@@ -328,4 +369,98 @@ test("a guarded save refuses to write when durable state cannot be read", async 
   assert.equal(indexeddb.value, "unreadable-but-preserved");
   assert.ok(!indexeddb.events.includes("set"));
   assert.ok(!localstorage.events.includes("set"));
+});
+
+test("load-time migration refuses to overwrite an IndexedDB record changed after inspection", async () => {
+  const local = createDefaultProject("autosave-load-local");
+  local.updatedAt = "2026-08-10T12:00:00.000Z";
+  const winner = createDefaultProject("autosave-load-race-winner");
+  winner.updatedAt = "2026-08-10T12:01:00.000Z";
+  const indexeddb = new MemoryDriver();
+  const localstorage = new MemoryDriver(JSON.stringify(local));
+  const originalCompare = indexeddb.compareAndSet.bind(indexeddb);
+  indexeddb.compareAndSet = async (expectedRevision, value) => {
+    indexeddb.value = JSON.stringify(winner);
+    return originalCompare(expectedRevision, value);
+  };
+
+  const result = await loadProjectAutosave(drivers(indexeddb, localstorage));
+
+  assert.equal(result.project?.seed, local.seed);
+  assert.ok(result.conflict);
+  assert.equal(JSON.parse(indexeddb.value!).seed, winner.seed);
+  assert.equal(JSON.parse(localstorage.value!).seed, local.seed);
+});
+
+test("load-time stale-copy cleanup cannot delete a concurrent fallback write", async () => {
+  const project = createDefaultProject("autosave-load-shared");
+  const concurrent = createDefaultProject("autosave-load-concurrent");
+  const raw = JSON.stringify(project);
+  const indexeddb = new MemoryDriver(raw);
+  const localstorage = new MemoryDriver(raw);
+  const originalRemove = localstorage.removeIfRevision.bind(localstorage);
+  localstorage.removeIfRevision = async (expectedRevision) => {
+    localstorage.value = JSON.stringify(concurrent);
+    return originalRemove(expectedRevision);
+  };
+
+  const result = await loadProjectAutosave(drivers(indexeddb, localstorage));
+
+  assert.equal(result.project?.seed, project.seed);
+  assert.ok(result.conflict);
+  assert.equal(JSON.parse(localstorage.value!).seed, concurrent.seed);
+});
+
+test("divergent copies can be resolved only while both reviewed revisions remain current", async () => {
+  const indexed = createDefaultProject("autosave-choice-indexed");
+  indexed.updatedAt = "2026-08-10T12:00:00.000Z";
+  const fallback = createDefaultProject("autosave-choice-fallback");
+  fallback.updatedAt = "2026-08-10T12:01:00.000Z";
+  const indexeddb = new MemoryDriver(JSON.stringify(indexed));
+  const localstorage = new MemoryDriver(JSON.stringify(fallback));
+  const loaded = await loadProjectAutosave(drivers(indexeddb, localstorage));
+  assert.equal(loaded.project?.seed, fallback.seed);
+  assert.equal(loaded.conflict?.reason, "divergent-copies");
+
+  const edited = structuredClone(loaded.project!);
+  edited.name = "Explicitly retained copy";
+  const resolved = await saveProjectAutosave(edited, drivers(indexeddb, localstorage), {
+    expectedBackendRevisions: loaded.conflict!.backendRevisions,
+  });
+
+  assert.equal(resolved.conflict, undefined);
+  assert.equal(JSON.parse(indexeddb.value!).name, edited.name);
+  assert.equal(localstorage.value, null);
+});
+
+test("localStorage conditional writes require a cross-tab lock and serialize contenders", async () => {
+  let value: string | null = null;
+  const storage = {
+    getItem: () => value,
+    setItem: (_key: string, next: string) => { value = next; },
+    removeItem: () => { value = null; },
+  };
+  let tail = Promise.resolve();
+  const locks: AutosaveLockManager = {
+    request<T>(_name: string, callback: () => T): Promise<T> {
+      const result = tail.then(callback, callback);
+      tail = result.then(() => undefined, () => undefined);
+      return result;
+    },
+  };
+  const driver = createLocalStorageDriver(storage, locks);
+  const first = createDefaultProject("autosave-lock-first");
+  const second = createDefaultProject("autosave-lock-second");
+  const [a, b] = await Promise.all([
+    driver.compareAndSet!(null, JSON.stringify(first)),
+    driver.compareAndSet!(null, JSON.stringify(second)),
+  ]);
+
+  assert.deepEqual([a.saved, b.saved].sort(), [false, true]);
+  assert.equal(JSON.parse(value!).seed, first.seed);
+
+  const unlocked = createLocalStorageDriver(storage, null);
+  const refused = await unlocked.compareAndSet!(autosaveRevision(value!), JSON.stringify(second));
+  assert.equal(refused.saved, false);
+  assert.equal(JSON.parse(value!).seed, first.seed);
 });
