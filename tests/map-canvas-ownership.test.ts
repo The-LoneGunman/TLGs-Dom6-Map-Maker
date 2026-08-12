@@ -3,7 +3,7 @@ import test from "node:test";
 import type { Plane } from "../src/domain";
 import { createDefaultProject } from "../src/generator";
 import { createProvinceOwnershipModel } from "../src/geometry";
-import { canRenderPlanePreview, planeBackgroundAsset, provinceAtOwnershipPoint, renderPlanePng, samplePlaneOwnership } from "../src/MapCanvas";
+import { canRenderPlanePreview, planeBackgroundAsset, provinceAtOwnershipPoint, provinceMarkerBadges, renderPlanePng, samplePlaneOwnership } from "../src/MapCanvas";
 
 test("preview dimensions are rejected before allocating a canvas", () => {
   assert.equal(canRenderPlanePreview({ width: 3840, height: 2160 }), true);
@@ -88,6 +88,43 @@ test("surface preview ownership remains solid", () => {
   const owners = samplePlaneOwnership(plane, 48, 30, ownership);
   assert.equal(owners.some((owner) => owner < 0), false);
   assert.ok(provinceAtOwnershipPoint(plane, ownership, 0.5, 0.5));
+  assert.equal(provinceAtOwnershipPoint(plane, ownership, -0.01, 0.5), undefined);
+  assert.equal(provinceAtOwnershipPoint(plane, ownership, 1.01, 0.5), undefined);
+  assert.equal(provinceAtOwnershipPoint(plane, ownership, 0.5, -0.01), undefined);
+  assert.equal(provinceAtOwnershipPoint(plane, ownership, 0.5, 1.01), undefined);
+});
+
+test("province marker model distinguishes every editable map annotation", () => {
+  const province = createDefaultProject("marker-fixture").planes[0]!.provinces[0]!;
+  province.start = true;
+  province.teamStart = 3;
+  province.throne = "fixed";
+  province.sites = [{ id: "site-one", value: "1", known: false }];
+  province.manySites = true;
+  province.defenders = [{ commander: "5", squads: [] }];
+  const badges = provinceMarkerBadges(province, { specificStartNation: 17, gateNumbers: [22, 71] });
+  assert.deepEqual(badges.map((badge) => badge.kind), [
+    "generic-start",
+    "team-start",
+    "specific-start",
+    "fixed-throne",
+    "placed-site",
+    "many-sites",
+    "guardians",
+    "gateway",
+  ]);
+  assert.match(badges.find((badge) => badge.kind === "gateway")!.label, /22, 71/);
+  assert.match(badges.find((badge) => badge.kind === "specific-start")!.label, /17/);
+
+  province.start = false;
+  province.teamStart = undefined;
+  province.sites = [];
+  province.manySites = false;
+  province.defenders = [];
+  province.throne = "preferred";
+  assert.equal(provinceMarkerBadges(province)[0]!.kind, "preferred-throne");
+  province.throne = "avoid";
+  assert.equal(provinceMarkerBadges(province)[0]!.kind, "avoided-throne");
 });
 
 test("sparse plane archetypes select their themed owner-0 artwork", () => {

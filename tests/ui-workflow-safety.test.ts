@@ -104,3 +104,13 @@ test("MapMaker exposes confirmations, backup recovery, armed-state detail, and s
   assert.match(source, /Same-plane gateway linked\./);
   assert.match(source, /Cancel endpoint/);
 });
+
+test("autosave conflict UI never resolves a reviewed conflict with an unconditional overwrite", () => {
+  const source = readFileSync(new URL("../src/MapMakerApp.tsx", import.meta.url), "utf8");
+  assert.match(source, /replaceNewer && !conflictRevisions/);
+  assert.match(source, /expectedBackendRevisions: conflictRevisions/);
+  assert.doesNotMatch(source, /replaceNewer\s*\?\s*await saveProjectAutosave\(project\)/);
+  assert.match(source, /preferredBackend: autosaveState\.conflict\?\.alternateBackend|preferredBackend \? \{ preferredBackend \}/);
+  assert.match(source, /Two preserved device copies differ\./);
+  assert.match(source, /Inspect other copy/);
+});

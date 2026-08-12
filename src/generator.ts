@@ -197,6 +197,8 @@ export interface AddPlaneOptions {
   provinceTarget?: number;
   name?: string;
   autoSize?: boolean;
+  /** Reserve this plane from automatic generic and configured cave-nation starts. */
+  noGeneratedStarts?: boolean;
 }
 
 interface GeneratePlaneOptions {
@@ -305,6 +307,7 @@ function defaultPlane(seed: string, index: number, kind: PlaneKind = "surface"):
     kind,
     variant: ARCHETYPE_PROFILES[kind].defaultVariant,
     autoSize: index === 0,
+    noGeneratedStarts: false,
     provinceTarget: index === 0 ? 96 : 48,
     width: preset.width,
     height: preset.height,
@@ -406,6 +409,7 @@ export function addPlane(project: MapProject, kind: PlaneKind = "underworld", op
   }
   plane.variant = options.variant ?? plane.variant;
   plane.autoSize = options.autoSize ?? false;
+  plane.noGeneratedStarts = options.noGeneratedStarts ?? false;
   plane.name = options.name?.trim() || plane.name;
   plane.provinceTarget = clamp(
     Math.round(options.provinceTarget ?? next.settings.players * next.settings.provincesPerPlayer * 0.45),
@@ -466,14 +470,6 @@ export function generateProject(project: MapProject): MapProject {
   });
   const autoSurfaceCoreCount = next.planes.filter((plane) => plane.autoSize && isSurfaceCorePlaneForSizing(plane)).length;
   const autoCaveCoreCount = next.planes.filter((plane) => plane.autoSize && isTrueCaveCorePlane(plane)).length;
-  const trueCaveStartPlaneIndexes = next.planes.flatMap((plane, index) => isTrueCaveCorePlane(plane) ? [index] : []);
-  const caveStartPlaneIndexes = trueCaveStartPlaneIndexes.length
-    ? trueCaveStartPlaneIndexes
-    : next.planes.flatMap((plane, index) => ARCHETYPE_PROFILES[plane.kind].caveFamily ? [index] : []);
-  const otherStartPlaneIndexes = next.planes.flatMap((plane, index) => {
-    return index > 0 && !ARCHETYPE_PROFILES[plane.kind].caveFamily ? [index] : [];
-  });
-
   const overlandStarts = requestedStarts.land + requestedStarts.coastal + requestedStarts.water;
   const coreTargets = new Map<number, number>();
   next.planes.forEach((plane, index) => {
@@ -494,8 +490,8 @@ export function generateProject(project: MapProject): MapProject {
       if (isCorePlaneForSizing(normalized)) {
         normalized.provinceTarget = coreTargets.get(index) ?? normalized.provinceTarget;
       } else {
-        const allocatedStarts = allocatedPlaneStarts(requestedStarts.cave, caveStartPlaneIndexes, index)
-          + allocatedPlaneStarts(requestedStarts.other, otherStartPlaneIndexes, index);
+        const allocatedStarts = plannedGeneratedStartsOnPlane(next, requestedStarts, "cave", index)
+          + plannedGeneratedStartsOnPlane(next, requestedStarts, "other", index);
         // Higher requested capital degree expands the protected two-ring. Scale
         // capacity with it, then reserve four additional neutral provinces per
         // start so hard special realms retain themed guardians.
@@ -518,7 +514,7 @@ export function generateProject(project: MapProject): MapProject {
       waterPercent,
     });
   });
-  const preparedStartAnchors = prepareSparseStartBasins(next, requestedStarts, caveStartPlaneIndexes, otherStartPlaneIndexes);
+  const preparedStartAnchors = prepareSparseStartBasins(next, requestedStarts);
   if (next.settings.planeConnections !== undefined) {
     next.settings.planeConnections = normalizePlaneConnections(next.settings.planeConnections, next.planes);
   }
@@ -537,6 +533,16 @@ export function generateProject(project: MapProject): MapProject {
   // chosen endpoints instead of forcing a second gate roll afterward.
   next.gates = generateGates(next);
   distributeThrones(next);
+  // Throne placement is deliberately after the first guardian cleanup. Run
+  // the same authored-start union once more so a newly assigned/manual start
+  // can never retain generated defenders or a throne in its direct one-ring.
+  for (const plane of next.planes) {
+    const specificStartIds = next.specificStarts
+      .filter((start) => start.planeId === plane.id)
+      .map((start) => start.provinceId);
+    clearStartZoneGuardians(plane, specificStartIds);
+    clearStartZoneThrones(plane, specificStartIds);
+  }
   const economyMode = normalizeEconomyBalanceMode(next.settings.economyBalance);
   const softPopulationBaseline = economyMode === "soft" ? capturePopulations(next.planes) : undefined;
   for (const plane of next.planes) {
@@ -580,7 +586,11 @@ function assignConfiguredCaveStarts(project: MapProject) {
   const caveStarts = project.planes.flatMap((plane, planeIndex) => plane.provinces
     .filter((province) => province.start && province.startType === "cave")
     .map((province) => ({ plane, planeIndex, province })))
-    .sort((a, b) => a.planeIndex - b.planeIndex || a.province.index - b.province.index);
+    // A configured cave nation belongs in a true Cave/Cavern whenever one of
+    // those generated capitals exists. Underworld-style cave-family realms
+    // remain a deterministic fallback rather than stealing the first slot.
+    .sort((a, b) => Number(!isTrueCaveCorePlane(a.plane)) - Number(!isTrueCaveCorePlane(b.plane))
+      || a.planeIndex - b.planeIndex || a.province.index - b.province.index);
 
   let caveCursor = 0;
   for (const nation of nations) {
@@ -598,17 +608,9 @@ function assignConfiguredCaveStarts(project: MapProject) {
   }
 }
 
-function allocatedPlaneStarts(total: number, eligibleIndexes: readonly number[], planeIndex: number): number {
-  const slot = eligibleIndexes.indexOf(planeIndex);
-  if (slot < 0 || total <= 0 || !eligibleIndexes.length) return 0;
-  return Math.floor(total / eligibleIndexes.length) + (slot < total % eligibleIndexes.length ? 1 : 0);
-}
-
 function prepareSparseStartBasins(
   project: MapProject,
   requested: StartDistribution,
-  cavePlaneIndexes: readonly number[],
-  otherPlaneIndexes: readonly number[],
 ): PreparedStartAnchor[] {
   let basinPlan = feasibleDenseStartPlan(project, requested);
   const separatedOverlandPlan = feasibleDenseStartPlan(project, requested, 3);
@@ -631,9 +633,10 @@ function prepareSparseStartBasins(
   const anchors = [...(preparedStartAnchors ?? [])];
   for (let planeIndex = 0; planeIndex < project.planes.length; planeIndex += 1) {
     const plane = project.planes[planeIndex]!;
-    if (resolvePlaneOwnershipMode(plane) !== "sparse") continue;
-    const requestedCount = allocatedPlaneStarts(requested.cave, cavePlaneIndexes, planeIndex)
-      + allocatedPlaneStarts(requested.other, otherPlaneIndexes, planeIndex);
+    if (plane.noGeneratedStarts || resolvePlaneOwnershipMode(plane) !== "sparse") continue;
+    const caveCount = plannedGeneratedStartsOnPlane(project, requested, "cave", planeIndex);
+    const otherCount = plannedGeneratedStartsOnPlane(project, requested, "other", planeIndex);
+    const requestedCount = caveCount + otherCount;
     if (!requestedCount) continue;
     const activeCount = plane.provinces.filter((province) => !isBlockedProvince(province)).length;
     const minimumUsefulDegree = Math.min(project.settings.startDegreeTarget ?? 4, 4);
@@ -646,10 +649,10 @@ function prepareSparseStartBasins(
       requestedCount,
       Math.min(basinPlan.degree, packingDegreeCap),
       basinPlan.twoRingCapacity,
-      allocatedPlaneStarts(requested.cave, cavePlaneIndexes, planeIndex) > 0 ? "cave" : "other",
+      caveCount > 0 ? "cave" : "other",
       `${project.seed}:plane:${planeIndex}:start-basins`,
     );
-    const type = allocatedPlaneStarts(requested.cave, cavePlaneIndexes, planeIndex) > 0 ? "cave" as const : "other" as const;
+    const type = caveCount > 0 ? "cave" as const : "other" as const;
     anchors.push(...sparseAnchors.map((provinceId) => ({ planeId: plane.id, provinceId, type })));
   }
   return anchors;
@@ -662,7 +665,7 @@ function feasibleDenseStartPlan(
 ): { degree: number; twoRingCapacity: number; feasible: boolean } {
   const target = project.settings.startDegreeTarget ?? 4;
   const minimumUsefulDegree = Math.min(target, 4);
-  const densePlanes = project.planes.filter((plane) => resolvePlaneOwnershipMode(plane) === "solid");
+  const densePlanes = project.planes.filter((plane) => !plane.noGeneratedStarts && resolvePlaneOwnershipMode(plane) === "solid");
   const constrainedTypes = (["water", "coastal", "land"] as StartType[]).filter((type) => requested[type] > 0);
   if (!constrainedTypes.length || !densePlanes.length) return { degree: target, twoRingCapacity: target * 3 + 1, feasible: true };
   const planningProject = { ...project, planes: densePlanes };
@@ -727,11 +730,38 @@ interface PreparedStartAnchor {
 function ensureOverlandStartCategories(project: MapProject, requested: StartDistribution): PreparedStartAnchor[] | undefined {
   const total = requested.land + requested.coastal + requested.water;
   if (!total) return undefined;
-  const planeIndex = project.planes.findIndex((plane) => resolvePlaneOwnershipMode(plane) === "solid"
-    && (plane.kind === "surface" || plane.kind === "custom"));
-  if (planeIndex < 0) return undefined;
+  const eligibleIndexes = eligibleGeneratedStartPlaneIndexes(project, "land");
+  if (!eligibleIndexes.length) return undefined;
+  const anchors: PreparedStartAnchor[] = [];
+  for (const planeIndex of eligibleIndexes) {
+    const planeRequest: StartDistribution = {
+      land: plannedGeneratedStartsOnPlane(project, requested, "land", planeIndex),
+      coastal: plannedGeneratedStartsOnPlane(project, requested, "coastal", planeIndex),
+      water: plannedGeneratedStartsOnPlane(project, requested, "water", planeIndex),
+      cave: 0,
+      other: 0,
+    };
+    if (planeRequest.land + planeRequest.coastal + planeRequest.water === 0) continue;
+    const planeAnchors = ensureOverlandStartCategoriesOnPlane(project, planeRequest, planeIndex);
+    if (!planeAnchors) return undefined;
+    anchors.push(...planeAnchors);
+  }
+  return anchors.length === total ? anchors : undefined;
+}
+
+function ensureOverlandStartCategoriesOnPlane(
+  project: MapProject,
+  requested: StartDistribution,
+  planeIndex: number,
+): PreparedStartAnchor[] | undefined {
+  const total = requested.land + requested.coastal + requested.water;
+  if (!total) return [];
   const plane = project.planes[planeIndex]!;
   const adjacency = adjacencyFor(plane, { traversableOnly: true });
+  // Start-border repair opens every incident authored border. Use the full
+  // graph for anchor spacing so an apparently distant pair cannot become
+  // adjacent after those capital exits are normalized.
+  const spacingAdjacency = adjacencyFor(plane);
   const minimumUsefulDegree = Math.min(project.settings.startDegreeTarget ?? 4, 4);
   const preferredDegree = project.settings.startDegreeTarget ?? 4;
   const degrees = [...new Set(plane.provinces.map((province) => adjacency.get(province.id)?.length ?? 0)
@@ -742,7 +772,7 @@ function ensureOverlandStartCategories(project: MapProject, requested: StartDist
   const distancesFrom = (id: string) => {
     let distances = distanceCache.get(id);
     if (!distances) {
-      distances = shortestDistances(adjacency, id);
+      distances = shortestDistances(spacingAdjacency, id);
       distanceCache.set(id, distances);
     }
     return distances;
@@ -1061,7 +1091,7 @@ export function generatePlane(
   assignArchetypeDetails(provinces, source.kind, source.variant, stageSeed);
 
   if (!options.deferStrategicFeatures) {
-    if (planeIndex === 0) {
+    if (planeIndex === 0 && !generated.noGeneratedStarts) {
       placeStarts(generated, settings.players, stageSeed, settings.startDegreeTarget ?? 4, "land");
       repairStartBorders(generated);
       clearStartZoneGuardians(generated);
@@ -2854,18 +2884,34 @@ export function scaledStartSeparationTarget(traversableProvinceCount: number, st
  */
 export function preflightStartPlan(project: MapProject): string[] {
   const requested = normalizeStartDistribution(project.settings.startDistribution, project.settings.players);
-  const hasOverland = project.planes.some((plane) => resolvePlaneOwnershipMode(plane) === "solid"
-    && (plane.kind === "surface" || plane.kind === "custom"));
-  const hasCaveRealm = project.planes.some((plane) => ["cave", "cavern", "underworld", "hell", "abyss"].includes(plane.kind));
-  const hasOtherRealm = project.planes.some((plane, index) => index > 0
-    && ["cloud", "air", "dream", "elemental"].includes(plane.kind));
+  const hasOverland = eligibleGeneratedStartPlaneIndexes(project, "land").length > 0;
+  const hasCaveRealm = eligibleGeneratedStartPlaneIndexes(project, "cave").length > 0;
+  const hasOtherRealm = eligibleGeneratedStartPlaneIndexes(project, "other").length > 0;
+  const hasAnyOverland = project.planes.some(isSurfaceCorePlaneForSizing);
+  const hasAnyCaveRealm = project.planes.some((plane) => ARCHETYPE_PROFILES[plane.kind].caveFamily);
+  const hasAnyOtherRealm = project.planes.some((plane, index) => index > 0
+    && !isSurfaceCorePlaneForSizing(plane) && !ARCHETYPE_PROFILES[plane.kind].caveFamily);
   const issues: string[] = [];
 
-  if (!hasOverland && requested.land > 0) issues.push(`${requested.land} land start${requested.land === 1 ? " needs" : "s need"} a Surface or solid Custom plane.`);
-  if (!hasOverland && requested.coastal > 0) issues.push(`${requested.coastal} coastal start${requested.coastal === 1 ? " needs" : "s need"} a Surface or solid Custom plane.`);
-  if (!hasOverland && requested.water > 0) issues.push(`${requested.water} water start${requested.water === 1 ? " needs" : "s need"} a Surface or solid Custom plane with generated seas.`);
-  if (!hasCaveRealm && requested.cave > 0) issues.push(`${requested.cave} cave start${requested.cave === 1 ? " needs" : "s need"} a Cave, Cavern, Underworld, Hell, or Abyss plane.`);
-  if (!hasOtherRealm && requested.other > 0) issues.push(`${requested.other} other-plane start${requested.other === 1 ? " needs" : "s need"} a Cloud, Air, Dream, or Elemental plane.`);
+  if (!hasOverland && requested.land > 0) issues.push(hasAnyOverland
+    ? `${requested.land} land start${requested.land === 1 ? " needs" : "s need"} at least one Surface or surface-like solid Custom plane enabled for generated starts.`
+    : `${requested.land} land start${requested.land === 1 ? " needs" : "s need"} a Surface or solid Custom plane.`);
+  if (!hasOverland && requested.coastal > 0) issues.push(hasAnyOverland
+    ? `${requested.coastal} coastal start${requested.coastal === 1 ? " needs" : "s need"} at least one Surface or surface-like solid Custom plane enabled for generated starts.`
+    : `${requested.coastal} coastal start${requested.coastal === 1 ? " needs" : "s need"} a Surface or solid Custom plane.`);
+  if (!hasOverland && requested.water > 0) issues.push(hasAnyOverland
+    ? `${requested.water} water start${requested.water === 1 ? " needs" : "s need"} at least one Surface or surface-like solid Custom plane enabled for generated starts.`
+    : `${requested.water} water start${requested.water === 1 ? " needs" : "s need"} a Surface or solid Custom plane with generated seas.`);
+  if (!hasCaveRealm && requested.cave > 0) issues.push(hasAnyCaveRealm
+    ? `${requested.cave} cave start${requested.cave === 1 ? " needs" : "s need"} at least one cave-family plane enabled for generated starts.`
+    : `${requested.cave} cave start${requested.cave === 1 ? " needs" : "s need"} a Cave, Cavern, Underworld, Hell, or Abyss plane.`);
+  if (!hasOtherRealm && requested.other > 0) issues.push(hasAnyOtherRealm
+    ? `${requested.other} other-plane start${requested.other === 1 ? " needs" : "s need"} at least one non-core special plane enabled for generated starts.`
+    : `${requested.other} other-plane start${requested.other === 1 ? " needs" : "s need"} a Cloud, Air, Dream, or Elemental plane.`);
+  const configuredCaveNations = normalizeCaveStartNations(project.settings.caveStartNations).length;
+  if (configuredCaveNations > requested.cave) {
+    issues.push(`${configuredCaveNations} configured cave nation${configuredCaveNations === 1 ? " needs" : "s need"} at least ${configuredCaveNations} generated cave start${configuredCaveNations === 1 ? "" : "s"}, but the current allocation requests ${requested.cave}.`);
+  }
   return issues;
 }
 
@@ -2874,31 +2920,11 @@ function generatedStartSeparationTargets(project: MapProject, requested: StartDi
     plane.id,
     plane.provinces.filter((province) => !isBlockedProvince(province)).length,
   ]));
-  const assigned = new Map(project.planes.map((plane) => [plane.id, 0]));
-  const allocate = (count: number, planeIndexes: readonly number[]) => {
-    for (let slot = 0; slot < count && planeIndexes.length; slot += 1) {
-      const planeIndex = [...planeIndexes].sort((a, b) => {
-        const planeA = project.planes[a]!;
-        const planeB = project.planes[b]!;
-        const capacityA = (activeCounts.get(planeA.id) ?? 0) / ((assigned.get(planeA.id) ?? 0) + 1);
-        const capacityB = (activeCounts.get(planeB.id) ?? 0) / ((assigned.get(planeB.id) ?? 0) + 1);
-        return capacityB - capacityA || a - b;
-      })[0]!;
-      const plane = project.planes[planeIndex]!;
-      assigned.set(plane.id, (assigned.get(plane.id) ?? 0) + 1);
-    }
-  };
-  const overlandIndexes = project.planes.flatMap((plane, index) => resolvePlaneOwnershipMode(plane) === "solid"
-    && (plane.kind === "surface" || plane.kind === "custom") ? [index] : []);
-  const trueCaveIndexes = project.planes.flatMap((plane, index) => isTrueCaveCorePlane(plane) ? [index] : []);
-  const caveIndexes = trueCaveIndexes.length
-    ? trueCaveIndexes
-    : project.planes.flatMap((plane, index) => ARCHETYPE_PROFILES[plane.kind].caveFamily ? [index] : []);
-  const otherIndexes = project.planes.flatMap((plane, index) => index > 0
-    && !ARCHETYPE_PROFILES[plane.kind].caveFamily ? [index] : []);
-  allocate(requested.land + requested.coastal + requested.water, overlandIndexes);
-  allocate(requested.cave, caveIndexes);
-  allocate(requested.other, otherIndexes);
+  const planeTargets = generatedStartPlaneTargets(project, requested);
+  const assigned = new Map(project.planes.map((plane) => [plane.id, START_TYPES.reduce(
+    (sum, type) => sum + (planeTargets.get(type)?.get(plane.id) ?? 0),
+    0,
+  )]));
   return new Map(project.planes.map((plane) => [
     plane.id,
     scaledStartSeparationTarget(activeCounts.get(plane.id) ?? 0, assigned.get(plane.id) ?? 0),
@@ -2921,6 +2947,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
   }
 
   const adjacency = new Map(project.planes.map((plane) => [plane.id, adjacencyFor(plane, { traversableOnly: true })]));
+  const planeTargets = generatedStartPlaneTargets(project, requested);
   const bridgeEndpoints = new Map(project.planes.map((plane) => {
     const bridgeKeys = graphBridgeKeys(plane);
     const endpoints = new Set<string>();
@@ -2949,7 +2976,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
   const degreeTarget = project.settings.startDegreeTarget ?? 4;
   const minimumUsefulDegree = Math.min(degreeTarget, 4);
   const preferredGeneratedDegree = degreeTarget === 4 ? 5 : degreeTarget;
-  const candidateDegrees = [...new Set(project.planes.flatMap((plane) => plane.provinces
+  const candidateDegrees = [...new Set(project.planes.flatMap((plane) => plane.noGeneratedStarts ? [] : plane.provinces
     .filter((province) => isEligibleStartProvince(province))
     .map((province) => adjacency.get(plane.id)?.get(province.id)?.length ?? 0)
     .filter((degree) => degree >= minimumUsefulDegree)))]
@@ -2974,6 +3001,8 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
           `${project.seed}:distributed:scaled-separation:degree-${degree}:variant-${variant}:${type}:${slot}`,
           degree,
           separationPlan,
+          planeTargets,
+          adjacency,
         );
         if (!candidate) return [];
         attempt.push(candidate);
@@ -2989,10 +3018,14 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
     variant: number,
   ): ProvinceRef[] => {
     const slots = order.flatMap((type) => Array.from({ length: requested[type] }, () => type));
-    const refs = project.planes.flatMap((plane, planeIndex) => plane.provinces.map((province) => ({ plane, planeIndex, province })));
+    const refs = project.planes.flatMap((plane, planeIndex) => plane.noGeneratedStarts
+      ? []
+      : plane.provinces.map((province) => ({ plane, planeIndex, province })));
     const pools = new Map<StartType, ProvinceRef[]>();
     for (const type of [...new Set(slots)]) {
-      let candidates = refs.filter((ref) => isEligibleStartProvince(ref.province)
+      const eligiblePlaneIds = new Set(eligibleGeneratedStartPlaneIndexes(project, type).map((index) => project.planes[index]!.id));
+      let candidates = refs.filter((ref) => eligiblePlaneIds.has(ref.plane.id)
+        && isEligibleStartProvince(ref.province)
         && matchesStartType(ref, type, adjacency.get(ref.plane.id)!)
         && (degree === undefined
           ? (adjacency.get(ref.plane.id)?.get(ref.province.id)?.length ?? 0) >= minimumUsefulDegree
@@ -3034,7 +3067,12 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
       const capacityTolerance = preferredCapacity === undefined ? Infinity : Math.max(2, preferredCapacity * 0.2);
       let candidates = (pools.get(type) ?? []).filter((candidate) => {
         const key = globalProvinceKey(candidate.plane.id, candidate.province.id);
-        return !used.has(key) && separationFromAttempt(candidate) >= separationForPlane(separationPlan, candidate.plane.id);
+        const planeQuota = planeTargets.get(type)?.get(candidate.plane.id) ?? 0;
+        const planeLoad = attempt.filter((item) => item.plane.id === candidate.plane.id
+          && matchesStartType(item, type, adjacency.get(item.plane.id)!)).length;
+        return planeLoad < planeQuota
+          && !used.has(key)
+          && separationFromAttempt(candidate) >= separationForPlane(separationPlan, candidate.plane.id);
       });
       if (preferredCapacity !== undefined) {
         const comparable = candidates.filter((candidate) => Math.abs(
@@ -3203,7 +3241,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
   if (!selected.length) {
     for (const type of placementOrder) {
       for (let slot = 0; slot < requested[type]; slot += 1) {
-        const candidate = chooseDistributedStart(project, type, selected, adjacency, twoRingCapacity, bridgeEndpoints, `${project.seed}:distributed:${type}:${slot}`);
+        const candidate = chooseDistributedStart(project, type, selected, adjacency, twoRingCapacity, bridgeEndpoints, `${project.seed}:distributed:${type}:${slot}`, undefined, 0, planeTargets, adjacency);
         if (!candidate) break;
         selected.push(candidate);
       }
@@ -3214,7 +3252,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
   // total number of capitals. Fill remaining slots from safe provinces and
   // record their real category so startAllocation exposes the shortfall.
   while (selected.length < project.settings.players) {
-    const candidate = chooseDistributedStart(project, undefined, selected, adjacency, twoRingCapacity, bridgeEndpoints, `${project.seed}:distributed:fallback:${selected.length}`);
+    const candidate = chooseDistributedStart(project, undefined, selected, adjacency, twoRingCapacity, bridgeEndpoints, `${project.seed}:distributed:fallback:${selected.length}`, undefined, 0, planeTargets, adjacency);
     if (!candidate) break;
     selected.push(candidate);
   }
@@ -3230,7 +3268,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
     const distancesFrom = (id: string) => {
       let result = distances.get(id);
       if (!result) {
-        result = shortestDistances(local, id);
+        result = shortestDistances(adjacency.get(plane.id)!, id);
         distances.set(id, result);
       }
       return result;
@@ -3476,6 +3514,24 @@ function clearStartZoneGuardians(plane: Plane, extraStartIds: string[] = []) {
   }
 }
 
+function clearStartZoneThrones(plane: Plane, extraStartIds: string[] = []) {
+  const adjacency = adjacencyFor(plane, { traversableOnly: true });
+  const startIds = new Set(plane.provinces
+    .filter((province) => province.start || province.teamStart !== undefined)
+    .map((province) => province.id));
+  for (const id of extraStartIds) if (adjacency.has(id)) startIds.add(id);
+  const protectedIds = new Set(startIds);
+  for (const startId of startIds) {
+    for (const neighbour of adjacency.get(startId) ?? []) protectedIds.add(neighbour);
+  }
+  for (const province of plane.provinces) {
+    if (!protectedIds.has(province.id)) continue;
+    province.throne = "avoid";
+    province.fixedThrone = undefined;
+    province.manySites = false;
+  }
+}
+
 function appendGuardianCapacityWarnings(project: MapProject) {
   for (const plane of project.planes) {
     const variant = plane.variant ?? ARCHETYPE_PROFILES[plane.kind].defaultVariant;
@@ -3510,6 +3566,11 @@ function chooseDistributedStart(
   seed: string,
   forcedDegree?: number,
   minimumSeparation: number | ReadonlyMap<string, number> = 0,
+  planeTargets: ReadonlyMap<StartType, ReadonlyMap<string, number>> = generatedStartPlaneTargets(
+    project,
+    normalizeStartDistribution(project.settings.startDistribution, project.settings.players),
+  ),
+  separationAdjacencyByPlane: Map<string, Map<string, string[]>> = adjacencyByPlane,
 ): ProvinceRef | undefined {
   const target = project.settings.startDegreeTarget ?? 4;
   const selectedDegrees = selected.map((item) => adjacencyByPlane.get(item.plane.id)?.get(item.province.id)?.length ?? 0);
@@ -3517,25 +3578,25 @@ function chooseDistributedStart(
   const selectedCapacities = selected.map((item) => twoRingCapacityByPlane.get(item.plane.id)?.get(item.province.id) ?? 0);
   const preferredCapacity = selectedCapacities.length ? mean(selectedCapacities) : undefined;
   const capacityTolerance = preferredCapacity === undefined ? 0 : Math.max(2, Math.round(preferredCapacity * 0.2));
-  const preferOverlandWater = requestedType === "water" && project.planes.some((plane) => {
-    if (plane.kind !== "surface" && plane.kind !== "custom") return false;
-    const adjacency = adjacencyByPlane.get(plane.id)!;
-    return plane.provinces.some((province) => isEligibleStartProvince(province)
-      && isWaterProvince(province)
-      && (forcedDegree === undefined || (adjacency.get(province.id)?.length ?? 0) === forcedDegree));
-  });
+  const eligiblePlaneIds = requestedType === undefined
+    ? new Set(project.planes.filter((plane) => !plane.noGeneratedStarts).map((plane) => plane.id))
+    : new Set(eligibleGeneratedStartPlaneIndexes(project, requestedType).map((index) => project.planes[index]!.id));
   const selectedKeys = new Set(selected.map((item) => globalProvinceKey(item.plane.id, item.province.id)));
   const startsByPlane = new Map(project.planes.map((plane) => [plane.id, selected.filter((item) => item.plane.id === plane.id).map((item) => item.province)]));
   const distanceMaps = new Map(project.planes.map((plane) => {
-    const adjacency = adjacencyByPlane.get(plane.id)!;
+    const adjacency = separationAdjacencyByPlane.get(plane.id)!;
     return [plane.id, (startsByPlane.get(plane.id) ?? []).map((start) => shortestDistances(adjacency, start.id))];
   }));
   const candidateFacts = (plane: Plane, planeIndex: number, province: Province) => {
     const adjacency = adjacencyByPlane.get(plane.id)!;
     const ref = { plane, planeIndex, province };
-    if (!isEligibleStartProvince(province)
+    const planeQuota = requestedType === undefined ? Infinity : planeTargets.get(requestedType)?.get(plane.id) ?? 0;
+    const planeTypeLoad = requestedType === undefined ? 0 : selected.filter((item) => item.plane.id === plane.id
+      && matchesStartType(item, requestedType, adjacencyByPlane.get(item.plane.id)!)).length;
+    if (!eligiblePlaneIds.has(plane.id)
+      || planeTypeLoad >= planeQuota
+      || !isEligibleStartProvince(province)
       || selectedKeys.has(globalProvinceKey(plane.id, province.id))
-      || (preferOverlandWater && plane.kind !== "surface" && plane.kind !== "custom")
       || (requestedType && !matchesStartType(ref, requestedType, adjacency))) return undefined;
     const planeStarts = startsByPlane.get(plane.id) ?? [];
     const maps = distanceMaps.get(plane.id) ?? [];
@@ -3657,8 +3718,8 @@ function chooseStartCandidate(
 
 function matchesStartType(ref: ProvinceRef, type: StartType, adjacency: Map<string, string[]>): boolean {
   const { plane, province } = ref;
-  const overland = plane.kind === "surface" || plane.kind === "custom";
-  if (type === "water") return isWaterProvince(province);
+  const overland = isSurfaceCorePlaneForSizing(plane);
+  if (type === "water") return overland && isWaterProvince(province);
   if (type === "coastal") {
     if (!overland || isWaterProvince(province)) return false;
     const byId = new Map(plane.provinces.map((item) => [item.id, item]));
@@ -3667,7 +3728,8 @@ function matchesStartType(ref: ProvinceRef, type: StartType, adjacency: Map<stri
       return neighbour ? isWaterProvince(neighbour) : false;
     });
   }
-  if (type === "cave") return !isWaterProvince(province) && (ARCHETYPE_PROFILES[plane.kind].caveFamily || isCaveProvince(province));
+  if (type === "cave") return !isWaterProvince(province)
+    && (ARCHETYPE_PROFILES[plane.kind].caveFamily || (overland && isCaveProvince(province)));
   if (type === "other") return !overland && !ARCHETYPE_PROFILES[plane.kind].caveFamily && !isWaterProvince(province);
   if (!overland || isWaterProvince(province) || isCaveProvince(province)) return false;
   const byId = new Map(plane.provinces.map((item) => [item.id, item]));
@@ -4739,6 +4801,67 @@ function isSurfaceCorePlaneForSizing(plane: Pick<Plane, "kind" | "variant" | "ow
 /** Core realms alone consume the players × provinces-per-player budget. */
 export function isCorePlaneForSizing(plane: Pick<Plane, "kind" | "variant" | "ownershipMode">): boolean {
   return isTrueCaveCorePlane(plane) || isSurfaceCorePlaneForSizing(plane);
+}
+
+/** Plane families eligible for automatic starts after per-plane reservations. */
+function eligibleGeneratedStartPlaneIndexes(project: Pick<MapProject, "planes">, type: StartType): number[] {
+  const available = project.planes.flatMap((plane, index) => plane.noGeneratedStarts ? [] : [index]);
+  if (type === "land" || type === "coastal" || type === "water") {
+    return available.filter((index) => isSurfaceCorePlaneForSizing(project.planes[index]!));
+  }
+  if (type === "cave") {
+    const trueCaves = available.filter((index) => isTrueCaveCorePlane(project.planes[index]!));
+    return trueCaves.length
+      ? trueCaves
+      : available.filter((index) => ARCHETYPE_PROFILES[project.planes[index]!.kind].caveFamily);
+  }
+  return available.filter((index) => index > 0
+    && !isSurfaceCorePlaneForSizing(project.planes[index]!)
+    && !ARCHETYPE_PROFILES[project.planes[index]!.kind].caveFamily);
+}
+
+/**
+ * Capacity-weighted, deterministic quotas keep equally sized planes within
+ * one start of each other while still giving larger authored realms a fair
+ * share. Overland categories share one load counter, preventing independent
+ * land/coast/water allocations from stacking onto the same plane.
+ */
+function generatedStartPlaneTargets(
+  project: Pick<MapProject, "planes">,
+  requested: StartDistribution,
+): Map<StartType, Map<string, number>> {
+  const targets = new Map(START_TYPES.map((type) => [type, new Map<string, number>()]));
+  const assignedByPlane = new Map(project.planes.map((plane) => [plane.id, 0]));
+  for (const type of ["water", "coastal", "land", "cave", "other"] as StartType[]) {
+    const indexes = eligibleGeneratedStartPlaneIndexes(project, type);
+    for (let slot = 0; slot < requested[type] && indexes.length; slot += 1) {
+      const planeIndex = [...indexes].sort((a, b) => {
+        const planeA = project.planes[a]!;
+        const planeB = project.planes[b]!;
+        const sizeA = planeA.provinces.length || planeA.provinceTarget;
+        const sizeB = planeB.provinces.length || planeB.provinceTarget;
+        const capacityA = sizeA / ((assignedByPlane.get(planeA.id) ?? 0) + 1);
+        const capacityB = sizeB / ((assignedByPlane.get(planeB.id) ?? 0) + 1);
+        return capacityB - capacityA || a - b;
+      })[0]!;
+      const plane = project.planes[planeIndex]!;
+      assignedByPlane.set(plane.id, (assignedByPlane.get(plane.id) ?? 0) + 1);
+      const byPlane = targets.get(type)!;
+      byPlane.set(plane.id, (byPlane.get(plane.id) ?? 0) + 1);
+    }
+  }
+  return targets;
+}
+
+function plannedGeneratedStartsOnPlane(
+  project: Pick<MapProject, "planes">,
+  requested: StartDistribution,
+  type: StartType,
+  planeIndex: number,
+): number {
+  const plane = project.planes[planeIndex];
+  if (!plane) return 0;
+  return generatedStartPlaneTargets(project, requested).get(type)?.get(plane.id) ?? 0;
 }
 
 function normalizeGateLayout(layout: GateLayout | undefined): GateLayout {

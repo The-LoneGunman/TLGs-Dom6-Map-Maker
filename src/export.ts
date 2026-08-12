@@ -214,7 +214,30 @@ export function downloadProject(project: MapProject) {
   downloadBlob(new Blob([JSON.stringify(project, null, 2)], { type: "application/json" }), name);
 }
 
+/** Parser-side ceiling. The file picker should also reject larger files before calling File.text(). */
+export const MAX_PROJECT_IMPORT_BYTES = 16 * 1024 * 1024;
+export const MAX_IMPORTED_PLANES = 8;
+export const MAX_IMPORTED_PROVINCES_PER_PLANE = 800;
+export const MAX_IMPORTED_EDGES_PER_PLANE = 6_400;
+export const MAX_IMPORTED_GATES = 2_048;
+export const MAX_IMPORTED_ID_LENGTH = 128;
+export const MAX_IMPORTED_STRING_LENGTH = 4_096;
+export const MAX_IMPORTED_DIRECTIVE_LENGTH = 256 * 1024;
+
+const MAX_GENERIC_ARRAY_ENTRIES = 10_000;
+const MAX_PLAYER_ENTRIES = 512;
+const MAX_SPECIFIC_STARTS = 512;
+const MAX_PLANE_CONNECTION_RULES = 64;
+const MAX_GATE_ENDPOINTS = 64;
+const MAX_GENERATION_WARNINGS = 256;
+const MAX_SITES_PER_PROVINCE = 64;
+const MAX_DEFENSE_GROUPS_PER_PROVINCE = 32;
+const MAX_SQUADS_PER_DEFENSE_GROUP = 64;
+const MAX_ITEMS_PER_DEFENSE_GROUP = 64;
+const SAFE_IMPORTED_ID = /^[A-Za-z0-9_-]+$/;
+
 export function parseProject(text: string): MapProject {
+  assertProjectTextSize(text);
   const parsed: unknown = JSON.parse(text);
   const root = recordAt(parsed, "project", "This is not a Pantokrator Atlas project.");
   if (root.schemaVersion !== 1) throw new Error(`Unsupported project schema ${String(root.schemaVersion)}.`);
@@ -268,41 +291,41 @@ function assertProjectShape(project: Record<string, unknown>): void {
   booleanAt(project.noNameFilter, "project.noNameFilter");
   numberAt(project.sailDistance, "project.sailDistance");
   optionalNumberAt(project.victoryPoints, "project.victoryPoints");
-  numberArrayAt(project.allowedPlayers, "project.allowedPlayers");
-  arrayAt(project.computerPlayers, "project.computerPlayers").forEach((value, index) => {
+  numberArrayAt(project.allowedPlayers, "project.allowedPlayers", MAX_PLAYER_ENTRIES);
+  boundedArrayAt(project.computerPlayers, "project.computerPlayers", MAX_PLAYER_ENTRIES).forEach((value, index) => {
     const player = recordAt(value, `project.computerPlayers[${index}]`);
     numberAt(player.nation, `project.computerPlayers[${index}].nation`);
     numberAt(player.difficulty, `project.computerPlayers[${index}].difficulty`);
   });
-  numberArrayAt(project.cannotWin, "project.cannotWin");
-  arrayAt(project.specificStarts, "project.specificStarts").forEach((value, index) => {
+  numberArrayAt(project.cannotWin, "project.cannotWin", MAX_PLAYER_ENTRIES);
+  boundedArrayAt(project.specificStarts, "project.specificStarts", MAX_SPECIFIC_STARTS).forEach((value, index) => {
     const start = recordAt(value, `project.specificStarts[${index}]`);
     numberAt(start.nation, `project.specificStarts[${index}].nation`);
-    nonemptyStringAt(start.planeId, `project.specificStarts[${index}].planeId`);
-    nonemptyStringAt(start.provinceId, `project.specificStarts[${index}].provinceId`);
+    idAt(start.planeId, `project.specificStarts[${index}].planeId`);
+    idAt(start.provinceId, `project.specificStarts[${index}].provinceId`);
     optionalEnumAt(start.source, new Set(["generated-cave"]), `project.specificStarts[${index}].source`);
   });
 
-  const planes = arrayAt(project.planes, "project.planes");
+  const planes = boundedArrayAt(project.planes, "project.planes", MAX_IMPORTED_PLANES);
   if (planes.length === 0) throw new Error("project.planes must contain at least one plane.");
   planes.forEach((value, index) => assertPlane(recordAt(value, `project.planes[${index}]`), index));
 
-  arrayAt(project.gates, "project.gates").forEach((value, index) => {
+  boundedArrayAt(project.gates, "project.gates", MAX_IMPORTED_GATES).forEach((value, index) => {
     const gate = recordAt(value, `project.gates[${index}]`);
-    nonemptyStringAt(gate.id, `project.gates[${index}].id`);
+    idAt(gate.id, `project.gates[${index}].id`);
     numberAt(gate.gateNumber, `project.gates[${index}].gateNumber`);
     optionalEnumAt(gate.direction, GATE_DIRECTIONS, `project.gates[${index}].direction`);
     optionalBooleanAt(gate.adjacentStartFallback, `project.gates[${index}].adjacentStartFallback`);
-    const endpoints = arrayAt(gate.endpoints, `project.gates[${index}].endpoints`);
+    const endpoints = boundedArrayAt(gate.endpoints, `project.gates[${index}].endpoints`, MAX_GATE_ENDPOINTS);
     if (endpoints.length < 2) throw new Error(`project.gates[${index}].endpoints must contain at least two endpoints.`);
     endpoints.forEach((endpointValue, endpointIndex) => {
       const endpoint = recordAt(endpointValue, `project.gates[${index}].endpoints[${endpointIndex}]`);
-      nonemptyStringAt(endpoint.planeId, `project.gates[${index}].endpoints[${endpointIndex}].planeId`);
-      nonemptyStringAt(endpoint.provinceId, `project.gates[${index}].endpoints[${endpointIndex}].provinceId`);
+      idAt(endpoint.planeId, `project.gates[${index}].endpoints[${endpointIndex}].planeId`);
+      idAt(endpoint.provinceId, `project.gates[${index}].endpoints[${endpointIndex}].provinceId`);
     });
   });
-  stringAt(project.rawDirectives, "project.rawDirectives");
-  if (project.generationWarnings !== undefined) stringArrayAt(project.generationWarnings, "project.generationWarnings");
+  directiveAt(project.rawDirectives, "project.rawDirectives");
+  if (project.generationWarnings !== undefined) stringArrayAt(project.generationWarnings, "project.generationWarnings", MAX_GENERATION_WARNINGS);
   stringAt(project.createdAt, "project.createdAt");
   stringAt(project.updatedAt, "project.updatedAt");
 }
@@ -325,15 +348,15 @@ function assertGenerationSettings(settings: Record<string, unknown>): void {
     }
   }
   optionalNumberAt(settings.startDegreeTarget, "project.settings.startDegreeTarget");
-  if (settings.caveStartNations !== undefined) numberArrayAt(settings.caveStartNations, "project.settings.caveStartNations");
+  if (settings.caveStartNations !== undefined) numberArrayAt(settings.caveStartNations, "project.settings.caveStartNations", MAX_PLAYER_ENTRIES);
   optionalEnumAt(settings.gateLayout, GATE_LAYOUTS, "project.settings.gateLayout");
   optionalEnumAt(settings.gateDirection, GATE_DIRECTIONS, "project.settings.gateDirection");
   optionalNumberAt(settings.gatePairsPerConnection, "project.settings.gatePairsPerConnection");
   if (settings.planeConnections !== undefined) {
-    arrayAt(settings.planeConnections, "project.settings.planeConnections").forEach((value, index) => {
+    boundedArrayAt(settings.planeConnections, "project.settings.planeConnections", MAX_PLANE_CONNECTION_RULES).forEach((value, index) => {
       const rule = recordAt(value, `project.settings.planeConnections[${index}]`);
-      nonemptyStringAt(rule.a, `project.settings.planeConnections[${index}].a`);
-      nonemptyStringAt(rule.b, `project.settings.planeConnections[${index}].b`);
+      idAt(rule.a, `project.settings.planeConnections[${index}].a`);
+      idAt(rule.b, `project.settings.planeConnections[${index}].b`);
       numberAt(rule.pairs, `project.settings.planeConnections[${index}].pairs`);
       optionalBooleanAt(rule.enabled, `project.settings.planeConnections[${index}].enabled`);
     });
@@ -343,11 +366,12 @@ function assertGenerationSettings(settings: Record<string, unknown>): void {
 
 function assertPlane(plane: Record<string, unknown>, index: number): void {
   const path = `project.planes[${index}]`;
-  nonemptyStringAt(plane.id, `${path}.id`);
+  idAt(plane.id, `${path}.id`);
   stringAt(plane.name, `${path}.name`);
   enumAt(plane.kind, PLANE_KINDS, `${path}.kind`);
   optionalEnumAt(plane.variant, PLANE_VARIANTS, `${path}.variant`);
   optionalBooleanAt(plane.autoSize, `${path}.autoSize`);
+  optionalBooleanAt(plane.noGeneratedStarts, `${path}.noGeneratedStarts`);
   numberAt(plane.provinceTarget, `${path}.provinceTarget`);
   numberAt(plane.width, `${path}.width`);
   numberAt(plane.height, `${path}.height`);
@@ -358,7 +382,7 @@ function assertPlane(plane: Record<string, unknown>, index: number): void {
   optionalBooleanAt(plane.noDeepCaves, `${path}.noDeepCaves`);
   optionalStringAt(plane.mapTextColor, `${path}.mapTextColor`);
   optionalStringAt(plane.mapDominionColor, `${path}.mapDominionColor`);
-  const provinces = arrayAt(plane.provinces, `${path}.provinces`);
+  const provinces = boundedArrayAt(plane.provinces, `${path}.provinces`, MAX_IMPORTED_PROVINCES_PER_PLANE);
   provinces.forEach((value, provinceIndex) => assertProvince(recordAt(value, `${path}.provinces[${provinceIndex}]`), `${path}.provinces[${provinceIndex}]`));
   provinces.forEach((value, provinceIndex) => {
     const province = value as Record<string, unknown>;
@@ -366,20 +390,20 @@ function assertPlane(plane: Record<string, unknown>, index: number): void {
       throw new Error(`${path}.provinces must be stored in local province-number order; expected index ${provinceIndex + 1} at array position ${provinceIndex}.`);
     }
   });
-  arrayAt(plane.edges, `${path}.edges`).forEach((value, edgeIndex) => {
+  boundedArrayAt(plane.edges, `${path}.edges`, MAX_IMPORTED_EDGES_PER_PLANE).forEach((value, edgeIndex) => {
     const edgePath = `${path}.edges[${edgeIndex}]`;
     const edge = recordAt(value, edgePath);
-    nonemptyStringAt(edge.id, `${edgePath}.id`);
-    nonemptyStringAt(edge.a, `${edgePath}.a`);
-    nonemptyStringAt(edge.b, `${edgePath}.b`);
+    idAt(edge.id, `${edgePath}.id`);
+    idAt(edge.a, `${edgePath}.a`);
+    idAt(edge.b, `${edgePath}.b`);
     enumAt(edge.kind, EDGE_KINDS, `${edgePath}.kind`);
     optionalNumberAt(edge.special, `${edgePath}.special`);
   });
-  stringAt(plane.rawDirectives, `${path}.rawDirectives`);
+  directiveAt(plane.rawDirectives, `${path}.rawDirectives`);
 }
 
 function assertProvince(province: Record<string, unknown>, path: string): void {
-  nonemptyStringAt(province.id, `${path}.id`);
+  idAt(province.id, `${path}.id`);
   numberAt(province.index, `${path}.index`);
   for (const key of ["x", "y", "gridX", "gridY"] as const) numberAt(province[key], `${path}.${key}`);
   stringAt(province.name, `${path}.name`);
@@ -396,10 +420,10 @@ function assertProvince(province: Record<string, unknown>, path: string): void {
   optionalNumberAt(province.teamStart, `${path}.teamStart`);
   enumAt(province.throne, THRONE_MODES, `${path}.throne`);
   optionalStringAt(province.fixedThrone, `${path}.fixedThrone`);
-  arrayAt(province.sites, `${path}.sites`).forEach((value, siteIndex) => {
+  boundedArrayAt(province.sites, `${path}.sites`, MAX_SITES_PER_PROVINCE).forEach((value, siteIndex) => {
     const sitePath = `${path}.sites[${siteIndex}]`;
     const site = recordAt(value, sitePath);
-    nonemptyStringAt(site.id, `${sitePath}.id`);
+    idAt(site.id, `${sitePath}.id`);
     stringAt(site.value, `${sitePath}.value`);
     booleanAt(site.known, `${sitePath}.known`);
   });
@@ -412,14 +436,14 @@ function assertProvince(province: Record<string, unknown>, path: string): void {
   booleanAt(province.temple, `${path}.temple`);
   booleanAt(province.lab, `${path}.lab`);
   optionalNumberAt(province.provinceDefense, `${path}.provinceDefense`);
-  arrayAt(province.defenders, `${path}.defenders`).forEach((value, defenderIndex) => {
+  boundedArrayAt(province.defenders, `${path}.defenders`, MAX_DEFENSE_GROUPS_PER_PROVINCE).forEach((value, defenderIndex) => {
     assertDefense(recordAt(value, `${path}.defenders[${defenderIndex}]`), `${path}.defenders[${defenderIndex}]`);
   });
   const battle = recordAt(province.battle, `${path}.battle`);
   for (const key of ["skybox", "battleMap", "groundColor", "rockColor", "fogColor"] as const) {
     optionalStringAt(battle[key], `${path}.battle.${key}`);
   }
-  stringAt(province.rawDirectives, `${path}.rawDirectives`);
+  directiveAt(province.rawDirectives, `${path}.rawDirectives`);
 }
 
 function assertDefense(defense: Record<string, unknown>, path: string): void {
@@ -428,16 +452,16 @@ function assertDefense(defense: Record<string, unknown>, path: string): void {
   optionalStringAt(defense.commanderName, `${path}.commanderName`);
   optionalStringAt(defense.bodyguard, `${path}.bodyguard`);
   optionalNumberAt(defense.bodyguardCount, `${path}.bodyguardCount`);
-  arrayAt(defense.squads, `${path}.squads`).forEach((value, squadIndex) => {
+  boundedArrayAt(defense.squads, `${path}.squads`, MAX_SQUADS_PER_DEFENSE_GROUP).forEach((value, squadIndex) => {
     const squadPath = `${path}.squads[${squadIndex}]`;
     const squad = recordAt(value, squadPath);
-    nonemptyStringAt(squad.id, `${squadPath}.id`);
+    idAt(squad.id, `${squadPath}.id`);
     nonemptyStringAt(squad.unit, `${squadPath}.unit`);
     numberAt(squad.count, `${squadPath}.count`);
   });
   optionalNumberAt(defense.experience, `${path}.experience`);
   optionalNumberAt(defense.randomEquipment, `${path}.randomEquipment`);
-  if (defense.items !== undefined) stringArrayAt(defense.items, `${path}.items`);
+  if (defense.items !== undefined) stringArrayAt(defense.items, `${path}.items`, MAX_ITEMS_PER_DEFENSE_GROUP);
   if (defense.magic !== undefined) {
     const magic = recordAt(defense.magic, `${path}.magic`);
     for (const [key, value] of Object.entries(magic)) {
@@ -456,7 +480,14 @@ function recordAt(value: unknown, path: string, message?: string): Record<string
 
 function arrayAt(value: unknown, path: string): unknown[] {
   if (!Array.isArray(value)) throw new Error(`${path} must be an array.`);
+  if (value.length > MAX_GENERIC_ARRAY_ENTRIES) throw new Error(`${path} must contain at most ${MAX_GENERIC_ARRAY_ENTRIES} entries.`);
   return value;
+}
+
+function boundedArrayAt(value: unknown, path: string, maximum: number): unknown[] {
+  const array = arrayAt(value, path);
+  if (array.length > maximum) throw new Error(`${path} must contain at most ${maximum} entries.`);
+  return array;
 }
 
 function numberAt(value: unknown, path: string): asserts value is number {
@@ -477,11 +508,28 @@ function optionalBooleanAt(value: unknown, path: string): void {
 
 function stringAt(value: unknown, path: string): asserts value is string {
   if (typeof value !== "string") throw new Error(`${path} must be a string.`);
+  if (value.length > MAX_IMPORTED_STRING_LENGTH) {
+    throw new Error(`${path} must contain at most ${MAX_IMPORTED_STRING_LENGTH} characters.`);
+  }
 }
 
 function nonemptyStringAt(value: unknown, path: string): asserts value is string {
   stringAt(value, path);
   if (!value.trim()) throw new Error(`${path} must not be empty.`);
+}
+
+function idAt(value: unknown, path: string): asserts value is string {
+  if (typeof value !== "string") throw new Error(`${path} must be a string.`);
+  if (!value.length) throw new Error(`${path} must not be empty.`);
+  if (value.length > MAX_IMPORTED_ID_LENGTH) throw new Error(`${path} must contain at most ${MAX_IMPORTED_ID_LENGTH} characters.`);
+  if (!SAFE_IMPORTED_ID.test(value)) throw new Error(`${path} may contain only letters, digits, underscores, and hyphens.`);
+}
+
+function directiveAt(value: unknown, path: string): asserts value is string {
+  if (typeof value !== "string") throw new Error(`${path} must be a string.`);
+  if (value.length > MAX_IMPORTED_DIRECTIVE_LENGTH) {
+    throw new Error(`${path} must contain at most ${MAX_IMPORTED_DIRECTIVE_LENGTH} characters.`);
+  }
 }
 
 function optionalStringAt(value: unknown, path: string): void {
@@ -496,20 +544,68 @@ function optionalEnumAt(value: unknown, allowed: ReadonlySet<string>, path: stri
   if (value !== undefined) enumAt(value, allowed, path);
 }
 
-function numberArrayAt(value: unknown, path: string): void {
-  arrayAt(value, path).forEach((entry, index) => numberAt(entry, `${path}[${index}]`));
+function numberArrayAt(value: unknown, path: string, maximum = MAX_GENERIC_ARRAY_ENTRIES): void {
+  boundedArrayAt(value, path, maximum).forEach((entry, index) => numberAt(entry, `${path}[${index}]`));
 }
 
-function stringArrayAt(value: unknown, path: string): void {
-  arrayAt(value, path).forEach((entry, index) => stringAt(entry, `${path}[${index}]`));
+function stringArrayAt(value: unknown, path: string, maximum = MAX_GENERIC_ARRAY_ENTRIES): void {
+  boundedArrayAt(value, path, maximum).forEach((entry, index) => stringAt(entry, `${path}[${index}]`));
 }
 
 function enumArrayAt(value: unknown, allowed: ReadonlySet<string>, path: string): void {
   arrayAt(value, path).forEach((entry, index) => enumAt(entry, allowed, `${path}[${index}]`));
 }
 
+function assertProjectTextSize(text: string): void {
+  let bytes = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    if (code <= 0x7f) bytes += 1;
+    else if (code <= 0x7ff) bytes += 2;
+    else if (code >= 0xd800 && code <= 0xdbff && index + 1 < text.length
+      && text.charCodeAt(index + 1) >= 0xdc00 && text.charCodeAt(index + 1) <= 0xdfff) {
+      bytes += 4;
+      index += 1;
+    } else bytes += 3;
+    if (bytes > MAX_PROJECT_IMPORT_BYTES) {
+      throw new Error(`Project files must be at most ${MAX_PROJECT_IMPORT_BYTES} UTF-8 bytes.`);
+    }
+  }
+}
+
 export function estimatedPackageBytes(project: MapProject): number {
-  return project.planes.reduce((sum, plane) => sum + estimatedD6mBytes(plane), 0) + 64_000;
+  return project.planes.reduce((sum, plane) => sum + estimatedD6mBytes(plane), 0)
+    + estimatedTextPackageBytes(project);
+}
+
+/**
+ * Conservative, allocation-light estimate for the maps and support files that
+ * accompany D6Ms. In particular, advanced directives exist both in compiled
+ * .map files and in atlas_project.json, so omitting text can substantially
+ * understate ZIP memory for heavily authored projects.
+ */
+export function estimatedTextPackageBytes(project: MapProject): number {
+  const mapBytes = project.planes.reduce(
+    (sum, plane, planeIndex) => sum + estimatedCompiledMapBytes(project, plane, planeIndex),
+    0,
+  );
+  const projectJsonBytes = estimatedPrettyJsonBytes(project);
+  const provinceCount = project.planes.reduce((sum, plane) => sum + plane.provinces.length, 0);
+  const edgeCount = project.planes.reduce((sum, plane) => sum + plane.edges.length, 0);
+  const gateEndpointCount = project.gates.reduce((sum, gate) => sum + gate.endpoints.length, 0);
+
+  // INSTALL, balance, host settings, and host topology. The topology dossier
+  // repeats province/edge descriptions, so budget by records instead of using
+  // the former fixed 64 KB allowance.
+  const supportTextBytes = 64 * 1024
+    + project.planes.length * 4 * 1024
+    + provinceCount * 1024
+    + edgeCount * 512
+    + project.gates.length * 512
+    + gateEndpointCount * 512
+    + estimatedTopologyRepeatedStringBytes(project);
+  const zipDirectoryOverhead = 8 * 1024 + (project.planes.length * 2 + 5) * 256;
+  return mapBytes + projectJsonBytes + supportTextBytes + zipDirectoryOverhead;
 }
 
 export function zipPackageSafety(project: MapProject): ZipPackageSafety {
@@ -532,6 +628,148 @@ export function zipPackageSafety(project: MapProject): ZipPackageSafety {
     };
   }
   return { level: "safe", estimatedPackageBytes: estimatedBytes, estimatedPeakBytes };
+}
+
+function estimatedCompiledMapBytes(
+  project: MapProject,
+  plane: MapProject["planes"][number],
+  planeIndex: number,
+): number {
+  let bytes = 8 * 1024
+    + jsonStringBytes(project.name)
+    + jsonStringBytes(project.description)
+    + jsonStringBytes(project.seed)
+    + jsonStringBytes(plane.name)
+    + rawDirectiveOutputUpperBound(plane.rawDirectives);
+  if (planeIndex === 0) bytes += rawDirectiveOutputUpperBound(project.rawDirectives);
+
+  for (const province of plane.provinces) {
+    bytes += 512 + jsonStringBytes(province.name) + rawDirectiveOutputUpperBound(province.rawDirectives);
+    if (province.fixedThrone) bytes += 64 + jsonStringBytes(province.fixedThrone);
+    for (const site of province.sites) bytes += 64 + jsonStringBytes(site.value);
+    for (const value of Object.values(province.battle)) {
+      if (value) bytes += 64 + jsonStringBytes(value);
+    }
+    for (const defense of province.defenders) {
+      bytes += 256 + jsonStringBytes(defense.commander) + jsonStringBytes(defense.commanderName ?? "")
+        + jsonStringBytes(defense.bodyguard ?? "");
+      for (const squad of defense.squads) bytes += 96 + jsonStringBytes(squad.unit);
+      for (const item of defense.items ?? []) bytes += 96 + jsonStringBytes(item);
+      bytes += Object.keys(defense.magic ?? {}).length * 48;
+    }
+  }
+  bytes += plane.edges.length * 96;
+  bytes += project.gates.reduce(
+    (sum, gate) => sum + gate.endpoints.filter((endpoint) => endpoint.planeId === plane.id).length * 64,
+    0,
+  );
+  if (planeIndex === 0) bytes += project.specificStarts.length * 64;
+  return bytes;
+}
+
+function rawDirectiveOutputUpperBound(raw: string): number {
+  if (!raw) return 0;
+  let newlines = 0;
+  for (let index = 0; index < raw.length; index += 1) {
+    if (raw.charCodeAt(index) === 10) newlines += 1;
+  }
+  // appendRaw trims and filters lines, then joins with CRLF. Counting the
+  // original UTF-8 payload plus one extra CR byte per LF is an upper bound.
+  return utf8StringBytes(raw) + newlines + 2;
+}
+
+function estimatedPrettyJsonBytes(value: unknown, depth = 0): number {
+  if (value === null) return 4;
+  if (typeof value === "string") return jsonStringBytes(value);
+  if (typeof value === "number") return Number.isFinite(value) ? String(value).length : 4;
+  if (typeof value === "boolean") return value ? 4 : 5;
+  if (Array.isArray(value)) {
+    if (!value.length) return 2;
+    let bytes = 3 + depth * 2;
+    for (const [index, entry] of value.entries()) {
+      bytes += (depth + 1) * 2 + estimatedPrettyJsonBytes(entry ?? null, depth + 1) + 1;
+      if (index < value.length - 1) bytes += 1;
+    }
+    return bytes;
+  }
+  if (typeof value === "object") {
+    const entries = Object.entries(value).filter(([, entry]) => entry !== undefined);
+    if (!entries.length) return 2;
+    let bytes = 3 + depth * 2;
+    for (const [index, [key, entry]] of entries.entries()) {
+      bytes += (depth + 1) * 2 + jsonStringBytes(key) + 2
+        + estimatedPrettyJsonBytes(entry, depth + 1) + 1;
+      if (index < entries.length - 1) bytes += 1;
+    }
+    return bytes;
+  }
+  return 4;
+}
+
+function jsonStringBytes(value: string): number {
+  let bytes = 2;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code === 0x22 || code === 0x5c || code === 0x08 || code === 0x0c
+      || code === 0x0a || code === 0x0d || code === 0x09) bytes += 2;
+    else if (code <= 0x1f || (code >= 0xd800 && code <= 0xdfff
+      && !(code <= 0xdbff && index + 1 < value.length
+        && value.charCodeAt(index + 1) >= 0xdc00 && value.charCodeAt(index + 1) <= 0xdfff))) bytes += 6;
+    else if (code <= 0x7f) bytes += 1;
+    else if (code <= 0x7ff) bytes += 2;
+    else if (code <= 0xdbff && index + 1 < value.length) {
+      bytes += 4;
+      index += 1;
+    } else bytes += 3;
+  }
+  return bytes;
+}
+
+function estimatedTopologyRepeatedStringBytes(project: MapProject): number {
+  const planeById = new Map(project.planes.map((plane) => [plane.id, plane]));
+  const provinceByKey = new Map(project.planes.flatMap((plane) => plane.provinces.map((province) => [
+    `${plane.id}\u0000${province.id}`,
+    province,
+  ] as const)));
+  let bytes = jsonStringBytes(project.name);
+  for (const plane of project.planes) {
+    const provinceById = new Map(plane.provinces.map((province) => [province.id, province]));
+    bytes += jsonStringBytes(plane.name) * 2;
+    for (const province of plane.provinces) bytes += jsonStringBytes(province.name) * 2;
+    for (const edge of plane.edges) {
+      for (const provinceId of [edge.a, edge.b]) {
+        const province = provinceById.get(provinceId);
+        bytes += province
+          ? jsonStringBytes(province.name)
+          : jsonStringBytes(provinceId);
+      }
+    }
+  }
+  for (const gate of project.gates) {
+    bytes += jsonStringBytes(gate.id);
+    for (const endpoint of gate.endpoints) {
+      const plane = planeById.get(endpoint.planeId);
+      const province = provinceByKey.get(`${endpoint.planeId}\u0000${endpoint.provinceId}`);
+      bytes += jsonStringBytes(plane?.name ?? endpoint.planeId)
+        + jsonStringBytes(province?.name ?? endpoint.provinceId);
+    }
+  }
+  return bytes;
+}
+
+function utf8StringBytes(value: string): number {
+  let bytes = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 0x7f) bytes += 1;
+    else if (code <= 0x7ff) bytes += 2;
+    else if (code >= 0xd800 && code <= 0xdbff && index + 1 < value.length
+      && value.charCodeAt(index + 1) >= 0xdc00 && value.charCodeAt(index + 1) <= 0xdfff) {
+      bytes += 4;
+      index += 1;
+    } else bytes += 3;
+  }
+  return bytes;
 }
 
 function supportFiles(project: MapProject): PackageFile[] {

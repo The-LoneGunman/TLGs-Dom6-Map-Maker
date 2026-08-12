@@ -70,6 +70,7 @@ import {
   downloadProject,
   estimatedPackageBytes,
   installPackage,
+  MAX_PROJECT_IMPORT_BYTES,
   parseProject,
   zipPackageSafety,
   type ExportProgress,
@@ -80,7 +81,7 @@ import {
   type GenerationWorkerProgress,
   type ProjectGenerationTask,
 } from "./generationWorker";
-import { MapCanvas, canRenderPlanePreview, renderPlanePng } from "./MapCanvas";
+import { MapCanvas, canRenderPlanePreview, renderPlanePng, type ProvinceMarkerAnnotations } from "./MapCanvas";
 import { CatalogCombobox } from "./catalog/CatalogCombobox";
 import {
   BUILTIN_DOM6_CATALOG,
@@ -127,6 +128,26 @@ const INSPECTOR_TABS: readonly InspectorTab[] = ["terrain", "gameplay", "sites",
 const LEFT_TABS: readonly LeftTab[] = ["generate", "planes", "scenario"];
 
 const CATALOG_STORAGE_KEY = "pantokrator-atlas-user-catalog-v1";
+export const MAX_CUSTOM_CATALOG_IMPORT_BYTES = 8 * 1024 * 1024;
+
+type BrowserTextImport = Pick<File, "size" | "text">;
+
+/** Reject oversized browser imports before File.text() allocates another full copy. */
+export async function parseProjectImportFile(file: BrowserTextImport): Promise<MapProject> {
+  assertBrowserImportSize(file.size, MAX_PROJECT_IMPORT_BYTES, "Project");
+  return parseProject(await file.text());
+}
+
+/** Custom catalogs are intentionally capped independently from editable projects. */
+export async function parseCatalogImportFile(file: BrowserTextImport): Promise<Dom6CatalogBundle> {
+  assertBrowserImportSize(file.size, MAX_CUSTOM_CATALOG_IMPORT_BYTES, "Custom catalog");
+  return parseCatalogBundle(await file.text());
+}
+
+function assertBrowserImportSize(size: number, maximum: number, label: string): void {
+  if (size <= maximum) return;
+  throw new Error(`${label} file is ${formatBytes(size)}; the browser import limit is ${formatBytes(maximum)}. The file was not read.`);
+}
 
 /** Browser storage can reject both reads and removals in private/sandboxed contexts. */
 export function removeStoredCustomCatalog(storage?: Pick<Storage, "removeItem">): boolean {
@@ -357,6 +378,10 @@ export function MapMakerApp() {
   const planeConnectionRules = useMemo(() => resolvePlaneConnectionRules(project), [project]);
   const selectedPlaneConnectionRules = planeConnectionRules.filter((rule) => rule.a === activePlane.id || rule.b === activePlane.id);
   const activePlaneGates = gatesTouchingPlane(project.gates, activePlane.id);
+  const activePlaneMarkerAnnotations = useMemo(
+    () => markerAnnotationsForPlane({ gates: project.gates, specificStarts: project.specificStarts }, activePlane.id),
+    [activePlane.id, project.gates, project.specificStarts],
+  );
   const fairness = useMemo(() => calculateFairness(project), [project]);
   const issues = useMemo(() => validateProject(project, catalog), [catalog, project]);
   const topologyAudits = useMemo(() => project.planes.map((plane) => ({
@@ -715,7 +740,7 @@ export function MapMakerApp() {
     event.target.value = "";
     if (!file) return;
     try {
-      const imported = parseCatalogBundle(await file.text());
+      const imported = await parseCatalogImportFile(file);
       const merged = userCatalog ? mergeCatalogBundles(userCatalog, imported) : imported;
       mergeCatalogBundles(BUILTIN_DOM6_CATALOG, merged);
       setUserCatalog(merged);
@@ -898,7 +923,7 @@ export function MapMakerApp() {
     setExportBusy(true);
     setExportProgress(undefined);
     try {
-      const blob = await renderPlanePng(activePlane, preview);
+      const blob = await renderPlanePng(activePlane, preview, activePlaneMarkerAnnotations);
       downloadBrowserBlob(blob, `${sanitizeMapName(project.name)}-${sanitizeMapName(activePlane.name)}-${preview}.png`);
       setToast("High-resolution preview exported.");
     } catch (error) {
@@ -913,7 +938,7 @@ export function MapMakerApp() {
     event.target.value = "";
     if (!file) return;
     try {
-      const next = parseProject(await file.text());
+      const next = await parseProjectImportFile(file);
       commit(next);
       setActivePlaneId(next.planes[0]?.id ?? "");
       setSelectedId(undefined);
@@ -929,12 +954,19 @@ export function MapMakerApp() {
     setAutosaveSaving(true);
     try {
       await autosaveQueueRef.current.catch(() => undefined);
-      const state = replaceNewer
-        ? await saveProjectAutosave(project)
-        : await saveProjectAutosave(project, undefined, { expectedRevision: autosaveRevisionRef.current });
+      const conflictRevisions = autosaveState.conflict?.backendRevisions;
+      if (replaceNewer && !conflictRevisions) {
+        setToast("This conflict cannot be replaced safely because the reviewed device revisions are unavailable. Load a saved copy or download this project before retrying.");
+        return;
+      }
+      const state = await saveProjectAutosave(project, undefined, replaceNewer
+        ? { expectedBackendRevisions: conflictRevisions }
+        : { expectedRevision: autosaveRevisionRef.current });
       setAutosaveState(state);
       if (state.conflict) {
-        setToast("Another tab has a newer autosave. Reload that copy or explicitly keep this one.");
+        setToast(state.conflict.reason === "divergent-copies"
+          ? "The two preserved device copies still differ. Inspect either copy, then explicitly choose which one to keep."
+          : "Another tab changed the autosave. Reload that copy or explicitly keep this one.");
         return;
       }
       autosaveRevisionRef.current = state.revision ?? autosaveRevisionRef.current;
@@ -947,9 +979,11 @@ export function MapMakerApp() {
   };
 
   const reloadAutosaveAfterConflict = async () => {
-    const result = await loadProjectAutosave();
+    const divergent = autosaveState.conflict?.reason === "divergent-copies";
+    const preferredBackend = divergent ? autosaveState.conflict?.alternateBackend : undefined;
+    const result = await loadProjectAutosave(undefined, preferredBackend ? { preferredBackend } : undefined);
     if (!result.project) {
-      setToast("The newer autosave is no longer available; the current atlas was kept.");
+      setToast(`${divergent ? "The other preserved copy" : "The newer autosave"} is no longer available; the current atlas was kept.`);
       return;
     }
     autosaveRevisionRef.current = result.revision ?? null;
@@ -961,7 +995,7 @@ export function MapMakerApp() {
     setGateSource(undefined);
     setUndoStack([]);
     setRedoStack([]);
-    setToast("Loaded the newer device autosave.");
+    setToast(divergent ? "Loaded the other preserved device copy for inspection. Neither copy has been deleted." : "Loaded the newer device autosave.");
   };
 
   if (!activePlane) return <main className="empty-state">No plane is available.</main>;
@@ -1002,8 +1036,10 @@ export function MapMakerApp() {
       </header>
 
       {autosaveState.conflict && <section className="autosave-conflict" role="alert" aria-live="assertive">
-        <div><strong>A newer device autosave exists.</strong><span>Another Atlas tab changed the shared copy. Automatic saving is paused so neither version is silently overwritten.</span></div>
-        <button className="button quiet" type="button" onClick={() => { void reloadAutosaveAfterConflict(); }}>Load newer copy</button>
+        <div>{autosaveState.conflict.reason === "divergent-copies"
+          ? <><strong>Two preserved device copies differ.</strong><span>IndexedDB and local storage contain different valid atlases. Automatic saving is paused; inspect the other copy, then explicitly keep the version you want.</span></>
+          : <><strong>A newer device autosave exists.</strong><span>Another Atlas tab changed the shared copy. Automatic saving is paused so neither version is silently overwritten.</span></>}</div>
+        <button className="button quiet" type="button" onClick={() => { void reloadAutosaveAfterConflict(); }}>{autosaveState.conflict.reason === "divergent-copies" ? "Inspect other copy" : "Load newer copy"}</button>
         <button className="button primary" type="button" onClick={() => { void saveAutosaveNow(true); }}>Keep this copy</button>
       </section>}
 
@@ -1229,6 +1265,9 @@ export function MapMakerApp() {
               {(activePlane.autoSize ?? project.planes[0]?.id === activePlane.id)
                 ? <div className="resolution-card"><span>Automatic province count</span><small>{planeAutoSizeDescription(project, activePlane)}</small></div>
                 : <NumberField label="Province target" value={activePlane.provinceTarget} min={8} max={800} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.provinceTarget = value; })} />}
+              <PlaneStartPolicyControl plane={activePlane} onChange={(value) => mutate((draft) => {
+                draft.planes.find((plane) => plane.id === activePlane.id)!.noGeneratedStarts = value || undefined;
+              })} />
               <Toggle label="Wrap east / west" checked={activePlane.wrapX} onChange={(value) => updateWrap("wrapX", value)} />
               <Toggle label="Wrap north / south" checked={activePlane.wrapY} onChange={(value) => updateWrap("wrapY", value)} />
               {project.settings.resolution === "custom" && (
@@ -1350,7 +1389,7 @@ export function MapMakerApp() {
             </div>
           </div>
           <div className="map-stage">
-            <MapCanvas key={activePlane.id} plane={activePlane} selectedId={selectedId} previewCondition={preview} onNavigate={setSelectedId} onActivate={handleProvinceClick} onZoomChange={setZoom} tool={tool} />
+            <MapCanvas key={activePlane.id} plane={activePlane} selectedId={selectedId} previewCondition={preview} markerAnnotations={activePlaneMarkerAnnotations} onNavigate={setSelectedId} onActivate={handleProvinceClick} onZoomChange={setZoom} tool={tool} />
             <div className="map-title-card">
               <span>{activePlane.kind}</span>
               <strong>{activePlane.name}</strong>
@@ -1358,10 +1397,11 @@ export function MapMakerApp() {
             </div>
             <div className="map-legend">
               <span><i className="legend-border" />Shared border = connected</span>
-              <span><i className="legend-start" />Start</span>
-              <span><i className="legend-throne" />Throne</span>
-              <span><i className="legend-site" />Site</span>
-              <span><i className="legend-defense" />Guardians</span>
+              <span><b>S/#/N</b> Generic/team/nation start</span>
+              <span><b>♜/♛/×</b> Preferred/fixed/avoid throne</span>
+              <span><b>✦/M</b> Placed/many sites</span>
+              <span><b>G</b> Guardians</span>
+              <span><b>◎</b> Gateway</span>
             </div>
           </div>
           <div className="plane-strip" role="group" aria-label="Plane selector">
@@ -1920,7 +1960,20 @@ function RangeField({ label, value, suffix, min, max, onInteractionStart, onInte
     onChange={(event) => { begin(); onChange(numberValue(event.target.value, min)); }}
   /></label>;
 }
-function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) { return <label className="toggle-row"><span>{label}</span><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} /><i /></label>; }
+function Toggle({ label, checked, describedBy, onChange }: { label: string; checked: boolean; describedBy?: string; onChange: (value: boolean) => void }) { return <label className="toggle-row"><span>{label}</span><input type="checkbox" checked={checked} aria-describedby={describedBy} onChange={(event) => onChange(event.target.checked)} /><i /></label>; }
+
+export function PlaneStartPolicyControl({ plane, onChange }: { plane: Pick<Plane, "noGeneratedStarts">; onChange: (value: boolean) => void }) {
+  return <>
+    <Toggle
+      label="Block generated starts on this plane"
+      checked={plane.noGeneratedStarts ?? false}
+      describedBy="plane-generated-start-policy-help"
+      onChange={onChange}
+    />
+    <p id="plane-generated-start-policy-help" className="field-note">Applies on the next Generate only. Manual generic, team, and nation-specific starts remain available; every start and its directly connected provinces still receive capital protection from generated guardians, special units, and thrones.</p>
+  </>;
+}
+
 function CheckCard({ label, checked, onChange, compact = false }: { label: string; checked: boolean; onChange: (value: boolean) => void; compact?: boolean }) { return <label className={`check-card ${compact ? "compact" : ""} ${checked ? "checked" : ""}`}><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} /><i>{checked ? "✓" : ""}</i><span>{label}</span></label>; }
 
 export function CaveStartNationField({ values, caveStartCount, hasCaveFamilyPlane, entries, onChange }: {
@@ -2099,6 +2152,29 @@ function isGeneratedPlaneName(name: string): boolean {
   const defaults = (["cave", "cavern", "cloud", "air", "underworld", "hell", "abyss", "dream", "elemental"] as PlaneKind[])
     .map((kind) => defaultPlaneName(kind, 1));
   return defaults.some((base) => value === base || (value.startsWith(`${base} `) && /^\d+$/.test(value.slice(base.length + 1))));
+}
+
+export function markerAnnotationsForPlane(project: Pick<MapProject, "gates" | "specificStarts">, planeId: string): ReadonlyMap<string, ProvinceMarkerAnnotations> {
+  const annotations = new Map<string, { specificStartNation?: number; gateNumbers: number[] }>();
+  const entryFor = (provinceId: string) => {
+    const current = annotations.get(provinceId);
+    if (current) return current;
+    const created: { specificStartNation?: number; gateNumbers: number[] } = { gateNumbers: [] };
+    annotations.set(provinceId, created);
+    return created;
+  };
+  for (const start of project.specificStarts) {
+    if (start.planeId === planeId) entryFor(start.provinceId).specificStartNation = start.nation;
+  }
+  for (const gate of project.gates) {
+    for (const endpoint of gate.endpoints) {
+      if (endpoint.planeId !== planeId) continue;
+      const numbers = entryFor(endpoint.provinceId).gateNumbers;
+      if (!numbers.includes(gate.gateNumber)) numbers.push(gate.gateNumber);
+    }
+  }
+  for (const annotation of annotations.values()) annotation.gateNumbers.sort((a, b) => a - b);
+  return annotations;
 }
 
 /** Plane number disambiguates duplicate names in imported projects and gate UI. */

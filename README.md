@@ -12,6 +12,7 @@ Release readiness is tracked in the [2026-08-11 audit and remediation record](do
 - Topology-aware overland ocean presets: natural, single continent, multiple continents, island chains, and a central inland sea
 - Surface, cave, cavern, cloud, air, underworld, hell, abyss, dream, elemental, and custom plane archetypes
 - Pre-generation plane planning with independent names, sizes, terrain variants, wrapping, display flags, and colors
+- Per-plane **Block generated starts** policies, with automatic reallocation to eligible realms and preflight errors when the requested start mix cannot fit
 - Exact land, coastal, water, cave, and other-plane start allocations
 - One-click Generate-tab default reset that preserves the current map and participates in Undo
 - Deterministic plane-, terrain-, coast-, flooded-cave-, and Styx-aware province names with project-wide uniqueness, capital-name protection, and a reroll that preserves manual edits

@@ -59,10 +59,25 @@ interface MapCanvasProps {
   plane: Plane;
   selectedId?: string;
   previewCondition: PreviewCondition;
+  markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations>;
   onNavigate: (provinceId: string) => void;
   onActivate: (provinceId: string) => void;
   onZoomChange?: (zoom: number) => void;
   tool?: string;
+}
+
+export interface ProvinceMarkerAnnotations {
+  specificStartNation?: number;
+  gateNumbers?: readonly number[];
+}
+
+export type ProvinceMarkerKind = "generic-start" | "team-start" | "specific-start" | "preferred-throne" | "fixed-throne" | "avoided-throne" | "placed-site" | "many-sites" | "guardians" | "gateway";
+
+export interface ProvinceMarkerBadge {
+  kind: ProvinceMarkerKind;
+  glyph: string;
+  label: string;
+  color: string;
 }
 
 export interface MapKeyboardCommand {
@@ -95,7 +110,7 @@ export function dispatchMapKeyboardCommand(
   else onActivate(command.provinceId);
 }
 
-export function MapCanvas({ plane, selectedId, previewCondition, onNavigate, onActivate, onZoomChange, tool = "select" }: MapCanvasProps) {
+export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotations, onNavigate, onActivate, onZoomChange, tool = "select" }: MapCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const keyboardHelpId = useId();
@@ -118,8 +133,11 @@ export function MapCanvas({ plane, selectedId, previewCondition, onNavigate, onA
   const selectedProvince = plane.provinces.find((province) => province.id === selectedId);
   const selectedPosition = selectedProvince ? plane.provinces.findIndex((province) => province.id === selectedProvince.id) + 1 : undefined;
   const toolLabel = `${tool.charAt(0).toUpperCase()}${tool.slice(1)}`;
+  const selectedMarkerSummary = selectedProvince
+    ? provinceMarkerBadges(selectedProvince, markerAnnotations?.get(selectedProvince.id)).map((badge) => badge.label).join(", ")
+    : "";
   const provinceStatus = selectedProvince
-    ? `Current province ${selectedProvince.index} of ${plane.provinces.length}: ${selectedProvince.name}. ${toolLabel} tool active.`
+    ? `Current province ${selectedProvince.index} of ${plane.provinces.length}: ${selectedProvince.name}.${selectedMarkerSummary ? ` Markers: ${selectedMarkerSummary}.` : ""} ${toolLabel} tool active.`
     : `${plane.provinces.length} provinces. No current province. ${toolLabel} tool active.`;
   const liveStatus = keyboardAction && keyboardAction.provinceId === selectedId && keyboardAction.tool === tool
     ? keyboardAction.message
@@ -170,10 +188,10 @@ export function MapCanvas({ plane, selectedId, previewCondition, onNavigate, onA
     context.scale(view.zoom, view.zoom);
     context.translate(-width / 2, -height / 2);
     if (backgroundImage) paintRealmBackground(context, backgroundImage, width, height, plane.wrapX, plane.wrapY);
-    paintPlane(context, plane, cells, topology, ownership, previewCondition, width, height, { selectedId, labels: view.zoom >= 1.35, detail: view.zoom >= 0.92, materialImages });
+    paintPlane(context, plane, cells, topology, ownership, previewCondition, width, height, { selectedId, labels: view.zoom >= 1.35, detail: view.zoom >= 0.92, materialImages, markerAnnotations });
     context.restore();
     drawVignette(context, width, height);
-  }, [backgroundImage, cells, materialImages, ownership, plane, previewCondition, selectedId, topology, view]);
+  }, [backgroundImage, cells, markerAnnotations, materialImages, ownership, plane, previewCondition, selectedId, topology, view]);
 
   useEffect(() => {
     draw();
@@ -284,7 +302,7 @@ export function MapCanvas({ plane, selectedId, previewCondition, onNavigate, onA
   );
 }
 
-export async function renderPlanePng(plane: Plane, condition: PreviewCondition): Promise<Blob> {
+export async function renderPlanePng(plane: Plane, condition: PreviewCondition, markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations>): Promise<Blob> {
   if (!canRenderPlanePreview(plane)) {
     throw new Error("Preview dimensions must be whole positive pixels within the supported 8.29-megapixel envelope.");
   }
@@ -301,7 +319,7 @@ export async function renderPlanePng(plane: Plane, condition: PreviewCondition):
   const materialImages = await loadArtworkImages(planeMaterialAssets(plane, condition));
   const topology = computeProvinceTopology(plane);
   const cells = ownership.mode === "solid" ? topology.cells : [];
-  paintPlane(context, plane, cells, topology, ownership, condition, canvas.width, canvas.height, { labels: true, detail: true, materialImages });
+  paintPlane(context, plane, cells, topology, ownership, condition, canvas.width, canvas.height, { labels: true, detail: true, materialImages, markerAnnotations });
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("The preview image could not be encoded.")), "image/png");
   });
@@ -436,7 +454,7 @@ function paintPlane(
   condition: PreviewCondition,
   width: number,
   height: number,
-  options: { selectedId?: string; labels?: boolean; detail?: boolean; materialImages?: Map<string, HTMLImageElement> },
+  options: { selectedId?: string; labels?: boolean; detail?: boolean; materialImages?: Map<string, HTMLImageElement>; markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations> },
 ) {
   if (ownership.mode === "sparse") {
     paintSparsePlane(context, plane, topology, ownership, condition, width, height, options);
@@ -530,6 +548,10 @@ export function provinceAtOwnershipPoint(
   x: number,
   y: number,
 ): Province | undefined {
+  // Panning or zooming can expose canvas outside the rendered unit square.
+  // Solid ownership is mathematically unbounded to support Voronoi clipping,
+  // so reject that visible margin before asking for an owner.
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) return undefined;
   const owner = ownership.ownerAt(x, y);
   return owner >= 0 && owner < plane.provinces.length ? plane.provinces[owner] : undefined;
 }
@@ -542,7 +564,7 @@ function paintSparsePlane(
   condition: PreviewCondition,
   width: number,
   height: number,
-  options: { selectedId?: string; labels?: boolean; detail?: boolean; materialImages?: Map<string, HTMLImageElement> },
+  options: { selectedId?: string; labels?: boolean; detail?: boolean; materialImages?: Map<string, HTMLImageElement>; markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations> },
 ) {
   const layer = document.createElement("canvas");
   layer.width = width;
@@ -666,7 +688,7 @@ function drawProvinceMarkers(
   plane: Plane,
   width: number,
   height: number,
-  options: { labels?: boolean },
+  options: { labels?: boolean; markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations> },
   ownerPaths?: Path2D[],
 ) {
   plane.provinces.forEach((province, owner) => {
@@ -678,21 +700,15 @@ function drawProvinceMarkers(
     const x = province.x * width;
     const y = province.y * height;
     const markerRadius = clamp(Math.min(width, height) / 270, 2.4, 7);
+    const badges = provinceMarkerBadges(province, options.markerAnnotations?.get(province.id));
     context.beginPath();
     context.arc(x, y, markerRadius, 0, TAU);
-    context.fillStyle = province.start ? "#f5d67c" : province.throne === "preferred" || province.throne === "fixed" ? "#d5a8ff" : "rgba(245, 238, 209, .88)";
+    context.fillStyle = badges[0]?.color ?? "rgba(245, 238, 209, .88)";
     context.fill();
     context.lineWidth = Math.max(1, width / 3200);
     context.strokeStyle = "rgba(18, 22, 23, .86)";
     context.stroke();
-    if (province.start || province.throne !== "none" || province.sites.length || province.defenders.length) {
-      const badge = province.start ? "S" : province.throne !== "none" ? "T" : province.defenders.length ? "D" : "✦";
-      context.fillStyle = "#181b1c";
-      context.font = `700 ${Math.max(8, markerRadius * 1.55)}px ui-sans-serif, system-ui`;
-      context.textAlign = "center";
-      context.textBaseline = "middle";
-      context.fillText(badge, x, y + 0.25);
-    }
+    drawProvinceMarkerBadges(context, badges, x, y, markerRadius, width);
     if (options.labels) {
       context.font = `600 ${clamp(width / 230, 9, 18)}px ui-sans-serif, system-ui`;
       context.textAlign = "center";
@@ -704,6 +720,56 @@ function drawProvinceMarkers(
       context.fillText(province.name, x, y + markerRadius + 3);
     }
     if (ownerPath) context.restore();
+  });
+}
+
+export function provinceMarkerBadges(province: Province, annotations?: ProvinceMarkerAnnotations): ProvinceMarkerBadge[] {
+  const badges: ProvinceMarkerBadge[] = [];
+  if (province.start) badges.push({ kind: "generic-start", glyph: "S", label: "generic start", color: "#f5d67c" });
+  if (province.teamStart !== undefined) badges.push({ kind: "team-start", glyph: `#${province.teamStart}`, label: `team start group ${province.teamStart}`, color: "#f0bd65" });
+  if (annotations?.specificStartNation !== undefined) badges.push({ kind: "specific-start", glyph: "N", label: `nation-specific start ${annotations.specificStartNation}`, color: "#ff9f70" });
+  if (province.throne === "preferred") badges.push({ kind: "preferred-throne", glyph: "♜", label: "preferred throne", color: "#d5a8ff" });
+  if (province.throne === "fixed") badges.push({ kind: "fixed-throne", glyph: "♛", label: "fixed throne", color: "#b993ff" });
+  if (province.throne === "avoid") badges.push({ kind: "avoided-throne", glyph: "×", label: "avoid throne", color: "#89918e" });
+  if (province.sites.length) badges.push({ kind: "placed-site", glyph: "✦", label: `${province.sites.length} placed magic site${province.sites.length === 1 ? "" : "s"}`, color: "#80c4b1" });
+  if (province.manySites) badges.push({ kind: "many-sites", glyph: "M", label: "many-sites terrain", color: "#5eb8a2" });
+  if (province.defenders.length) badges.push({ kind: "guardians", glyph: "G", label: `${province.defenders.length} guardian group${province.defenders.length === 1 ? "" : "s"}`, color: "#d28b65" });
+  if (annotations?.gateNumbers?.length) badges.push({ kind: "gateway", glyph: "◎", label: `gateway endpoint ${annotations.gateNumbers.join(", ")}`, color: "#74b9da" });
+  return badges;
+}
+
+function drawProvinceMarkerBadges(
+  context: CanvasRenderingContext2D,
+  badges: readonly ProvinceMarkerBadge[],
+  x: number,
+  y: number,
+  markerRadius: number,
+  width: number,
+) {
+  if (!badges.length) return;
+  const radius = clamp(markerRadius * 0.82, 3.2, 5.5);
+  const step = radius * 2 + 1;
+  const columns = Math.min(4, badges.length);
+  const rows = Math.ceil(badges.length / columns);
+  badges.forEach((badge, index) => {
+    const row = Math.floor(index / columns);
+    const rowStart = row * columns;
+    const rowCount = Math.min(columns, badges.length - rowStart);
+    const column = index - rowStart;
+    const badgeX = x + (column - (rowCount - 1) / 2) * step;
+    const badgeY = y + (row - (rows - 1) / 2) * step;
+    context.beginPath();
+    context.arc(badgeX, badgeY, radius, 0, TAU);
+    context.fillStyle = badge.color;
+    context.fill();
+    context.lineWidth = Math.max(0.8, width / 4200);
+    context.strokeStyle = "rgba(18, 22, 23, .92)";
+    context.stroke();
+    context.fillStyle = "#181b1c";
+    context.font = `800 ${badge.glyph.length > 1 ? Math.max(5.5, radius * 1.15) : Math.max(7, radius * 1.55)}px ui-sans-serif, system-ui`;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(badge.glyph, badgeX, badgeY + 0.2);
   });
 }
 
