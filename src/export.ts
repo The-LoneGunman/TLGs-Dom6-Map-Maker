@@ -1,5 +1,6 @@
 import { cloneProject, sanitizeMapName, type MapProject } from "./domain";
 import { calculateFairness } from "./generator";
+import { buildHostTopologyReport } from "./hostReport";
 import {
   compileMapText,
   encodeD6m,
@@ -20,6 +21,19 @@ export interface PackageFile {
   name: string;
   data: Uint8Array;
 }
+
+export type ZipPackageSafetyLevel = "safe" | "warning" | "blocked";
+
+export interface ZipPackageSafety {
+  level: ZipPackageSafetyLevel;
+  estimatedPackageBytes: number;
+  estimatedPeakBytes: number;
+  message?: string;
+}
+
+/** Stored ZIP assembly temporarily needs source files, the ZIP, and Blob copies. */
+export const ZIP_MEMORY_WARNING_PEAK_BYTES = 384 * 1024 * 1024;
+export const ZIP_MEMORY_LIMIT_PEAK_BYTES = 768 * 1024 * 1024;
 
 type ProgressCallback = (progress: ExportProgress) => void;
 
@@ -55,6 +69,8 @@ export async function buildPackageFiles(project: MapProject, onProgress?: Progre
 }
 
 export async function downloadPackage(project: MapProject, onProgress?: ProgressCallback) {
+  const safety = zipPackageSafety(project);
+  if (safety.level === "blocked") throw new Error(safety.message);
   const files = await buildPackageFiles(project, onProgress);
   const root = sanitizeMapName(project.name);
   onProgress?.({ stage: "packaging", plane: project.planes.length, planeCount: project.planes.length, percent: 96, message: "Packing the ready-to-install map folder…" });
@@ -90,28 +106,100 @@ export async function installPackage(project: MapProject, onProgress?: ProgressC
     const mapsDirectory = await picker({ mode: "readwrite", id: "dominions6-maps" });
     const root = sanitizeMapName(project.name);
     const mapDirectory = await mapsDirectory.getDirectoryHandle(root, { create: true });
-    await removeObsoletePlaneArtifacts(mapDirectory, root, project.planes.length);
+    const encoder = new TextEncoder();
+    const transactionId = nextInstallTransactionId();
     const support = supportFiles(project);
-    for (let index = 0; index < project.planes.length; index += 1) {
+    const textArtifacts: InstallArtifact[] = project.planes.map((_, index) => {
       const suffix = index === 0 ? "" : `_plane${index + 1}`;
-      await writeFile(mapDirectory, `${root}${suffix}.map`, new TextEncoder().encode(compileMapText(project, index)));
-    }
-    for (const file of support) await writeFile(mapDirectory, file.name, file.data);
-    for (let index = 0; index < project.planes.length; index += 1) {
-      const plane = project.planes[index]!;
+      return installArtifact(root, transactionId, `${root}${suffix}.map`, encoder.encode(compileMapText(project, index)));
+    });
+    textArtifacts.push(...support.map((file) => installArtifact(root, transactionId, file.name, file.data)));
+    const d6mArtifacts = project.planes.map((_, index) => {
       const suffix = index === 0 ? "" : `_plane${index + 1}`;
-      const data = await encodeD6m(plane, `${project.seed}:d6m:${index}`, (progress) => {
-        const planeFraction = progress.totalRows ? progress.completedRows / progress.totalRows : 0;
-        onProgress?.({
-          stage: "rasterizing",
-          plane: index + 1,
-          planeCount: project.planes.length,
-          percent: Math.round(((index + planeFraction) / project.planes.length) * 92),
-          message: `Rendering ${plane.name} at ${plane.width}×${plane.height}…`,
+      return installArtifact(root, transactionId, `${root}${suffix}.d6m`);
+    });
+    const allArtifacts = [...d6mArtifacts, ...textArtifacts];
+    const temporaryNames = knownAtlasInstallTemporaryNames(root, transactionId);
+    const backups = new Map<string, string | null>();
+    const touchedTargets: string[] = [];
+
+    try {
+      // Stage each raster independently so an all-plane update never retains
+      // every D6M in RAM and no playable file changes during rendering.
+      for (let index = 0; index < project.planes.length; index += 1) {
+        const plane = project.planes[index]!;
+        const artifact = d6mArtifacts[index]!;
+        const data = await encodeD6m(plane, `${project.seed}:d6m:${index}`, (progress) => {
+          const planeFraction = progress.totalRows ? progress.completedRows / progress.totalRows : 0;
+          onProgress?.({
+            stage: "rasterizing",
+            plane: index + 1,
+            planeCount: project.planes.length,
+            percent: Math.round(((index + planeFraction) / project.planes.length) * 84),
+            message: `Rendering ${plane.name} at ${plane.width}×${plane.height}…`,
+          });
         });
-      });
-      onProgress?.({ stage: "writing", plane: index + 1, planeCount: project.planes.length, percent: 94, message: `Installing ${plane.name}…` });
-      await writeFile(mapDirectory, `${root}${suffix}.d6m`, data);
+        onProgress?.({ stage: "writing", plane: index + 1, planeCount: project.planes.length, percent: 86, message: `Staging ${plane.name} safely…` });
+        await writeFile(mapDirectory, artifact.stageName, data);
+      }
+
+      // Map/support compilation already succeeded above. Staging these small
+      // files detects quota or permission failures before current files move.
+      for (const artifact of textArtifacts) await writeFile(mapDirectory, artifact.stageName, artifact.data!);
+
+      // File System Access has no atomic rename. Disk-backed Atlas-only backups
+      // provide deterministic rollback without retaining all old D6Ms in RAM.
+      for (const artifact of allArtifacts) {
+        const existing = await readFileIfExists(mapDirectory, artifact.targetName);
+        if (existing) {
+          await writeFile(mapDirectory, artifact.backupName, existing);
+          backups.set(artifact.targetName, artifact.backupName);
+        } else {
+          backups.set(artifact.targetName, null);
+        }
+      }
+
+      // Publish binaries first. Only after all current D6Ms exist do .map and
+      // support files begin referencing them.
+      for (let index = 0; index < d6mArtifacts.length; index += 1) {
+        const artifact = d6mArtifacts[index]!;
+        touchedTargets.push(artifact.targetName);
+        onProgress?.({ stage: "writing", plane: index + 1, planeCount: project.planes.length, percent: 90 + Math.round(((index + 1) / project.planes.length) * 5), message: `Publishing ${project.planes[index]!.name}…` });
+        await copyFile(mapDirectory, artifact.stageName, artifact.targetName);
+      }
+      for (const artifact of textArtifacts) {
+        touchedTargets.push(artifact.targetName);
+        await copyFile(mapDirectory, artifact.stageName, artifact.targetName);
+      }
+    } catch (error) {
+      const rollbackErrors = await rollbackInstall(mapDirectory, touchedTargets, backups);
+      const cleanupNames = rollbackErrors.length
+        ? new Set([...temporaryNames].filter((name) => name.includes("__stage__")))
+        : temporaryNames;
+      const cleanupErrors = await cleanupInstallArtifacts(mapDirectory, cleanupNames);
+      const recoveryErrors = [...rollbackErrors, ...cleanupErrors];
+      if (recoveryErrors.length) {
+        throw new AggregateError(
+          [error, ...recoveryErrors],
+          "Direct installation failed and the browser could not fully restore or clean every Atlas-owned file. Atlas backup temporary files were retained when restoration failed; unrelated files were not touched. Retry the direct install before hosting.",
+        );
+      }
+      throw error;
+    }
+
+    // Cleanup is deliberately last: temporary/backup artifacts and obsolete
+    // numbered planes remain available until every current file is published.
+    const cleanupErrors = await cleanupInstallArtifacts(mapDirectory, temporaryNames);
+    try {
+      await removeObsoletePlaneArtifacts(mapDirectory, root, project.planes.length);
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+    if (cleanupErrors.length) {
+      throw new AggregateError(
+        cleanupErrors,
+        "The current atlas was installed, but Atlas could not remove every Atlas-owned temporary or obsolete plane file. Unrelated files were not touched; retry the direct install before hosting.",
+      );
     }
     onProgress?.({ stage: "done", plane: project.planes.length, planeCount: project.planes.length, percent: 100, message: "Installed. The map is ready in Dominions 6." });
     return "installed";
@@ -163,6 +251,8 @@ const EDGE_KINDS = new Set([
 const GATE_DIRECTIONS = new Set(["bidirectional", "forward", "reverse"]);
 const GATE_LAYOUTS = new Set(["hub", "chain", "ring", "compatible"]);
 const OCEAN_LAYOUTS = new Set(["natural", "single_continent", "multiple_continents", "island_chains", "inland_sea"]);
+const ECONOMY_BALANCE_MODES = new Set(["none", "soft", "hard"]);
+const OVERLAND_TOPOLOGY_MODES = new Set(["open", "competitive", "strategic"]);
 const RESOLUTIONS = new Set(["compact", "2k", "4k", "square-max", "custom"]);
 
 function assertProjectShape(project: Record<string, unknown>): void {
@@ -212,6 +302,7 @@ function assertProjectShape(project: Record<string, unknown>): void {
     });
   });
   stringAt(project.rawDirectives, "project.rawDirectives");
+  if (project.generationWarnings !== undefined) stringArrayAt(project.generationWarnings, "project.generationWarnings");
   stringAt(project.createdAt, "project.createdAt");
   stringAt(project.updatedAt, "project.updatedAt");
 }
@@ -225,6 +316,8 @@ function assertGenerationSettings(settings: Record<string, unknown>): void {
   optionalNumberAt(settings.continentCount, "project.settings.continentCount");
   optionalNumberAt(settings.specialPlaneSizePercent, "project.settings.specialPlaneSizePercent");
   optionalNumberAt(settings.provinceNameSeed, "project.settings.provinceNameSeed");
+  optionalEnumAt(settings.economyBalance, ECONOMY_BALANCE_MODES, "project.settings.economyBalance");
+  optionalEnumAt(settings.overlandTopology, OVERLAND_TOPOLOGY_MODES, "project.settings.overlandTopology");
   if (settings.startDistribution !== undefined) {
     const distribution = recordAt(settings.startDistribution, "project.settings.startDistribution");
     for (const key of ["land", "coastal", "water", "cave", "other"] as const) {
@@ -266,8 +359,13 @@ function assertPlane(plane: Record<string, unknown>, index: number): void {
   optionalStringAt(plane.mapTextColor, `${path}.mapTextColor`);
   optionalStringAt(plane.mapDominionColor, `${path}.mapDominionColor`);
   const provinces = arrayAt(plane.provinces, `${path}.provinces`);
-  if (provinces.length === 0) throw new Error(`${path}.provinces must contain at least one province.`);
   provinces.forEach((value, provinceIndex) => assertProvince(recordAt(value, `${path}.provinces[${provinceIndex}]`), `${path}.provinces[${provinceIndex}]`));
+  provinces.forEach((value, provinceIndex) => {
+    const province = value as Record<string, unknown>;
+    if (province.index !== provinceIndex + 1) {
+      throw new Error(`${path}.provinces must be stored in local province-number order; expected index ${provinceIndex + 1} at array position ${provinceIndex}.`);
+    }
+  });
   arrayAt(plane.edges, `${path}.edges`).forEach((value, edgeIndex) => {
     const edgePath = `${path}.edges[${edgeIndex}]`;
     const edge = recordAt(value, edgePath);
@@ -414,6 +512,28 @@ export function estimatedPackageBytes(project: MapProject): number {
   return project.planes.reduce((sum, plane) => sum + estimatedD6mBytes(plane), 0) + 64_000;
 }
 
+export function zipPackageSafety(project: MapProject): ZipPackageSafety {
+  const estimatedBytes = estimatedPackageBytes(project);
+  const estimatedPeakBytes = estimatedBytes * 3 + 16 * 1024 * 1024;
+  if (estimatedPeakBytes >= ZIP_MEMORY_LIMIT_PEAK_BYTES) {
+    return {
+      level: "blocked",
+      estimatedPackageBytes: estimatedBytes,
+      estimatedPeakBytes,
+      message: "This ZIP could exceed the browser's safe memory limit. Use direct install, reduce plane count or resolution, or export the editable project instead.",
+    };
+  }
+  if (estimatedPeakBytes >= ZIP_MEMORY_WARNING_PEAK_BYTES) {
+    return {
+      level: "warning",
+      estimatedPackageBytes: estimatedBytes,
+      estimatedPeakBytes,
+      message: "This ZIP may use substantial browser memory. Direct install is safer and streams one plane at a time.",
+    };
+  }
+  return { level: "safe", estimatedPackageBytes: estimatedBytes, estimatedPeakBytes };
+}
+
 function supportFiles(project: MapProject): PackageFile[] {
   const encoder = new TextEncoder();
   const fairness = calculateFairness(project);
@@ -471,7 +591,7 @@ function supportFiles(project: MapProject): PackageFile[] {
     `Main map file: ${sanitizeMapName(project.name)}.map`,
     "",
     "Direct install",
-    "Choose the Dominions 6 user-data maps folder. Pantokrator Atlas removes obsolete plane files before writing the update.",
+    "Choose the Dominions 6 user-data maps folder. Pantokrator Atlas stages and backs up its own files, publishes current D6Ms before their map references, then removes temporary and obsolete plane files last.",
     "",
     "ZIP install or update",
     "Before extracting, remove any existing map folder with the same name, then extract this entire folder into the Dominions 6 maps directory.",
@@ -482,6 +602,7 @@ function supportFiles(project: MapProject): PackageFile[] {
     { name: "atlas_project.json", data: encoder.encode(JSON.stringify(project, null, 2)) },
     { name: "balance_report.txt", data: encoder.encode(report) },
     { name: "host_settings.txt", data: encoder.encode(host) },
+    { name: "host_topology.txt", data: encoder.encode(buildHostTopologyReport(project)) },
   ];
 }
 
@@ -511,6 +632,103 @@ async function writeFile(directory: FileSystemDirectoryHandle, name: string, dat
   const writable = await handle.createWritable();
   await writable.write(ownedBuffer(data));
   await writable.close();
+}
+
+interface InstallArtifact {
+  targetName: string;
+  stageName: string;
+  backupName: string;
+  data?: Uint8Array;
+}
+
+const INSTALL_TEMP_PREFIX = ".__pantokrator_atlas_install__";
+const SUPPORT_FILE_NAMES = ["INSTALL.txt", "atlas_project.json", "balance_report.txt", "host_settings.txt", "host_topology.txt"] as const;
+let installTransactionSequence = 0;
+
+function nextInstallTransactionId(): string {
+  installTransactionSequence += 1;
+  return `${Date.now().toString(36)}_${installTransactionSequence.toString(36)}`;
+}
+
+function temporaryInstallName(root: string, transactionId: string, role: "stage" | "backup", targetName: string): string {
+  return `${INSTALL_TEMP_PREFIX}${root}__${transactionId}__${role}__${targetName}.tmp`;
+}
+
+function installArtifact(root: string, transactionId: string, targetName: string, data?: Uint8Array): InstallArtifact {
+  return {
+    targetName,
+    stageName: temporaryInstallName(root, transactionId, "stage", targetName),
+    backupName: temporaryInstallName(root, transactionId, "backup", targetName),
+    data,
+  };
+}
+
+function knownAtlasInstallTemporaryNames(root: string, transactionId: string): Set<string> {
+  const targets: string[] = [...SUPPORT_FILE_NAMES];
+  for (let planeNumber = 1; planeNumber <= 8; planeNumber += 1) {
+    const suffix = planeNumber === 1 ? "" : `_plane${planeNumber}`;
+    targets.push(`${root}${suffix}.map`, `${root}${suffix}.d6m`);
+  }
+  return new Set(targets.flatMap((target) => [
+    temporaryInstallName(root, transactionId, "stage", target),
+    temporaryInstallName(root, transactionId, "backup", target),
+  ]));
+}
+
+async function readFileIfExists(directory: FileSystemDirectoryHandle, name: string): Promise<Uint8Array | undefined> {
+  try {
+    const handle = await directory.getFileHandle(name);
+    const file = await handle.getFile();
+    return new Uint8Array(await file.arrayBuffer());
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "NotFoundError") return undefined;
+    throw error;
+  }
+}
+
+async function copyFile(directory: FileSystemDirectoryHandle, sourceName: string, targetName: string): Promise<void> {
+  const data = await readFileIfExists(directory, sourceName);
+  if (!data) throw new Error(`Atlas install staging file ${sourceName} is missing.`);
+  await writeFile(directory, targetName, data);
+}
+
+async function removeFileIfExists(directory: FileSystemDirectoryHandle, name: string): Promise<void> {
+  try {
+    await directory.removeEntry(name);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "NotFoundError") return;
+    throw error;
+  }
+}
+
+async function rollbackInstall(
+  directory: FileSystemDirectoryHandle,
+  touchedTargets: string[],
+  backups: ReadonlyMap<string, string | null>,
+): Promise<unknown[]> {
+  const errors: unknown[] = [];
+  for (const target of [...touchedTargets].reverse()) {
+    try {
+      const backup = backups.get(target);
+      if (backup) await copyFile(directory, backup, target);
+      else await removeFileIfExists(directory, target);
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  return errors;
+}
+
+async function cleanupInstallArtifacts(directory: FileSystemDirectoryHandle, names: ReadonlySet<string>): Promise<unknown[]> {
+  const errors: unknown[] = [];
+  for (const name of names) {
+    try {
+      await removeFileIfExists(directory, name);
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  return errors;
 }
 
 function downloadBlob(blob: Blob, filename: string) {

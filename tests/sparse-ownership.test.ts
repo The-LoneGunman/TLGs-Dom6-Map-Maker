@@ -188,6 +188,6 @@ test("cave-start nation validation rejects owner IDs and exposes assignment shor
   const issues = validateProject(project);
   assert.ok(issues.some((issue) => issue.severity === "error" && issue.message.includes("IDs of 5 or greater")));
   assert.ok(issues.some((issue) => issue.severity === "warning" && issue.message.includes("duplicated")));
-  assert.ok(issues.some((issue) => issue.severity === "warning" && issue.message.includes("vanilla 6.35 catalog")));
+  assert.ok(issues.some((issue) => issue.severity === "warning" && issue.message.includes("active catalog")));
   assert.ok(issues.some((issue) => issue.severity === "error" && issue.message.includes("choose Generate")));
 });

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { parseProject } from "../src/export";
-import { createDefaultProject } from "../src/generator";
+import { addPlane, createDefaultProject } from "../src/generator";
 
 interface MutableProvince extends Record<string, unknown> {
   battle: unknown;
@@ -50,7 +50,7 @@ test("project import preserves a complete schema-v1 project and optional-field m
   assert.equal(migrated.startType, "land");
 });
 
-test("project import rejects missing and empty plane collections before cloning", () => {
+test("project import rejects a missing atlas but round-trips intentionally staged empty planes", () => {
   assert.throws(
     () => parseProject(serializedMutation((draft) => { delete (draft as Record<string, unknown>).planes; })),
     /project\.planes must be an array/,
@@ -59,10 +59,19 @@ test("project import rejects missing and empty plane collections before cloning"
     () => parseProject(serializedMutation((draft) => { draft.planes = []; })),
     /project\.planes must contain at least one plane/,
   );
-  assert.throws(
-    () => parseProject(serializedMutation((draft) => { draft.planes[0].provinces = []; })),
-    /provinces must contain at least one province/,
-  );
+  const staged = addPlane(createDefaultProject("import-staged-plane"), "underworld", { generate: false });
+  const restored = parseProject(JSON.stringify(staged));
+  assert.equal(restored.planes.length, 2);
+  assert.equal(restored.planes[1]!.provinces.length, 0);
+  assert.equal(restored.planes[1]!.kind, "underworld");
+});
+
+test("project import rejects province arrays that do not match local province-number order", () => {
+  assert.throws(() => parseProject(serializedMutation((draft) => {
+    const first = draft.planes[0]!.provinces[0]!;
+    draft.planes[0]!.provinces[0] = draft.planes[0]!.provinces[1]!;
+    draft.planes[0]!.provinces[1] = first;
+  })), /must be stored in local province-number order/);
 });
 
 test("project import rejects malformed required top-level and settings fields", () => {
@@ -107,4 +116,26 @@ test("project import rejects unsupported schemas and non-project JSON without cr
   assert.throws(() => parseProject("[]"), /not a Pantokrator Atlas project/);
   assert.throws(() => parseProject(JSON.stringify({ schemaVersion: 99 })), /Unsupported project schema 99/);
   assert.throws(() => parseProject("{oops"), SyntaxError);
+});
+
+test("project import preserves valid generation policies and rejects unknown values", () => {
+  const project = createDefaultProject("policy-import");
+  project.settings.economyBalance = "soft";
+  project.settings.overlandTopology = "strategic";
+  project.generationWarnings = ["A constrained manual realm retained fewer guardians than requested."];
+
+  const parsed = parseProject(JSON.stringify(project));
+  assert.equal(parsed.settings.economyBalance, "soft");
+  assert.equal(parsed.settings.overlandTopology, "strategic");
+  assert.deepEqual(parsed.generationWarnings, project.generationWarnings);
+
+  assert.throws(() => parseProject(serializedMutation((draft) => {
+    draft.settings.economyBalance = "maximum";
+  })), /project\.settings\.economyBalance has an unsupported value/);
+  assert.throws(() => parseProject(serializedMutation((draft) => {
+    draft.settings.overlandTopology = "maze";
+  })), /project\.settings\.overlandTopology has an unsupported value/);
+  assert.throws(() => parseProject(serializedMutation((draft) => {
+    draft.generationWarnings = [42];
+  })), /project\.generationWarnings\[0\] must be a string/);
 });

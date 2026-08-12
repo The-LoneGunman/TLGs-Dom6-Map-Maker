@@ -119,6 +119,13 @@ const TROOP_TABLES = [
   "nonfort_troop_types_by_nation.csv",
 ];
 
+const UNIT_ROLE_NATION_COMMANDER = 1;
+const UNIT_ROLE_NATION_TROOP = 2;
+const UNIT_ROLE_SITE_COMMANDER = 4;
+const UNIT_ROLE_SITE_TROOP = 8;
+const UNIT_INTERNAL_RECORD = 16;
+const INTERNAL_UNIT_NAME = /(^|\b)(debug|test|xxx|unused)(\b|$)/i;
+
 const [
   unitRows,
   siteRows,
@@ -157,10 +164,23 @@ const roleIds = (tables, context) => new Set(tables.flatMap((rows) => rows
   .map((row) => integer(row.monster_number, context))));
 const leaderIds = roleIds(roleTables.slice(0, LEADER_TABLES.length), "leader unit");
 const troopIds = roleIds(roleTables.slice(LEADER_TABLES.length), "troop unit");
+const siteRoleIds = (pattern, context) => new Set(siteRows.flatMap((row) => Object.entries(row)
+  .filter(([column, value]) => pattern.test(column) && value)
+  .map(([, value]) => integer(value, context))));
+// hcom/hmon are the commander's/troop's recruit slots supplied by a magic
+// site. natcom/natmon are the nation-restricted site recruit slots. Together
+// with the six nation recruitment tables, these are authoritative role data
+// and avoid guessing a unit's role from its display name.
+const siteCommanderIds = siteRoleIds(/^hcom\d+$|^natcom$/, "site commander unit");
+const siteTroopIds = siteRoleIds(/^hmon\d+$|^natmon$/, "site troop unit");
 
 const units = unitRows.filter((row) => row.id && row.name).map((row) => {
   const id = integer(row.id, "unit");
-  const roleFlags = (leaderIds.has(id) ? 1 : 0) | (troopIds.has(id) ? 2 : 0);
+  const roleFlags = (leaderIds.has(id) ? UNIT_ROLE_NATION_COMMANDER : 0)
+    | (troopIds.has(id) ? UNIT_ROLE_NATION_TROOP : 0)
+    | (siteCommanderIds.has(id) ? UNIT_ROLE_SITE_COMMANDER : 0)
+    | (siteTroopIds.has(id) ? UNIT_ROLE_SITE_TROOP : 0)
+    | (INTERNAL_UNIT_NAME.test(row.name) ? UNIT_INTERNAL_RECORD : 0);
   return [id, row.name, roleFlags];
 });
 const sites = siteRows.filter((row) => row.id && row.name).map((row) => [
@@ -180,14 +200,27 @@ if (units.length !== 4091) throw new Error(`Expected 4,091 units, found ${units.
 if (sites.length !== 1253) throw new Error(`Expected 1,253 sites, found ${sites.length}.`);
 if (leaderIds.size !== 627) throw new Error(`Expected 627 nation-recruitable leaders, found ${leaderIds.size}.`);
 if (troopIds.size !== 679) throw new Error(`Expected 679 nation-recruitable troops, found ${troopIds.size}.`);
+if (siteCommanderIds.size !== 234) throw new Error(`Expected 234 site-recruitable commanders, found ${siteCommanderIds.size}.`);
+if (siteTroopIds.size !== 170) throw new Error(`Expected 170 site-recruitable troops, found ${siteTroopIds.size}.`);
 if ([...leaderIds].some((id) => !units.some(([unitId]) => unitId === id))) throw new Error("Leader table references a missing unit.");
 if ([...troopIds].some((id) => !units.some(([unitId]) => unitId === id))) throw new Error("Troop table references a missing unit.");
+if ([...siteCommanderIds].some((id) => !units.some(([unitId]) => unitId === id))) throw new Error("Magic-site commander slot references a missing unit.");
+if ([...siteTroopIds].some((id) => !units.some(([unitId]) => unitId === id))) throw new Error("Magic-site troop slot references a missing unit.");
+if (units.filter(([, , flags]) => (flags & (UNIT_ROLE_NATION_COMMANDER | UNIT_ROLE_SITE_COMMANDER)) !== 0).length !== 850) {
+  throw new Error("Expected 850 known commander-role units.");
+}
+if (units.filter(([, , flags]) => (flags & (UNIT_ROLE_NATION_TROOP | UNIT_ROLE_SITE_TROOP)) !== 0).length !== 842) {
+  throw new Error("Expected 842 known troop-role units.");
+}
+if (units.filter(([, , flags]) => (flags & UNIT_INTERNAL_RECORD) !== 0).length !== 13) {
+  throw new Error("Expected 13 internal/debug unit records.");
+}
 if (nationHomeSiteIds.size !== 208) throw new Error(`Expected 208 referenced nation home/future sites, found ${nationHomeSiteIds.size}.`);
 if (poptypes.length !== 82 || poptypes[0][0] !== 25 || poptypes.at(-1)[0] !== 106) throw new Error("Poptype table is incomplete.");
 
 const output = {
   format: "pantokrator-atlas/compact-catalog",
-  formatVersion: 2,
+  formatVersion: 3,
   gameVersion: "6.35",
   sourceRevision: "cfac4311bc0b58053b8dead7bffbc036ba9bd5dc",
   sourceDate: "2026-05-26",
@@ -206,6 +239,11 @@ console.log(JSON.stringify({
   units: units.length,
   nationRecruitableLeaders: leaderIds.size,
   nationRecruitableTroops: troopIds.size,
+  siteRecruitableCommanders: siteCommanderIds.size,
+  siteRecruitableTroops: siteTroopIds.size,
+  knownCommanderRoles: units.filter(([, , flags]) => (flags & (UNIT_ROLE_NATION_COMMANDER | UNIT_ROLE_SITE_COMMANDER)) !== 0).length,
+  knownTroopRoles: units.filter(([, , flags]) => (flags & (UNIT_ROLE_NATION_TROOP | UNIT_ROLE_SITE_TROOP)) !== 0).length,
+  internalUnitRecords: units.filter(([, , flags]) => (flags & UNIT_INTERNAL_RECORD) !== 0).length,
   sites: sites.length,
   nationHomeSites: nationHomeSiteIds.size,
   nations: nations.length,

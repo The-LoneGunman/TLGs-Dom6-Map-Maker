@@ -57,6 +57,8 @@ export interface PlaneConnectionRule {
 
 export type GateDirection = "bidirectional" | "forward" | "reverse";
 export type GateLayout = "hub" | "chain" | "ring" | "compatible";
+export type EconomyBalanceMode = "none" | "soft" | "hard";
+export type OverlandTopologyMode = "open" | "competitive" | "strategic";
 
 /** Large-scale overland land/sea arrangement. Missing means natural. */
 export type OceanLayout =
@@ -300,6 +302,10 @@ export interface GenerationSettings {
   biomeCohesion: number;
   throneCount: number;
   siteFrequency?: number;
+  /** Missing preserves the current strict early-economy correction. */
+  economyBalance?: EconomyBalanceMode;
+  /** Missing preserves the current generated overland border profile. */
+  overlandTopology?: OverlandTopologyMode;
   /** Missing in schema-v1 projects means every requested start is surface land. */
   startDistribution?: StartDistribution;
   /** Preferred traversable connection count at starts; defaults to four. */
@@ -325,6 +331,8 @@ export interface MapProject {
   seed: string;
   targetVersion: number;
   settings: GenerationSettings;
+  /** Non-blocking deterministic generation constraints for the editor to surface. */
+  generationWarnings?: string[];
   mapNoHide: boolean;
   noDeepCaves: boolean;
   noDeepChoice: boolean;
@@ -429,7 +437,8 @@ export function sanitizeMapName(value: string): string {
     .replace(/_+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 64);
-  return cleaned || "pantokrator_atlas";
+  const fallback = cleaned || "pantokrator_atlas";
+  return /^(?:CON|PRN|AUX|NUL)$/i.test(fallback) ? `${fallback}_map` : fallback;
 }
 
 export function isWaterTerrain(terrain: TerrainKey): boolean {
@@ -551,6 +560,19 @@ export function clearProvinceForNationSpecificStart(province: Province): void {
 }
 
 /**
+ * Make an authored generic or team start safe without erasing deliberate
+ * capital economy, sites, or buildings. Independent guardian groups are not
+ * valid capital content, while no-start and throne markers directly conflict
+ * with a player start.
+ */
+export function prepareProvinceForPlayerStart(province: Province): void {
+  province.noStart = false;
+  province.throne = "avoid";
+  province.fixedThrone = undefined;
+  province.defenders = [];
+}
+
+/**
  * Atomically add, replace, or remove a forced nation start. Adding an
  * assignment also removes any older assignment for that nation and scrubs
  * independent-province features from the destination capital.
@@ -586,6 +608,16 @@ export function clearAllNationSpecificStartFeatures(project: MapProject): void {
     const province = project.planes.find((plane) => plane.id === start.planeId)?.provinces.find((item) => item.id === start.provinceId);
     if (province) clearProvinceForNationSpecificStart(province);
   }
+}
+
+/** Reapply the clean-capital invariant to the deduplicated authored union. */
+export function clearAllPlayerStartFeatures(project: MapProject): void {
+  for (const plane of project.planes) {
+    for (const province of plane.provinces) {
+      if (province.start || province.teamStart !== undefined) prepareProvinceForPlayerStart(province);
+    }
+  }
+  clearAllNationSpecificStartFeatures(project);
 }
 
 export function cloneProject(project: MapProject): MapProject {

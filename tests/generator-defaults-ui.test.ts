@@ -16,6 +16,8 @@ const RESET_SETTING_KEYS = [
   "specialPlaneSizePercent",
   "provinceNameSeed",
   "biomeCohesion",
+  "economyBalance",
+  "overlandTopology",
   "throneCount",
   "startDistribution",
   "startDegreeTarget",
@@ -57,6 +59,8 @@ test("reset generator defaults has an exact settings-only map-preserving contrac
     specialPlaneSizePercent: 175,
     provinceNameSeed: 9,
     biomeCohesion: 9,
+    economyBalance: "none",
+    overlandTopology: "strategic",
     throneCount: 31,
     startDistribution: { land: 3, coastal: 2, water: 2, cave: 3, other: 2 },
     startDegreeTarget: 7,
@@ -123,6 +127,21 @@ test("new plane names remain distinguishable when the same archetype is added re
   assert.equal(uniquePlaneName(project.planes, "The Dreamlands"), "The Dreamlands");
 });
 
+test("staging another plane preserves every existing actual gateway", () => {
+  const project = createDefaultProject("staged-plane-gates");
+  project.gates = [{
+    id: "manual-gate",
+    gateNumber: 71,
+    endpoints: [
+      { planeId: project.planes[0]!.id, provinceId: project.planes[0]!.provinces[0]!.id },
+      { planeId: project.planes[0]!.id, provinceId: project.planes[0]!.provinces[1]!.id },
+    ],
+  }];
+  const staged = addPlane(project, "underworld", { generate: false });
+  assert.deepEqual(staged.gates, project.gates);
+  assert.equal(staged.planes[1]!.provinces.length, 0);
+});
+
 test("Generate copy and completion reporting disclose effective ocean-layout normalization", () => {
   const source = readFileSync(new URL("../src/MapMakerApp.tsx", import.meta.url), "utf8");
   assert.match(source, /Island chains use at least \{ISLAND_CHAIN_MIN_WATER_PERCENT\}% water/);
@@ -130,4 +149,13 @@ test("Generate copy and completion reporting disclose effective ocean-layout nor
   assert.match(source, /Island chains used the \$\{ISLAND_CHAIN_MIN_WATER_PERCENT\}% effective water minimum/);
   assert.match(source, /continentNote\.message/);
   assert.doesNotMatch(source, /Players Ã— provinces per player/);
+});
+
+test("Generate exposes documented economy and overland policy choices", () => {
+  const html = renderToStaticMarkup(createElement(MapMakerApp));
+  assert.match(html, />Economy balance</);
+  assert.match(html, />Hard competitive balance</);
+  assert.match(html, />Overland topology</);
+  assert.match(html, />Competitive mix</);
+  assert.match(html, /sparse and cave realms keep their authored route profiles/);
 });

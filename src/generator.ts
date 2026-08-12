@@ -3,7 +3,7 @@ import {
   MAX_PLANES,
   RESOLUTION_PRESETS,
   SCHEMA_VERSION,
-  clearAllNationSpecificStartFeatures,
+  clearAllPlayerStartFeatures,
   cloneProject,
   effectiveProvinceTerrainFlags,
   isBlockedProvince,
@@ -11,8 +11,10 @@ import {
   isCaveProvince,
   isWaterProvince,
   isWaterTerrain,
+  prepareProvinceForPlayerStart,
   setNationSpecificStart,
   type BiomeKey,
+  type EconomyBalanceMode,
   type Edge,
   type EdgeKind,
   type FairnessMetrics,
@@ -23,6 +25,7 @@ import {
   type MagicPath,
   type MapProject,
   type OceanLayout,
+  type OverlandTopologyMode,
   type Plane,
   type PlaneConnectionRule,
   type PlaneKind,
@@ -126,6 +129,11 @@ export const GUARDIAN_CATALOG_POOLS = {
   custom: { commanders: ["34"], units: ["18", "17", "28"] },
   water: { commanders: ["1067"], units: ["1046", "545", "565"] },
   cave_water: { commanders: ["1463", "1471"], units: ["1452", "1453", "1462", "1464", "1465", "1489"] },
+  dream_water: { commanders: ["651", "1572"], units: ["3626", "3913", "3983", "3984", "3985", "3986"] },
+  elemental_water: { commanders: ["3730"], units: ["3731", "3733", "3735", "3743"] },
+  storm_water: { commanders: ["3374"], units: ["1054", "1055", "3735"] },
+  hell_water: { commanders: ["1662"], units: ["904"] },
+  abyss_water: { commanders: ["652", "3853"], units: ["307", "308", "2210", "2211", "2213", "3852"] },
 } as const;
 
 /**
@@ -136,9 +144,29 @@ export const VERIFIED_WATER_CAPABLE_GUARDIAN_IDS = [
   "1067", "1046", "545", "565",
   "1463", "1471", "1452", "1453", "1462", "1464", "1465", "1489",
   "2844", "566", "672", "673", "674", "676", "677",
+  "651", "1572", "3626", "3913", "3983", "3984", "3985", "3986",
+  "3730", "3731", "3733", "3735", "3743",
+  "3374", "1054", "1055",
+  "1662", "904",
+  "652", "3853", "307", "308", "2210", "2211", "2213", "3852",
 ] as const;
 
 type GuardianTheme = keyof typeof GUARDIAN_CATALOG_POOLS;
+
+/**
+ * Vanilla has no custom poptype command for a wholly new planar population.
+ * These curated native aquatic subsets keep recruitment water-legal while
+ * making flooded special realms visibly distinct from an ordinary sea.
+ */
+export const THEMED_AQUATIC_POPTYPE_POOLS: Partial<Record<GuardianTheme, readonly number[]>> = {
+  cave_water: [65, 95, 105],
+  underworld: [65, 95, 105],
+  dream_water: [72, 97],
+  elemental_water: [31, 63, 64, 73],
+  storm_water: [72, 97],
+  hell_water: [65, 98, 105],
+  abyss_water: [65, 95, 98],
+};
 
 /**
  * Poptypes are Dominions' native independent-population templates. The manual
@@ -315,6 +343,8 @@ export function createDefaultProject(seed = "pantokrator-001"): MapProject {
     provinceNameSeed: 0,
     biomeCohesion: 68,
     throneCount: 8,
+    economyBalance: "hard",
+    overlandTopology: "competitive",
     startDistribution: { land: 6, coastal: 0, water: 0, cave: 0, other: 0 },
     startDegreeTarget: 4,
     caveStartNations: [],
@@ -389,7 +419,7 @@ export function addPlane(project: MapProject, kind: PlaneKind = "underworld", op
   if (options.generate !== false) {
     regenerateGeneratedProvinceNames(next.planes, next.seed, next.settings.provinceNameSeed ?? 0);
   }
-  next.gates = options.generate === false ? [] : generateGates(next);
+  if (options.generate !== false) next.gates = generateGates(next);
   next.updatedAt = new Date().toISOString();
   return next;
 }
@@ -397,6 +427,7 @@ export function addPlane(project: MapProject, kind: PlaneKind = "underworld", op
 export function generateProject(project: MapProject): MapProject {
   const next = cloneProject(project);
   removeGeneratedCaveSpecificStarts(next);
+  next.generationWarnings = [];
   next.schemaVersion = SCHEMA_VERSION;
   next.settings.players = clamp(Math.round(next.settings.players), 2, 32);
   next.settings.provincesPerPlayer = clamp(Math.round(next.settings.provincesPerPlayer), 8, 30);
@@ -412,6 +443,8 @@ export function generateProject(project: MapProject): MapProject {
   next.settings.provinceNameSeed = Math.max(0, Math.round(next.settings.provinceNameSeed ?? 0));
   next.settings.biomeCohesion = clamp(Math.round(next.settings.biomeCohesion), 0, 100);
   next.settings.throneCount = clamp(Math.round(next.settings.throneCount), 0, 64);
+  next.settings.economyBalance = normalizeEconomyBalanceMode(next.settings.economyBalance);
+  next.settings.overlandTopology = normalizeOverlandTopologyMode(next.settings.overlandTopology);
   next.settings.startDegreeTarget = clamp(Math.round(next.settings.startDegreeTarget ?? 4), 1, 8);
   next.settings.caveStartNations = normalizeCaveStartNations(next.settings.caveStartNations);
   next.settings.gateLayout = normalizeGateLayout(next.settings.gateLayout);
@@ -463,7 +496,11 @@ export function generateProject(project: MapProject): MapProject {
       } else {
         const allocatedStarts = allocatedPlaneStarts(requestedStarts.cave, caveStartPlaneIndexes, index)
           + allocatedPlaneStarts(requestedStarts.other, otherStartPlaneIndexes, index);
-        const minimumForStarts = allocatedStarts ? allocatedStarts * 8 : 18;
+        // Higher requested capital degree expands the protected two-ring. Scale
+        // capacity with it, then reserve four additional neutral provinces per
+        // start so hard special realms retain themed guardians.
+        const provincesPerSpecialStart = 12 + 2 * (next.settings.startDegreeTarget ?? 4);
+        const minimumForStarts = allocatedStarts ? allocatedStarts * provincesPerSpecialStart : 18;
         normalized.provinceTarget = Math.max(
           18,
           minimumForStarts,
@@ -487,20 +524,32 @@ export function generateProject(project: MapProject): MapProject {
   }
   placeDistributedStarts(next, preparedStartAnchors);
   assignConfiguredCaveStarts(next);
+  for (const plane of next.planes) {
+    applyGeneratedOverlandTopology(
+      plane,
+      next.settings.overlandTopology,
+      `${next.seed}:overland-topology:${plane.id}`,
+      next.specificStarts.filter((start) => start.planeId === plane.id).map((start) => start.provinceId),
+    );
+  }
   // Gates are movement edges for throne-access balance, so establish them
   // before globally distributing thrones. Throne candidates then exclude the
   // chosen endpoints instead of forcing a second gate roll afterward.
   next.gates = generateGates(next);
   distributeThrones(next);
+  const economyMode = normalizeEconomyBalanceMode(next.settings.economyBalance);
+  const softPopulationBaseline = economyMode === "soft" ? capturePopulations(next.planes) : undefined;
   for (const plane of next.planes) {
-    if (plane.provinces.some((province) => province.start)) balanceStartRegions(plane);
+    if (economyMode !== "none" && plane.provinces.some((province) => province.start)) balanceStartRegions(plane);
     markProvinceSizes(plane);
   }
-  balanceGlobalStartRegions(next);
+  if (economyMode !== "none") balanceGlobalStartRegions(next);
+  if (softPopulationBaseline) softenPopulationCorrections(softPopulationBaseline);
   // Start balancing can write population/economy values after #specstart
   // assignment. Reapply the clean-capital invariant as the final strategic
-  // mutation so generated and preserved manual specific starts behave alike.
-  clearAllNationSpecificStartFeatures(next);
+  // mutation so generated and preserved authored starts behave alike.
+  clearAllPlayerStartFeatures(next);
+  appendGuardianCapacityWarnings(next);
   regenerateGeneratedProvinceNames(next.planes, next.seed, next.settings.provinceNameSeed);
   next.updatedAt = new Date().toISOString();
   return next;
@@ -934,6 +983,12 @@ export function generatePlane(
     const siteBias = mergePaths(siteBiasFor(terrainBiome.terrain, climate), profile.sitePaths, 3);
     const id = idFor(stageSeed, "province", index);
     const authored = authoredNames.get(id) ?? authoredNamesByIndex.get(index + 1);
+    const warmer = source.variant === "volcanic" || source.variant === "infernal"
+      ? rng.chance(0.62)
+      : climate.temperature > 0.89 && rng.chance(0.35);
+    const colder = !warmer && (source.variant === "frozen"
+      ? rng.chance(0.68)
+      : climate.temperature < 0.12 && rng.chance(0.35));
     provinces.push({
       id,
       index: index + 1,
@@ -950,12 +1005,8 @@ export function generatePlane(
       large: false,
       noStart: isBlockedTerrain(terrainBiome.terrain),
       manySites: rng.chance(profile.manySitesChance),
-      warmer: source.variant === "volcanic" || source.variant === "infernal"
-        ? rng.chance(0.62)
-        : climate.temperature > 0.89 && rng.chance(0.35),
-      colder: source.variant === "frozen"
-        ? rng.chance(0.68)
-        : climate.temperature < 0.12 && rng.chance(0.35),
+      warmer,
+      colder,
       siteBias,
       start: false,
       throne: "none",
@@ -1015,8 +1066,18 @@ export function generatePlane(
       repairStartBorders(generated);
       clearStartZoneGuardians(generated);
     }
+    applyGeneratedOverlandTopology(generated, settings.overlandTopology, `${stageSeed}:overland-topology`);
     placeThrones(generated, planeIndex === 0 ? settings.throneCount : Math.max(1, Math.round(settings.throneCount * 0.35)), stageSeed);
-    if (planeIndex === 0) balanceStartRegions(generated);
+    if (planeIndex === 0) {
+      const economyMode = normalizeEconomyBalanceMode(settings.economyBalance);
+      const softPopulationBaseline = economyMode === "soft" ? capturePopulations([generated]) : undefined;
+      if (economyMode !== "none") balanceStartRegions(generated);
+      if (softPopulationBaseline) softenPopulationCorrections(softPopulationBaseline);
+    }
+  } else if (normalizeOverlandTopologyMode(settings.overlandTopology) === "open") {
+    // Open borders do not depend on capital placement and are idempotent when
+    // a deferred project generation applies the policy again later.
+    applyGeneratedOverlandTopology(generated, "open", `${stageSeed}:overland-topology`);
   }
   markProvinceSizes(generated);
   regenerateGeneratedProvinceNames([generated], stageSeed, settings.provinceNameSeed ?? 0);
@@ -1989,7 +2050,10 @@ function poptypesForProvince(
   variant: PlaneVariant,
   profile: ArchetypeProfile,
 ): readonly number[] {
-  if (isWaterProvince(province)) return AQUATIC_POPTYPE_POOL;
+  if (isWaterProvince(province)) {
+    const theme = guardianThemeFor(kind, variant, province);
+    return THEMED_AQUATIC_POPTYPE_POOLS[theme] ?? AQUATIC_POPTYPE_POOL;
+  }
   if (kind === "custom") return VARIANT_POPTYPE_POOLS[variant] ?? profile.poptypes;
   if (kind === "elemental") return VARIANT_POPTYPE_POOLS[variant] ?? profile.poptypes;
   return profile.poptypes;
@@ -1999,6 +2063,18 @@ function guardianThemeFor(kind: PlaneKind, variant: PlaneVariant, province: Prov
   if (isWaterProvince(province)) {
     if (kind === "underworld") return "underworld";
     if (kind === "cave" || kind === "cavern") return "cave_water";
+    if (kind === "dream") return "dream_water";
+    if (kind === "elemental") return "elemental_water";
+    if (kind === "hell") return "hell_water";
+    if (kind === "abyss") return "abyss_water";
+    if (kind === "custom") {
+      if (variant === "wild") return "dream_water";
+      if (variant === "volcanic" || variant === "frozen") return "elemental_water";
+      if (variant === "storm") return "storm_water";
+      if (variant === "infernal") return "hell_water";
+      if (variant === "void") return "abyss_water";
+      if (variant === "fungal" || variant === "crystal") return "cave_water";
+    }
     return "water";
   }
   if (kind !== "custom") return kind;
@@ -2770,6 +2846,29 @@ export function scaledStartSeparationTarget(traversableProvinceCount: number, st
   return clamp(Math.round(Math.sqrt(Math.max(1, traversableProvinceCount) / startCount)), 3, 8);
 }
 
+/**
+ * Report start allocations that cannot be represented by the currently
+ * planned plane families. This is intentionally geometry-independent: it
+ * catches impossible plans before an expensive generation run, while the
+ * normal validator remains responsible for cramped-but-possible layouts.
+ */
+export function preflightStartPlan(project: MapProject): string[] {
+  const requested = normalizeStartDistribution(project.settings.startDistribution, project.settings.players);
+  const hasOverland = project.planes.some((plane) => resolvePlaneOwnershipMode(plane) === "solid"
+    && (plane.kind === "surface" || plane.kind === "custom"));
+  const hasCaveRealm = project.planes.some((plane) => ["cave", "cavern", "underworld", "hell", "abyss"].includes(plane.kind));
+  const hasOtherRealm = project.planes.some((plane, index) => index > 0
+    && ["cloud", "air", "dream", "elemental"].includes(plane.kind));
+  const issues: string[] = [];
+
+  if (!hasOverland && requested.land > 0) issues.push(`${requested.land} land start${requested.land === 1 ? " needs" : "s need"} a Surface or solid Custom plane.`);
+  if (!hasOverland && requested.coastal > 0) issues.push(`${requested.coastal} coastal start${requested.coastal === 1 ? " needs" : "s need"} a Surface or solid Custom plane.`);
+  if (!hasOverland && requested.water > 0) issues.push(`${requested.water} water start${requested.water === 1 ? " needs" : "s need"} a Surface or solid Custom plane with generated seas.`);
+  if (!hasCaveRealm && requested.cave > 0) issues.push(`${requested.cave} cave start${requested.cave === 1 ? " needs" : "s need"} a Cave, Cavern, Underworld, Hell, or Abyss plane.`);
+  if (!hasOtherRealm && requested.other > 0) issues.push(`${requested.other} other-plane start${requested.other === 1 ? " needs" : "s need"} a Cloud, Air, Dream, or Elemental plane.`);
+  return issues;
+}
+
 function generatedStartSeparationTargets(project: MapProject, requested: StartDistribution): Map<string, number> {
   const activeCounts = new Map(project.planes.map((plane) => [
     plane.id,
@@ -3276,8 +3375,11 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
     markStart(candidate.province, actualType);
   }
   for (const plane of project.planes) {
-    repairStartBorders(plane);
-    clearStartZoneGuardians(plane, project.specificStarts.filter((start) => start.planeId === plane.id).map((start) => start.provinceId));
+    const specificStartIds = project.specificStarts
+      .filter((start) => start.planeId === plane.id)
+      .map((start) => start.provinceId);
+    repairStartBorders(plane, specificStartIds);
+    clearStartZoneGuardians(plane, specificStartIds);
   }
 }
 
@@ -3371,6 +3473,30 @@ function clearStartZoneGuardians(plane: Plane, extraStartIds: string[] = []) {
       }
     }
     if (flooded) addGuardian(flooded, "flooded");
+  }
+}
+
+function appendGuardianCapacityWarnings(project: MapProject) {
+  for (const plane of project.planes) {
+    const variant = plane.variant ?? ARCHETYPE_PROFILES[plane.kind].defaultVariant;
+    if (isCorePlaneForSizing(plane) || !usesHardSpecialGuardians(plane.kind, variant)) continue;
+    const startIds = new Set(plane.provinces
+      .filter((province) => province.start || province.teamStart !== undefined)
+      .map((province) => province.id));
+    for (const start of project.specificStarts) if (start.planeId === plane.id) startIds.add(start.provinceId);
+    if (!startIds.size) continue;
+    const adjacency = adjacencyFor(plane, { traversableOnly: true });
+    const protectedIds = new Set<string>();
+    for (const startId of startIds) {
+      const distances = shortestDistances(adjacency, startId);
+      for (const province of plane.provinces) if ((distances.get(province.id) ?? 99) <= 2) protectedIds.add(province.id);
+    }
+    const eligible = plane.provinces.filter((province) => !protectedIds.has(province.id) && !isBlockedProvince(province));
+    const guarded = eligible.filter((province) => province.defenders.length > 0).length;
+    if (guarded >= 3) continue;
+    project.generationWarnings!.push(
+      `${plane.name} retained only ${guarded} themed guardian province${guarded === 1 ? "" : "s"}: ${startIds.size} start${startIds.size === 1 ? "" : "s"} and their protected two-rings leave ${eligible.length} eligible neutral province${eligible.length === 1 ? "" : "s"}. Increase the bonus-plane size or reduce starts/connection degree.`,
+    );
   }
 }
 
@@ -3565,19 +3691,21 @@ function isEligibleStartProvince(province: Province): boolean {
 function markStart(province: Province, type: StartType) {
   province.start = true;
   province.startType = type;
-  province.noStart = false;
-  province.throne = "avoid";
+  prepareProvinceForPlayerStart(province);
   province.manySites = false;
-  province.defenders = [];
 }
 
-function repairStartBorders(plane: Plane) {
+function repairStartBorders(plane: Plane, extraStartIds: readonly string[] = []) {
   const byId = new Map(plane.provinces.map((province) => [province.id, province]));
+  const protectedStarts = new Set(plane.provinces
+    .filter((province) => province.start || province.teamStart !== undefined)
+    .map((province) => province.id));
+  for (const id of extraStartIds) if (byId.has(id)) protectedStarts.add(id);
   for (const edge of plane.edges) {
     const a = byId.get(edge.a);
     const b = byId.get(edge.b);
-    if (!a || !b || (!a.start && !b.start) || !blocksReliableStartEdge(edge)) continue;
-    const blockedNeighbour = a.start ? b : a;
+    if (!a || !b || (!protectedStarts.has(a.id) && !protectedStarts.has(b.id)) || !blocksReliableStartEdge(edge)) continue;
+    const blockedNeighbour = protectedStarts.has(a.id) ? b : a;
     if (isBlockedProvince(blockedNeighbour)) {
       blockedNeighbour.terrain = ARCHETYPE_PROFILES[plane.kind].caveFamily ? "cave" : "highland";
       blockedNeighbour.terrainFlags = blockedNeighbour.terrainFlags?.filter((flag) => flag !== "cavewall");
@@ -3589,6 +3717,113 @@ function repairStartBorders(plane: Plane) {
     edge.kind = "standard";
     edge.special = undefined;
   }
+}
+
+function applyGeneratedOverlandTopology(
+  plane: Plane,
+  requestedMode: OverlandTopologyMode | undefined,
+  seed: string,
+  extraStartIds: readonly string[] = [],
+) {
+  const mode = normalizeOverlandTopologyMode(requestedMode);
+  if (mode === "competitive" || !isSurfaceCorePlaneForSizing(plane)) return;
+
+  if (mode === "open") {
+    for (const edge of plane.edges) {
+      if (!blocksReliableStartEdge(edge)) continue;
+      // Keep the same visible province border and terrain silhouette, but make
+      // generated travel reliable. A bridge retains the visible river cue.
+      edge.kind = edge.kind === "river" ? "bridge" : "standard";
+      edge.special = undefined;
+    }
+    return;
+  }
+
+  const protectedStarts = new Set(plane.provinces
+    .filter((province) => province.start || province.teamStart !== undefined)
+    .map((province) => province.id));
+  for (const id of extraStartIds) protectedStarts.add(id);
+  const adjacency = adjacencyFor(plane, { traversableOnly: true });
+  const startDistances = [...protectedStarts].flatMap((id) => adjacency.has(id) ? [shortestDistances(adjacency, id)] : []);
+  const byId = new Map(plane.provinces.map((province) => [province.id, province]));
+  const isAwayFromStarts = (id: string) => startDistances.every((distances) => (distances.get(id) ?? Infinity) >= 2);
+  const candidates = plane.edges.filter((edge) => {
+    const a = byId.get(edge.a);
+    const b = byId.get(edge.b);
+    return a && b
+      && !isBlockedProvince(a)
+      && !isBlockedProvince(b)
+      && edge.kind !== "bridge"
+      && !blocksReliableStartEdge(edge)
+      && isAwayFromStarts(a.id)
+      && isAwayFromStarts(b.id);
+  });
+  const target = Math.min(candidates.length, Math.max(1, Math.round(plane.provinces.length / 10)));
+  const selected = new Set<string>();
+  const regionLoads = new Map<string, number>();
+
+  while (selected.size < target) {
+    const graphBridges = graphBridgeKeysExcluding(plane, selected);
+    const available = candidates.filter((edge) => {
+      const key = connectionKey(edge.a, edge.b);
+      return !selected.has(key) && !graphBridges.has(key);
+    });
+    if (!available.length) break;
+    available.sort((left, right) => {
+      const leftRegion = overlandEdgeRegion(left, byId);
+      const rightRegion = overlandEdgeRegion(right, byId);
+      const loadDifference = (regionLoads.get(leftRegion) ?? 0) - (regionLoads.get(rightRegion) ?? 0);
+      if (loadDifference) return loadDifference;
+      const leftRank = hashString(`${seed}:${connectionKey(left.a, left.b)}`);
+      const rightRank = hashString(`${seed}:${connectionKey(right.a, right.b)}`);
+      if (leftRank !== rightRank) return leftRank - rightRank;
+      return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+    });
+    const edge = available[0]!;
+    const key = connectionKey(edge.a, edge.b);
+    const region = overlandEdgeRegion(edge, byId);
+    edge.kind = strategicBorderKind(edge, byId, selected.size);
+    edge.special = undefined;
+    selected.add(key);
+    regionLoads.set(region, (regionLoads.get(region) ?? 0) + 1);
+  }
+}
+
+function graphBridgeKeysExcluding(plane: Plane, excluded: ReadonlySet<string>): Set<string> {
+  const active = plane.provinces.filter((province) => !isBlockedProvince(province));
+  const byId = new Map(active.map((province) => [province.id, province]));
+  const pairs = new Map<string, SpatialPair>();
+  for (const edge of plane.edges) {
+    const key = connectionKey(edge.a, edge.b);
+    if (excluded.has(key) || isImpassableEdge(edge)) continue;
+    const a = byId.get(edge.a);
+    const b = byId.get(edge.b);
+    if (!a || !b || a.id === b.id || pairs.has(key)) continue;
+    pairs.set(key, { a, b, key, distance: 0 });
+  }
+  return bridgeKeysFromPairs(active, pairs.values());
+}
+
+function overlandEdgeRegion(edge: Pick<Edge, "a" | "b">, byId: ReadonlyMap<string, Province>): string {
+  const a = byId.get(edge.a)!;
+  const b = byId.get(edge.b)!;
+  const x = Math.min(2, Math.floor(clamp((a.x + b.x) / 2, 0, 0.999999) * 3));
+  const y = Math.min(2, Math.floor(clamp((a.y + b.y) / 2, 0, 0.999999) * 3));
+  return `${x}:${y}`;
+}
+
+function strategicBorderKind(
+  edge: Pick<Edge, "a" | "b">,
+  byId: ReadonlyMap<string, Province>,
+  selectionIndex: number,
+): EdgeKind {
+  if (selectionIndex % 3 === 0) return "impassable";
+  const a = byId.get(edge.a)!;
+  const b = byId.get(edge.b)!;
+  const flagsA = effectiveProvinceTerrainFlags(a);
+  const flagsB = effectiveProvinceTerrainFlags(b);
+  const wet = flagsA.has("freshwater") || flagsB.has("freshwater") || flagsA.has("swamp") || flagsB.has("swamp");
+  return wet ? "river" : "mountain_pass";
 }
 
 function blocksReliableStartEdge(edge: Edge): boolean {
@@ -3893,6 +4128,30 @@ function balanceStartRegions(plane: Plane) {
       const current = start.population ?? 8000;
       start.population = clamp(current + deltaPopulation, 4000, 30000);
     });
+  }
+}
+
+type PopulationSnapshot = Map<Province, number | undefined>;
+
+function capturePopulations(planes: readonly Plane[]): PopulationSnapshot {
+  return new Map(planes.flatMap((plane) => plane.provinces.map((province) => [province, province.population] as const)));
+}
+
+/**
+ * Soft economy balance follows the exact hard-balance target but applies less
+ * than half of each correction and caps it to a narrow relative band. This
+ * keeps the ordering none < soft < hard deterministic province by province.
+ */
+function softenPopulationCorrections(baseline: PopulationSnapshot) {
+  for (const [province, original] of baseline) {
+    if (original === undefined) {
+      province.population = undefined;
+      continue;
+    }
+    const hardBalanced = province.population ?? original;
+    const relativeLimit = Math.max(100, Math.round(original * 0.12 / 10) * 10);
+    const lighterDelta = Math.round((hardBalanced - original) * 0.45 / 10) * 10;
+    province.population = original + clamp(lighterDelta, -relativeLimit, relativeLimit);
   }
 }
 
@@ -4457,6 +4716,14 @@ export function normalizeOceanLayout(layout: OceanLayout | undefined): OceanLayo
   return layout === "single_continent" || layout === "multiple_continents" || layout === "island_chains" || layout === "inland_sea"
     ? layout
     : "natural";
+}
+
+export function normalizeEconomyBalanceMode(mode: EconomyBalanceMode | undefined): EconomyBalanceMode {
+  return mode === "none" || mode === "soft" ? mode : "hard";
+}
+
+export function normalizeOverlandTopologyMode(mode: OverlandTopologyMode | undefined): OverlandTopologyMode {
+  return mode === "open" || mode === "strategic" ? mode : "competitive";
 }
 
 function isTrueCaveCorePlane(plane: Pick<Plane, "kind">): boolean {
