@@ -114,3 +114,10 @@ test("autosave conflict UI never resolves a reviewed conflict with an unconditio
   assert.match(source, /Two preserved device copies differ\./);
   assert.match(source, /Inspect other copy/);
 });
+
+test("the fixed project-import affordance remains a readable touch target on narrow screens", () => {
+  const source = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(source, /\.import-fab\s*\{[\s\S]*?min-height:\s*36px;[\s\S]*?font-size:\s*10px;/);
+  assert.match(source, /@media \(max-width: 979px\)[\s\S]*?\.import-fab\s*\{[\s\S]*?min-width:\s*112px;[\s\S]*?min-height:\s*44px;[\s\S]*?font-size:\s*11px;/);
+  assert.match(source, /bottom:\s*max\(10px, env\(safe-area-inset-bottom\)\);/);
+});

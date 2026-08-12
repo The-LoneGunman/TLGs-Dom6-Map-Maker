@@ -106,6 +106,7 @@ export async function installPackage(project: MapProject, onProgress?: ProgressC
     const mapsDirectory = await picker({ mode: "readwrite", id: "dominions6-maps" });
     const root = sanitizeMapName(project.name);
     const mapDirectory = await mapsDirectory.getDirectoryHandle(root, { create: true });
+    await assertSafeInstallDirectory(mapDirectory, root);
     const encoder = new TextEncoder();
     const transactionId = nextInstallTransactionId();
     const support = supportFiles(project);
@@ -278,7 +279,45 @@ const ECONOMY_BALANCE_MODES = new Set(["none", "soft", "hard"]);
 const OVERLAND_TOPOLOGY_MODES = new Set(["open", "competitive", "strategic"]);
 const RESOLUTIONS = new Set(["compact", "2k", "4k", "square-max", "custom"]);
 
+const PROJECT_FIELDS = new Set([
+  "schemaVersion", "name", "description", "seed", "targetVersion", "settings", "generationWarnings", "mapNoHide",
+  "noDeepCaves", "noDeepChoice", "noHomelandNames", "noNameFilter", "sailDistance", "victoryPoints", "allowedPlayers",
+  "computerPlayers", "cannotWin", "specificStarts", "planes", "gates", "rawDirectives", "createdAt", "updatedAt",
+]);
+const GENERATION_SETTING_FIELDS = new Set([
+  "players", "provincesPerPlayer", "waterPercent", "oceanLayout", "continentCount", "specialPlaneSizePercent",
+  "provinceNameSeed", "biomeCohesion", "throneCount", "siteFrequency", "economyBalance", "overlandTopology",
+  "startDistribution", "startDegreeTarget", "caveStartNations", "gateLayout", "gateDirection", "gatePairsPerConnection",
+  "planeConnections", "resolution",
+]);
+const START_DISTRIBUTION_FIELDS = new Set(["land", "coastal", "water", "cave", "other"]);
+const COMPUTER_PLAYER_FIELDS = new Set(["nation", "difficulty"]);
+const SPECIFIC_START_FIELDS = new Set(["nation", "planeId", "provinceId", "source"]);
+const PLANE_CONNECTION_FIELDS = new Set(["a", "b", "pairs", "enabled"]);
+const PLANE_FIELDS = new Set([
+  "id", "name", "kind", "variant", "autoSize", "noGeneratedStarts", "provinceTarget", "width", "height", "wrapX",
+  "wrapY", "ownershipMode", "mapNoHide", "noDeepCaves", "mapTextColor", "mapDominionColor", "provinces", "edges",
+  "rawDirectives",
+]);
+const EDGE_FIELDS = new Set(["id", "a", "b", "kind", "special"]);
+const PROVINCE_FIELDS = new Set([
+  "id", "index", "x", "y", "gridX", "gridY", "name", "nameSource", "biome", "terrain", "terrainFlags",
+  "freshwater", "small", "large", "noStart", "manySites", "warmer", "colder", "siteBias", "start", "startType",
+  "teamStart", "throne", "fixedThrone", "sites", "killRandomSites", "owner", "poptype", "population", "unrest", "fort",
+  "temple", "lab", "provinceDefense", "defenders", "battle", "rawDirectives",
+]);
+const MAGIC_SITE_FIELDS = new Set(["id", "value", "known"]);
+const DEFENSE_FIELDS = new Set([
+  "commander", "clearMagic", "commanderName", "bodyguard", "bodyguardCount", "squads", "experience", "randomEquipment",
+  "items", "magic",
+]);
+const DEFENSE_SQUAD_FIELDS = new Set(["id", "unit", "count"]);
+const BATTLE_FIELDS = new Set(["skybox", "battleMap", "groundColor", "rockColor", "fogColor"]);
+const GATE_FIELDS = new Set(["id", "gateNumber", "direction", "adjacentStartFallback", "endpoints"]);
+const GATE_ENDPOINT_FIELDS = new Set(["planeId", "provinceId"]);
+
 function assertProjectShape(project: Record<string, unknown>): void {
+  assertKnownFields(project, "project", PROJECT_FIELDS);
   stringAt(project.name, "project.name");
   stringAt(project.description, "project.description");
   stringAt(project.seed, "project.seed");
@@ -294,12 +333,14 @@ function assertProjectShape(project: Record<string, unknown>): void {
   numberArrayAt(project.allowedPlayers, "project.allowedPlayers", MAX_PLAYER_ENTRIES);
   boundedArrayAt(project.computerPlayers, "project.computerPlayers", MAX_PLAYER_ENTRIES).forEach((value, index) => {
     const player = recordAt(value, `project.computerPlayers[${index}]`);
+    assertKnownFields(player, `project.computerPlayers[${index}]`, COMPUTER_PLAYER_FIELDS);
     numberAt(player.nation, `project.computerPlayers[${index}].nation`);
     numberAt(player.difficulty, `project.computerPlayers[${index}].difficulty`);
   });
   numberArrayAt(project.cannotWin, "project.cannotWin", MAX_PLAYER_ENTRIES);
   boundedArrayAt(project.specificStarts, "project.specificStarts", MAX_SPECIFIC_STARTS).forEach((value, index) => {
     const start = recordAt(value, `project.specificStarts[${index}]`);
+    assertKnownFields(start, `project.specificStarts[${index}]`, SPECIFIC_START_FIELDS);
     numberAt(start.nation, `project.specificStarts[${index}].nation`);
     idAt(start.planeId, `project.specificStarts[${index}].planeId`);
     idAt(start.provinceId, `project.specificStarts[${index}].provinceId`);
@@ -312,6 +353,7 @@ function assertProjectShape(project: Record<string, unknown>): void {
 
   boundedArrayAt(project.gates, "project.gates", MAX_IMPORTED_GATES).forEach((value, index) => {
     const gate = recordAt(value, `project.gates[${index}]`);
+    assertKnownFields(gate, `project.gates[${index}]`, GATE_FIELDS);
     idAt(gate.id, `project.gates[${index}].id`);
     numberAt(gate.gateNumber, `project.gates[${index}].gateNumber`);
     optionalEnumAt(gate.direction, GATE_DIRECTIONS, `project.gates[${index}].direction`);
@@ -320,6 +362,7 @@ function assertProjectShape(project: Record<string, unknown>): void {
     if (endpoints.length < 2) throw new Error(`project.gates[${index}].endpoints must contain at least two endpoints.`);
     endpoints.forEach((endpointValue, endpointIndex) => {
       const endpoint = recordAt(endpointValue, `project.gates[${index}].endpoints[${endpointIndex}]`);
+      assertKnownFields(endpoint, `project.gates[${index}].endpoints[${endpointIndex}]`, GATE_ENDPOINT_FIELDS);
       idAt(endpoint.planeId, `project.gates[${index}].endpoints[${endpointIndex}].planeId`);
       idAt(endpoint.provinceId, `project.gates[${index}].endpoints[${endpointIndex}].provinceId`);
     });
@@ -331,6 +374,7 @@ function assertProjectShape(project: Record<string, unknown>): void {
 }
 
 function assertGenerationSettings(settings: Record<string, unknown>): void {
+  assertKnownFields(settings, "project.settings", GENERATION_SETTING_FIELDS);
   for (const key of ["players", "provincesPerPlayer", "waterPercent", "biomeCohesion", "throneCount"] as const) {
     numberAt(settings[key], `project.settings.${key}`);
   }
@@ -343,6 +387,7 @@ function assertGenerationSettings(settings: Record<string, unknown>): void {
   optionalEnumAt(settings.overlandTopology, OVERLAND_TOPOLOGY_MODES, "project.settings.overlandTopology");
   if (settings.startDistribution !== undefined) {
     const distribution = recordAt(settings.startDistribution, "project.settings.startDistribution");
+    assertKnownFields(distribution, "project.settings.startDistribution", START_DISTRIBUTION_FIELDS);
     for (const key of ["land", "coastal", "water", "cave", "other"] as const) {
       numberAt(distribution[key], `project.settings.startDistribution.${key}`);
     }
@@ -355,6 +400,7 @@ function assertGenerationSettings(settings: Record<string, unknown>): void {
   if (settings.planeConnections !== undefined) {
     boundedArrayAt(settings.planeConnections, "project.settings.planeConnections", MAX_PLANE_CONNECTION_RULES).forEach((value, index) => {
       const rule = recordAt(value, `project.settings.planeConnections[${index}]`);
+      assertKnownFields(rule, `project.settings.planeConnections[${index}]`, PLANE_CONNECTION_FIELDS);
       idAt(rule.a, `project.settings.planeConnections[${index}].a`);
       idAt(rule.b, `project.settings.planeConnections[${index}].b`);
       numberAt(rule.pairs, `project.settings.planeConnections[${index}].pairs`);
@@ -366,6 +412,7 @@ function assertGenerationSettings(settings: Record<string, unknown>): void {
 
 function assertPlane(plane: Record<string, unknown>, index: number): void {
   const path = `project.planes[${index}]`;
+  assertKnownFields(plane, path, PLANE_FIELDS);
   idAt(plane.id, `${path}.id`);
   stringAt(plane.name, `${path}.name`);
   enumAt(plane.kind, PLANE_KINDS, `${path}.kind`);
@@ -393,6 +440,7 @@ function assertPlane(plane: Record<string, unknown>, index: number): void {
   boundedArrayAt(plane.edges, `${path}.edges`, MAX_IMPORTED_EDGES_PER_PLANE).forEach((value, edgeIndex) => {
     const edgePath = `${path}.edges[${edgeIndex}]`;
     const edge = recordAt(value, edgePath);
+    assertKnownFields(edge, edgePath, EDGE_FIELDS);
     idAt(edge.id, `${edgePath}.id`);
     idAt(edge.a, `${edgePath}.a`);
     idAt(edge.b, `${edgePath}.b`);
@@ -403,6 +451,7 @@ function assertPlane(plane: Record<string, unknown>, index: number): void {
 }
 
 function assertProvince(province: Record<string, unknown>, path: string): void {
+  assertKnownFields(province, path, PROVINCE_FIELDS);
   idAt(province.id, `${path}.id`);
   numberAt(province.index, `${path}.index`);
   for (const key of ["x", "y", "gridX", "gridY"] as const) numberAt(province[key], `${path}.${key}`);
@@ -423,6 +472,7 @@ function assertProvince(province: Record<string, unknown>, path: string): void {
   boundedArrayAt(province.sites, `${path}.sites`, MAX_SITES_PER_PROVINCE).forEach((value, siteIndex) => {
     const sitePath = `${path}.sites[${siteIndex}]`;
     const site = recordAt(value, sitePath);
+    assertKnownFields(site, sitePath, MAGIC_SITE_FIELDS);
     idAt(site.id, `${sitePath}.id`);
     stringAt(site.value, `${sitePath}.value`);
     booleanAt(site.known, `${sitePath}.known`);
@@ -440,6 +490,7 @@ function assertProvince(province: Record<string, unknown>, path: string): void {
     assertDefense(recordAt(value, `${path}.defenders[${defenderIndex}]`), `${path}.defenders[${defenderIndex}]`);
   });
   const battle = recordAt(province.battle, `${path}.battle`);
+  assertKnownFields(battle, `${path}.battle`, BATTLE_FIELDS);
   for (const key of ["skybox", "battleMap", "groundColor", "rockColor", "fogColor"] as const) {
     optionalStringAt(battle[key], `${path}.battle.${key}`);
   }
@@ -447,6 +498,7 @@ function assertProvince(province: Record<string, unknown>, path: string): void {
 }
 
 function assertDefense(defense: Record<string, unknown>, path: string): void {
+  assertKnownFields(defense, path, DEFENSE_FIELDS);
   nonemptyStringAt(defense.commander, `${path}.commander`);
   optionalBooleanAt(defense.clearMagic, `${path}.clearMagic`);
   optionalStringAt(defense.commanderName, `${path}.commanderName`);
@@ -455,6 +507,7 @@ function assertDefense(defense: Record<string, unknown>, path: string): void {
   boundedArrayAt(defense.squads, `${path}.squads`, MAX_SQUADS_PER_DEFENSE_GROUP).forEach((value, squadIndex) => {
     const squadPath = `${path}.squads[${squadIndex}]`;
     const squad = recordAt(value, squadPath);
+    assertKnownFields(squad, squadPath, DEFENSE_SQUAD_FIELDS);
     idAt(squad.id, `${squadPath}.id`);
     nonemptyStringAt(squad.unit, `${squadPath}.unit`);
     numberAt(squad.count, `${squadPath}.count`);
@@ -476,6 +529,12 @@ function recordAt(value: unknown, path: string, message?: string): Record<string
     throw new Error(message ?? `${path} must be an object.`);
   }
   return value as Record<string, unknown>;
+}
+
+function assertKnownFields(record: Record<string, unknown>, path: string, fields: ReadonlySet<string>): void {
+  for (const key of Object.keys(record)) {
+    if (!fields.has(key)) throw new Error(`${path}.${key} is not supported by project schema version 1.`);
+  }
 }
 
 function arrayAt(value: unknown, path: string): unknown[] {
@@ -922,6 +981,61 @@ async function readFileIfExists(directory: FileSystemDirectoryHandle, name: stri
     if (error instanceof DOMException && error.name === "NotFoundError") return undefined;
     throw error;
   }
+}
+
+type IterableDirectoryHandle = FileSystemDirectoryHandle & {
+  values?: () => AsyncIterableIterator<FileSystemHandle>;
+};
+
+/**
+ * Never infer Atlas ownership from a colliding normalized folder name. A new
+ * directory is safe; an existing directory is writable only when its editable
+ * project marker proves that Atlas created the same normalized map root.
+ */
+async function assertSafeInstallDirectory(directory: FileSystemDirectoryHandle, root: string): Promise<void> {
+  const values = (directory as IterableDirectoryHandle).values;
+  if (typeof values !== "function") {
+    throw installCollisionError(root, "this browser cannot verify whether the target folder is empty");
+  }
+  let hasEntries = false;
+  for await (const entry of values.call(directory)) {
+    void entry;
+    hasEntries = true;
+    break;
+  }
+  if (!hasEntries) return;
+
+  let marker: string | undefined;
+  try {
+    const handle = await directory.getFileHandle("atlas_project.json");
+    const file = await handle.getFile();
+    if (file.size > MAX_PROJECT_IMPORT_BYTES) {
+      throw new Error(`atlas_project.json exceeds the ${MAX_PROJECT_IMPORT_BYTES}-byte project limit`);
+    }
+    marker = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "NotFoundError") {
+      throw installCollisionError(root, "the existing folder has no atlas_project.json ownership marker");
+    }
+    throw installCollisionError(root, "the existing atlas_project.json ownership marker could not be read safely", error);
+  }
+
+  try {
+    const installedProject = parseProject(marker);
+    if (sanitizeMapName(installedProject.name) !== root) {
+      throw new Error(`the marker belongs to ${sanitizeMapName(installedProject.name)}`);
+    }
+  } catch (error) {
+    throw installCollisionError(root, "the existing atlas_project.json does not identify this normalized map folder", error);
+  }
+}
+
+function installCollisionError(root: string, reason: string, cause?: unknown): Error {
+  return new Error(
+    `Direct install refused to change the existing ${root} folder because ${reason}. `
+      + "Choose a different project name, or manually move/remove the colliding folder and try again. No files were changed.",
+    cause === undefined ? undefined : { cause },
+  );
 }
 
 async function copyFile(directory: FileSystemDirectoryHandle, sourceName: string, targetName: string): Promise<void> {

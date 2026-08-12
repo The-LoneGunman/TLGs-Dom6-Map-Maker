@@ -37,6 +37,10 @@ class MemoryDirectory {
     if (!this.files.delete(name)) throw notFound();
   }
 
+  async *values() {
+    for (const name of this.files.keys()) yield { kind: "file" as const, name };
+  }
+
   async getFileHandle(name: string, options?: { create?: boolean }) {
     if (!this.files.has(name)) {
       if (!options?.create) throw notFound();
@@ -46,7 +50,7 @@ class MemoryDirectory {
       getFile: async () => {
         this.events.push(`read:${name}`);
         const data = this.files.get(name)!.slice();
-        return { arrayBuffer: async () => data.buffer };
+        return { size: data.byteLength, arrayBuffer: async () => data.buffer };
       },
       createWritable: async () => {
         let pending = new Uint8Array();
@@ -81,6 +85,10 @@ function smallInstallProject(planeCount = 1) {
     project.planes.push(plane);
   }
   return project;
+}
+
+function atlasOwnedFiles(project: ReturnType<typeof smallInstallProject>, files: Record<string, string>): Record<string, string> {
+  return { ...files, "atlas_project.json": JSON.stringify(project) };
 }
 
 async function withDirectoryPicker<T>(directory: MemoryDirectory, action: () => Promise<T>): Promise<T> {
@@ -172,10 +180,75 @@ test("cleanup ignores missing entries but propagates other filesystem failures",
   }, "Atlas_Root", 7), (error) => error === denied);
 });
 
+test("direct install accepts a new empty map folder", async () => {
+  const project = smallInstallProject();
+  const directory = new MemoryDirectory();
+
+  assert.equal(await withDirectoryPicker(directory, () => installPackage(project)), "installed");
+  assert.equal(directory.files.has("Safety_Atlas.map"), true);
+  assert.equal(directory.files.has("Safety_Atlas.d6m"), true);
+  assert.equal(directory.files.has("atlas_project.json"), true);
+});
+
+test("direct install refuses a non-Atlas normalized-name collision before changing any file", async () => {
+  const project = smallInstallProject();
+  project.name = "Collision / Atlas?";
+  const root = "Collision_Atlas";
+  const initial = {
+    [`${root}.map`]: "unrelated authored map",
+    [`${root}.d6m`]: "unrelated geography",
+    "custom-battlefield.tga": "unrelated image",
+  };
+  const directory = new MemoryDirectory(initial);
+
+  await assert.rejects(
+    withDirectoryPicker(directory, () => installPackage(project)),
+    /refused to change the existing Collision_Atlas folder.*no atlas_project\.json ownership marker.*No files were changed/i,
+  );
+  assert.equal(directory.events.some((event) => event.startsWith("write:") || event.startsWith("remove:")), false);
+  for (const [name, value] of Object.entries(initial)) assert.deepEqual(directory.files.get(name), encode(value));
+});
+
+test("direct install refuses a nonempty folder whose Atlas marker belongs to another normalized root", async () => {
+  const project = smallInstallProject();
+  const other = smallInstallProject();
+  other.name = "Different Atlas";
+  const root = "Safety_Atlas";
+  const initial = atlasOwnedFiles(other, {
+    [`${root}.map`]: "unrelated map",
+    [`${root}.d6m`]: "unrelated geography",
+  });
+  const directory = new MemoryDirectory(initial);
+
+  await assert.rejects(
+    withDirectoryPicker(directory, () => installPackage(project)),
+    /refused to change the existing Safety_Atlas folder.*does not identify this normalized map folder.*No files were changed/i,
+  );
+  assert.equal(directory.events.some((event) => event.startsWith("write:") || event.startsWith("remove:")), false);
+  for (const [name, value] of Object.entries(initial)) assert.deepEqual(directory.files.get(name), encode(value));
+});
+
+test("direct install refuses an unreadable Atlas ownership marker before staging", async () => {
+  const project = smallInstallProject();
+  const initial = {
+    "Safety_Atlas.map": "existing map",
+    "Safety_Atlas.d6m": "existing geography",
+    "atlas_project.json": "{not valid project JSON",
+  };
+  const directory = new MemoryDirectory(initial);
+
+  await assert.rejects(
+    withDirectoryPicker(directory, () => installPackage(project)),
+    /refused to change the existing Safety_Atlas folder.*does not identify this normalized map folder.*No files were changed/i,
+  );
+  assert.equal(directory.events.some((event) => event.startsWith("write:") || event.startsWith("remove:")), false);
+  for (const [name, value] of Object.entries(initial)) assert.deepEqual(directory.files.get(name), encode(value));
+});
+
 test("direct install stages and backs up before publishing binaries, then removes only Atlas artifacts last", async () => {
   const project = smallInstallProject();
   const root = "Safety_Atlas";
-  const directory = new MemoryDirectory({
+  const directory = new MemoryDirectory(atlasOwnedFiles(project, {
     [`${root}.map`]: "old map",
     [`${root}.d6m`]: "old d6m",
     [`${root}_plane2.map`]: "obsolete map",
@@ -183,7 +256,7 @@ test("direct install stages and backs up before publishing binaries, then remove
     [`${root}_plane2.tga`]: "related but unowned image",
     [`${root}_battle.map`]: "related but unowned battle map",
     "custom-battlefield.tga": "unrelated image",
-  });
+  }));
 
   assert.equal(await withDirectoryPicker(directory, () => installPackage(project)), "installed");
 
@@ -213,13 +286,13 @@ test("direct install stages and backs up before publishing binaries, then remove
 test("a staging failure preserves every current playable and unrelated file", async () => {
   const project = smallInstallProject(2);
   const root = "Safety_Atlas";
-  const initial = {
+  const initial = atlasOwnedFiles(project, {
     [`${root}.map`]: "old main map",
     [`${root}.d6m`]: "old main d6m",
     [`${root}_plane2.map`]: "old plane map",
     [`${root}_plane2.d6m`]: "old plane d6m",
     "custom-battlefield.tga": "leave me",
-  };
+  });
   const directory = new MemoryDirectory(initial);
   const failure = new DOMException("Disk full", "QuotaExceededError");
   directory.failWrite = (name) => name.includes("__stage__") && name.endsWith(`${root}_plane2.d6m.tmp`) ? failure : undefined;
@@ -234,13 +307,13 @@ test("a staging failure preserves every current playable and unrelated file", as
 test("a mid-publish binary failure rolls every touched target back from disk backups", async () => {
   const project = smallInstallProject(2);
   const root = "Safety_Atlas";
-  const initial = {
+  const initial = atlasOwnedFiles(project, {
     [`${root}.map`]: "old main map",
     [`${root}.d6m`]: "old main d6m",
     [`${root}_plane2.map`]: "old plane map",
     [`${root}_plane2.d6m`]: "old plane d6m",
     "custom-battlefield.tga": "leave me",
-  };
+  });
   const directory = new MemoryDirectory(initial);
   const failure = new DOMException("Write interrupted", "InvalidStateError");
   let failed = false;
@@ -262,11 +335,11 @@ test("a mid-publish binary failure rolls every touched target back from disk bac
 test("a map-reference publish failure restores binaries and removes newly created support files", async () => {
   const project = smallInstallProject();
   const root = "Safety_Atlas";
-  const initial = {
+  const initial = atlasOwnedFiles(project, {
     [`${root}.map`]: "old map",
     [`${root}.d6m`]: "old d6m",
     "custom-battlefield.tga": "leave me",
-  };
+  });
   const directory = new MemoryDirectory(initial);
   const failure = new DOMException("Map write failed", "NotAllowedError");
   let failed = false;
@@ -280,7 +353,8 @@ test("a map-reference publish failure restores binaries and removes newly create
 
   await assert.rejects(withDirectoryPicker(directory, () => installPackage(project)), (error) => error === failure);
   for (const [name, value] of Object.entries(initial)) assert.deepEqual(directory.files.get(name), encode(value));
-  for (const support of ["INSTALL.txt", "atlas_project.json", "balance_report.txt", "host_settings.txt", "host_topology.txt"]) {
+  assert.deepEqual(directory.files.get("atlas_project.json"), encode(initial["atlas_project.json"]));
+  for (const support of ["INSTALL.txt", "balance_report.txt", "host_settings.txt", "host_topology.txt"]) {
     assert.equal(directory.files.has(support), false);
   }
   assert.equal([...directory.files].some(([name]) => name.startsWith(".__pantokrator_atlas_install__")), false);
@@ -289,13 +363,13 @@ test("a map-reference publish failure restores binaries and removes newly create
 test("an unrecoverable rollback retains Atlas backups and reports the residual explicitly", async () => {
   const project = smallInstallProject(2);
   const root = "Safety_Atlas";
-  const directory = new MemoryDirectory({
+  const directory = new MemoryDirectory(atlasOwnedFiles(project, {
     [`${root}.map`]: "old map",
     [`${root}.d6m`]: "old main d6m",
     [`${root}_plane2.map`]: "old plane map",
     [`${root}_plane2.d6m`]: "old plane d6m",
     "custom-battlefield.tga": "leave me",
-  });
+  }));
   const publishFailure = new DOMException("Publish failed", "InvalidStateError");
   const restoreFailure = new DOMException("Restore failed", "NotAllowedError");
   let planeTwoFailed = false;

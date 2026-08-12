@@ -59,7 +59,7 @@ This checklist records requirements and findings from the final manual audit, op
 
 ## Final evidence
 
-- Production build, lint, TypeScript, and 262 automated checks pass (3 rendered-output checks plus 259 TypeScript tests).
+- Production build, lint, TypeScript, and 270 automated checks pass (3 rendered-output checks plus 267 TypeScript tests).
 - A deterministic 34-case settings fuzz matrix passed for 2–32 players, 1–3 planes, 8–30 provinces per player, start-degree targets 1–8, water 0–60%, and every resolution/wrap mode exercised by the suite. All requested start categories, graphs, compiled maps, and validation contracts were clean.
 - All 121 plane-kind × terrain-variant combinations generated deterministically. The export audit covered 8,712 provinces and 1,784 guardian groups with no invalid catalog IDs, off-theme poptypes, independent `#defence`, or guardian incursions into start two-rings.
 - The final Abyss audit covered all 11 variants and 83 guardian groups: every commander was Demon General #1314 or Demon Priest #1609, with only Lesser Horror #307, Horror #308, Demon Knight #489, and Disease Demon #1662 squads.

@@ -31,7 +31,7 @@ Pantokrator Atlas currently runs from its GitHub source repository; it is not in
 
 Repository: [The-LoneGunman/TLGs-Dom6-Map-Maker](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker)
 
-> **Current build status:** this is a source/testing build, not yet a packaged public release. The P1 engineering blockers found by the 2026-08-11 audit have regression-tested fixes; the remaining release gate is a live Dominions 6 smoke test of representative installed packages. Review the [audit and remediation record](FULL_AUDIT_2026-08-11.md), and keep **Editable project JSON** backups for important maps.
+> **Current build status:** this is a source/testing build, not yet a packaged public release. The engineering blockers found by the release audits have regression-tested fixes, and a compact generated package has passed the installed Dominions 6 scripted new-game loader. The remaining release gate is an in-game smoke test of a representative eight-plane package and its gates. Review the [audit and remediation record](FULL_AUDIT_2026-08-11.md), and keep **Editable project JSON** backups for important maps.
 
 If the repository is private, the owner must first invite your GitHub account as a collaborator. Sign in to that authorized account in GitHub or GitHub Desktop before trying to download it. Someone without repository access cannot install the program from this link; the owner must grant access or publish a release/public copy.
 

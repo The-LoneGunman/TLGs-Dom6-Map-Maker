@@ -106,3 +106,27 @@ test("project import bounds ordinary strings, directive blocks, and UTF-8 file s
     /Project files must be at most 16777216 UTF-8 bytes/,
   );
 });
+
+test("project import rejects unknown state instead of retaining an unbounded hidden payload", () => {
+  assert.throws(() => parseProject(serializedMutation((draft) => {
+    (draft as MapProject & { hiddenPayload: unknown }).hiddenPayload = { retained: true };
+  })), /project\.hiddenPayload is not supported by project schema version 1/);
+
+  assert.throws(() => parseProject(serializedMutation((draft) => {
+    const battle = draft.planes[0]!.provinces[0]!.battle as typeof draft.planes[0]["provinces"][number]["battle"] & {
+      nestedPayload: unknown;
+    };
+    battle.nestedPayload = { retained: true };
+  })), /\.battle\.nestedPayload is not supported by project schema version 1/);
+
+  // JSON.parse itself can handle nesting well beyond JSON.stringify's call
+  // stack. Reject the unknown root field before cloneProject or package-size
+  // estimation recursively traverses attacker-controlled data.
+  const valid = JSON.stringify(createDefaultProject("deep-unknown-import"));
+  const nested = `${"[".repeat(8_000)}0${"]".repeat(8_000)}`;
+  const adversarial = `${valid.slice(0, -1)},"hiddenPayload":${nested}}`;
+  assert.throws(
+    () => parseProject(adversarial),
+    /project\.hiddenPayload is not supported by project schema version 1/,
+  );
+});
