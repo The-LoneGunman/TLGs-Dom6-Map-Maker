@@ -16,6 +16,27 @@ The seven PNG realm backdrops in `public/plane-backgrounds/` are original projec
 
 The seven files total 16,077,040 bytes (15.33 MiB). Each file is distinct.
 
+## Universal material textures
+
+The four grayscale material textures in `public/map-art/materials/` were also
+generated with OpenAI ImageGen from project-authored prompts on 2026-08-11,
+then transformed locally into mathematically periodic mirror tiles. They are
+original Pantokrator Atlas assets, not artwork extracted from Dominions or a
+community map.
+
+| File | Adaptive uses | Dimensions |
+| --- | --- | ---: |
+| `earth.png` | Plains, farms, dry land, and wastes | 1024 x 1024 px |
+| `foliage.png` | Forests, cave forests, kelp, and magical vegetation | 1024 x 1024 px |
+| `stone.png` | Highlands, mountains, caves, infernal rock, and void islands | 1024 x 1024 px |
+| `water.png` | Seas, lakes, swamps, flooded caves, and the River Styx | 1024 x 1024 px |
+
+These are source materials rather than fixed province illustrations. The
+renderer clips and recolors them against canonical province ownership, keeps
+their scale relative to the complete map, and suppresses optional details that
+cannot fit safely inside a tiny island or narrow corridor. This prevents asset
+stretching and geometry-specific failures.
+
 ## Where the backdrops appear
 
 These images are presentation assets for the Pantokrator Atlas editor and its high-resolution PNG previews. They give sparse planes a themed backdrop behind areas that no province owns.

@@ -434,7 +434,9 @@ When Generate's resolution is Custom, Width and Height appear here for the activ
 
 ### Themed backdrops
 
-Sparse-plane art appears behind ownerless areas in the editor and PNG preview. Dominions' D6M format has no second raster-underlay field, so the native game uses its own owner-zero presentation. The backdrop is not missing when the in-game result looks different.
+Sparse-plane art appears behind ownerless areas in the editor and PNG preview. Universal earth, foliage, stone, and water materials are clipped inside every solid or sparse province. Their scale is relative to the entire map instead of the individual province: tiny or narrow shapes automatically receive less detail rather than stretched or clipped artwork, large hubs receive more detail, and wrapped seams use a matching texture phase. If an art file cannot load, the existing terrain gradient and procedural marks remain readable.
+
+Dominions' D6M format has no second raster-underlay field, so the native game uses its own owner-zero and terrain presentation. The custom backdrop and material treatment is not missing or broken when the in-game result looks different; it belongs to the editor and PNG preview.
 
 ### Remove this plane
 
@@ -834,7 +836,7 @@ Downloads the portable source backup described above.
 
 ### Preview PNG
 
-Exports the active plane at its configured resolution using the currently selected Condition preview. The PNG includes editor artwork and sparse-plane backdrops. It is not the native playable D6M.
+Exports the active plane at its configured resolution using the currently selected Condition preview. The PNG includes adaptive terrain materials, shape-safe procedural detail, and sparse-plane backdrops. It is not the native playable D6M.
 
 ### Filename normalization
 

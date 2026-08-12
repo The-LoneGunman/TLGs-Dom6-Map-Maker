@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 1,
+  "id": "pantokrator-universal-materials",
+  "version": "1.0.0",
+  "selectionSalt": "universal-materials-v1",
+  "assets": [
+    {
+      "id": "material-earth",
+      "family": "material.earth",
+      "kind": "texture_tile",
+      "files": [{
+        "source": "/map-art/materials/earth.png",
+        "width": 1024,
+        "height": 1024,
+        "format": "png",
+        "colorSpace": "srgb",
+        "alpha": "opaque",
+        "transparentPaddingPx": 0,
+        "edgeBleedPx": 8
+      }],
+      "compatibility": { "terrains": ["plains", "farm", "waste", "cavewaste"] },
+      "shape": {
+        "classes": ["any"],
+        "aspectRatio": { "min": 1, "max": 100 },
+        "areaToMedian": { "min": 0.01, "max": 100 },
+        "minInscribedToEquivalentRadius": 0,
+        "safeInsetRatio": 0,
+        "maxCoverageRatio": 1
+      },
+      "render": {
+        "fit": "tile_clip",
+        "relativeTo": "canvas_short_edge",
+        "scale": { "min": 0.03, "preferred": 0.075, "max": 0.14 },
+        "renderedPixels": { "min": 64, "max": 512, "maxUpscale": 1.25 },
+        "rotation": "none",
+        "mirrorX": true,
+        "mirrorY": true,
+        "opacity": 0.32,
+        "seamlessX": true,
+        "seamlessY": true
+      },
+      "placement": {
+        "anchor": "canvas_center",
+        "weight": 1,
+        "maxPerProvince": 1,
+        "minSeparationRatio": 0,
+        "avoid": []
+      },
+      "fallback": { "assetIds": [], "final": "terrain_gradient" }
+    },
+    {
+      "id": "material-foliage",
+      "family": "material.foliage",
+      "kind": "texture_tile",
+      "files": [{
+        "source": "/map-art/materials/foliage.png",
+        "width": 1024,
+        "height": 1024,
+        "format": "png",
+        "colorSpace": "srgb",
+        "alpha": "opaque",
+        "transparentPaddingPx": 0,
+        "edgeBleedPx": 8
+      }],
+      "compatibility": { "terrains": ["forest", "caveforest", "kelp"] },
+      "shape": {
+        "classes": ["any"],
+        "aspectRatio": { "min": 1, "max": 100 },
+        "areaToMedian": { "min": 0.01, "max": 100 },
+        "minInscribedToEquivalentRadius": 0,
+        "safeInsetRatio": 0,
+        "maxCoverageRatio": 1
+      },
+      "render": {
+        "fit": "tile_clip",
+        "relativeTo": "canvas_short_edge",
+        "scale": { "min": 0.03, "preferred": 0.07, "max": 0.14 },
+        "renderedPixels": { "min": 64, "max": 512, "maxUpscale": 1.25 },
+        "rotation": "none",
+        "mirrorX": true,
+        "mirrorY": true,
+        "opacity": 0.35,
+        "seamlessX": true,
+        "seamlessY": true
+      },
+      "placement": {
+        "anchor": "canvas_center",
+        "weight": 1,
+        "maxPerProvince": 1,
+        "minSeparationRatio": 0,
+        "avoid": []
+      },
+      "fallback": { "assetIds": [], "final": "terrain_gradient" }
+    },
+    {
+      "id": "material-stone",
+      "family": "material.stone",
+      "kind": "texture_tile",
+      "files": [{
+        "source": "/map-art/materials/stone.png",
+        "width": 1024,
+        "height": 1024,
+        "format": "png",
+        "colorSpace": "srgb",
+        "alpha": "opaque",
+        "transparentPaddingPx": 0,
+        "edgeBleedPx": 8
+      }],
+      "compatibility": { "terrains": ["highland", "mountains", "cave", "cavehighland", "cavewall"] },
+      "shape": {
+        "classes": ["any"],
+        "aspectRatio": { "min": 1, "max": 100 },
+        "areaToMedian": { "min": 0.01, "max": 100 },
+        "minInscribedToEquivalentRadius": 0,
+        "safeInsetRatio": 0,
+        "maxCoverageRatio": 1
+      },
+      "render": {
+        "fit": "tile_clip",
+        "relativeTo": "canvas_short_edge",
+        "scale": { "min": 0.03, "preferred": 0.08, "max": 0.14 },
+        "renderedPixels": { "min": 64, "max": 512, "maxUpscale": 1.25 },
+        "rotation": "none",
+        "mirrorX": true,
+        "mirrorY": true,
+        "opacity": 0.34,
+        "seamlessX": true,
+        "seamlessY": true
+      },
+      "placement": {
+        "anchor": "canvas_center",
+        "weight": 1,
+        "maxPerProvince": 1,
+        "minSeparationRatio": 0,
+        "avoid": []
+      },
+      "fallback": { "assetIds": [], "final": "terrain_gradient" }
+    },
+    {
+      "id": "material-water",
+      "family": "material.water",
+      "kind": "texture_tile",
+      "files": [{
+        "source": "/map-art/materials/water.png",
+        "width": 1024,
+        "height": 1024,
+        "format": "png",
+        "colorSpace": "srgb",
+        "alpha": "opaque",
+        "transparentPaddingPx": 0,
+        "edgeBleedPx": 8
+      }],
+      "compatibility": { "terrains": ["freshwater", "sea", "deepsea", "swamp", "caveswamp"] },
+      "shape": {
+        "classes": ["any"],
+        "aspectRatio": { "min": 1, "max": 100 },
+        "areaToMedian": { "min": 0.01, "max": 100 },
+        "minInscribedToEquivalentRadius": 0,
+        "safeInsetRatio": 0,
+        "maxCoverageRatio": 1
+      },
+      "render": {
+        "fit": "tile_clip",
+        "relativeTo": "canvas_short_edge",
+        "scale": { "min": 0.03, "preferred": 0.065, "max": 0.14 },
+        "renderedPixels": { "min": 64, "max": 512, "maxUpscale": 1.25 },
+        "rotation": "none",
+        "mirrorX": true,
+        "mirrorY": true,
+        "opacity": 0.36,
+        "seamlessX": true,
+        "seamlessY": true
+      },
+      "placement": {
+        "anchor": "canvas_center",
+        "weight": 1,
+        "maxPerProvince": 1,
+        "minSeparationRatio": 0,
+        "avoid": []
+      },
+      "fallback": { "assetIds": [], "final": "terrain_gradient" }
+    }
+  ]
+}
