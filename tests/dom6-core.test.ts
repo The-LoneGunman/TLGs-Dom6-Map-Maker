@@ -221,6 +221,16 @@ test("D6M encoder writes the official header, exact length, row-major owners, an
   assert.equal(corruptedInspection.valid, false);
 });
 
+test("D6M export rejects reordered province arrays before geography can desynchronize", async () => {
+  const project = createDefaultProject("d6m-reordered-provinces");
+  const plane = cloneProject(project).planes[0]!;
+  [plane.provinces[0], plane.provinces[1]] = [plane.provinces[1]!, plane.provinces[0]!];
+  const reordered = { ...project, planes: [plane] };
+  assert.ok(validateProject(reordered)
+    .some((issue) => issue.severity === "error" && issue.message.includes("province array is not stored")));
+  await assert.rejects(() => encodeD6m(plane, "d6m-reordered-provinces"), /ascending local province-number order/);
+});
+
 test("D6M minimum-capital distance uses exact stored pixels and enabled wrap seams", async () => {
   const project = createDefaultProject("binary-mindist");
   const plane = project.planes[0]!;

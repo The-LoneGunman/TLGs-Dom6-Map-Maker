@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 async function render() {
@@ -44,4 +45,18 @@ test("ships a local-first editor without database-backed page dependencies", asy
   assert.match(html, /Condition preview/);
   assert.match(html, /Province inspector/i);
   assert.match(html, /Fairness/);
+});
+
+test("production generation worker stays on the browser origin", () => {
+  const staticDirectory = new URL("../dist/client/_next/static/", import.meta.url);
+  const javascriptFiles = readdirSync(staticDirectory, { recursive: true })
+    .filter((name) => typeof name === "string" && name.endsWith(".js"));
+  const source = javascriptFiles
+    .map((name) => readFileSync(new URL(name.replaceAll("\\", "/"), staticDirectory), "utf8"))
+    .join("\n");
+
+  assert.doesNotMatch(source, /file:\/\/\/[^"'`]*generationWorker/i, "the client worker constructor must not retain a build-machine file URL");
+  const workerReference = source.match(/\/_next\/static\/(generation\.worker-[A-Za-z0-9_-]+\.js)/);
+  assert.ok(workerReference, "the app chunk should reference a same-origin generated worker asset");
+  assert.ok(existsSync(new URL(workerReference[1], staticDirectory)), "the referenced worker asset should be emitted");
 });

@@ -4,6 +4,7 @@ import {
   AQUATIC_POPTYPE_POOL,
   GUARDIAN_CATALOG_POOLS,
   ISLAND_CHAIN_MIN_WATER_PERCENT,
+  THEMED_AQUATIC_POPTYPE_POOLS,
   VERIFIED_WATER_CAPABLE_GUARDIAN_IDS,
   addPlane,
   adjacencyFor,
@@ -212,10 +213,49 @@ test("Cave and Cavern flooding stays additive Sea+Cave with aquatic recruitment 
     && guardian.squads.every((squad) => GUARDIAN_CATALOG_POOLS.cave_water.units.includes(squad.unit as never))));
 });
 
-test("all flooded-cave and Styx guardian IDs are pinned water-capable units", () => {
+test("all themed flooded-realm guardian IDs are pinned water-capable units", () => {
   const verified = new Set<string>(VERIFIED_WATER_CAPABLE_GUARDIAN_IDS);
-  for (const theme of [GUARDIAN_CATALOG_POOLS.water, GUARDIAN_CATALOG_POOLS.cave_water, GUARDIAN_CATALOG_POOLS.underworld]) {
+  for (const theme of [
+    GUARDIAN_CATALOG_POOLS.water,
+    GUARDIAN_CATALOG_POOLS.cave_water,
+    GUARDIAN_CATALOG_POOLS.underworld,
+    GUARDIAN_CATALOG_POOLS.dream_water,
+    GUARDIAN_CATALOG_POOLS.elemental_water,
+    GUARDIAN_CATALOG_POOLS.storm_water,
+    GUARDIAN_CATALOG_POOLS.hell_water,
+    GUARDIAN_CATALOG_POOLS.abyss_water,
+  ]) {
     for (const id of [...theme.commanders, ...theme.units]) assert.ok(verified.has(id), `${id} lacks a pinned aquatic/amphibious capability`);
+  }
+});
+
+test("flooded special realms retain their plane theme in poptypes and guardians", () => {
+  const profiles = [
+    ["underworld", "fungal", "underworld"],
+    ["dream", "wild", "dream_water"],
+    ["elemental", "oceanic", "elemental_water"],
+    ["custom", "storm", "storm_water"],
+    ["custom", "infernal", "hell_water"],
+    ["custom", "void", "abyss_water"],
+  ] as const;
+  for (const [kind, variant, theme] of profiles) {
+    const base = createDefaultProject(`themed-flood-${kind}-${variant}`);
+    const plane = generatePlane({
+      ...base.planes[0]!, kind, variant, autoSize: false, provinceTarget: 96,
+      wrapX: kind === "underworld" ? false : true,
+      wrapY: kind === "underworld" ? false : true,
+    }, { ...base.settings, players: 2, waterPercent: 55, throneCount: 0 }, `themed-flood-${kind}-${variant}`, 0);
+    const flooded = plane.provinces.filter(isWaterProvince);
+    const poptypes = THEMED_AQUATIC_POPTYPE_POOLS[theme]!;
+    const pool = GUARDIAN_CATALOG_POOLS[theme];
+    assert.ok(flooded.length > 0);
+    const inhabited = flooded.filter((province) => province.poptype !== undefined);
+    assert.ok(inhabited.length > 0);
+    assert.ok(inhabited.every((province) => poptypes.includes(province.poptype!)), `${kind}/${variant} used a generic aquatic poptype`);
+    const guardians = flooded.flatMap((province) => province.defenders);
+    assert.ok(guardians.length > 0);
+    assert.ok(guardians.every((guardian) => pool.commanders.includes(guardian.commander as never)
+      && guardian.squads.every((squad) => pool.units.includes(squad.unit as never))), `${kind}/${variant} used generic sea guardians`);
   }
 });
 

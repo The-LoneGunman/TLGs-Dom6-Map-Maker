@@ -23,6 +23,18 @@ function themeFor(kind: PlaneKind, variant: PlaneVariant, province: Province): k
   if (isWaterProvince(province)) {
     if (kind === "underworld") return "underworld";
     if (kind === "cave" || kind === "cavern") return "cave_water";
+    if (kind === "dream") return "dream_water";
+    if (kind === "elemental") return "elemental_water";
+    if (kind === "hell") return "hell_water";
+    if (kind === "abyss") return "abyss_water";
+    if (kind === "custom") {
+      if (variant === "wild") return "dream_water";
+      if (variant === "volcanic" || variant === "frozen") return "elemental_water";
+      if (variant === "storm") return "storm_water";
+      if (variant === "infernal") return "hell_water";
+      if (variant === "void") return "abyss_water";
+      if (variant === "fungal" || variant === "crystal") return "cave_water";
+    }
     return "water";
   }
   if (kind !== "custom") return kind;
@@ -54,6 +66,7 @@ test("all 121 plane and terrain-variant combinations use valid, thematic, start-
       source.autoSize = false;
       source.provinceTarget = 72;
       const plane = generatePlane(source, { ...base.settings, players: 2 }, `guardian-matrix:${kind}:${variant}`, 0);
+      assert.equal(plane.provinces.some((province) => province.warmer && province.colder), false, `${kind}/${variant} emitted mutually exclusive temperature flags`);
       const guardians = plane.provinces.flatMap((province) => province.defenders.map((group) => ({ province, group })));
       assert.ok(guardians.length > 0, `${kind}/${variant} produced no guardian groups`);
 
@@ -84,4 +97,3 @@ test("all 121 plane and terrain-variant combinations use valid, thematic, start-
 
   assert.ok(checkedGroups > KINDS.length * VARIANTS.length, "the matrix should exercise multiple guardian groups, not only fallbacks");
 });
-

@@ -264,6 +264,9 @@ export function MapCanvas({ plane, selectedId, previewCondition, onNavigate, onA
 }
 
 export async function renderPlanePng(plane: Plane, condition: PreviewCondition): Promise<Blob> {
+  if (!canRenderPlanePreview(plane)) {
+    throw new Error("Preview dimensions must be whole positive pixels within the supported 8.29-megapixel envelope.");
+  }
   const canvas = document.createElement("canvas");
   canvas.width = plane.width;
   canvas.height = plane.height;
@@ -280,6 +283,14 @@ export async function renderPlanePng(plane: Plane, condition: PreviewCondition):
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("The preview image could not be encoded.")), "image/png");
   });
+}
+
+export function canRenderPlanePreview(plane: Pick<Plane, "width" | "height">): boolean {
+  return Number.isSafeInteger(plane.width)
+    && Number.isSafeInteger(plane.height)
+    && plane.width > 0
+    && plane.height > 0
+    && plane.width * plane.height <= 8_294_400;
 }
 
 const PLANE_BACKGROUND_ASSETS: Partial<Record<Plane["kind"], string>> = {

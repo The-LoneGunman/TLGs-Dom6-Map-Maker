@@ -13,6 +13,7 @@ import {
   generatePlane,
   generateProject,
   globalMovementAdjacency,
+  preflightStartPlan,
   scaledStartSeparationTarget,
   shortestDistances,
 } from "../src/generator";
@@ -585,7 +586,11 @@ test("all plane archetypes generate coherent terrain, native populations, sites,
         assert.ok((shortestDistances(adjacency, start.id).get(province.id) ?? 99) >= 3, `${kind} guardian entered a start two-ring`);
       }
       const theme = isWaterProvince(province)
-        ? kind === "cave" || kind === "cavern" ? "cave_water" : kind === "underworld" ? "underworld" : "water"
+        ? kind === "cave" || kind === "cavern" ? "cave_water"
+          : kind === "underworld" ? "underworld"
+            : kind === "dream" ? "dream_water"
+              : kind === "elemental" ? "elemental_water"
+                : "water"
         : kind;
       const pool = GUARDIAN_CATALOG_POOLS[theme];
       for (const guardian of province.defenders) {
@@ -625,6 +630,9 @@ test("guardian commander and troop pools are pinned to bundled Dominions 6.35 ID
     ["364", "Faydream Enchantress"], ["98", "Pyromancer"], ["103", "Hydromancer"],
     ["1893", "Imperial Geomancer"], ["1067", "Merman Captain"],
     ["1463", "Pale One Commander"], ["1471", "Pale One Captain"],
+    ["651", "Eater of Dreams"], ["1572", "Merman Dreamer"],
+    ["3730", "Water Elemental"], ["3374", "Marid"], ["1662", "Disease Demon"],
+    ["652", "Void Lord"], ["3853", "Void Herald"],
   ]);
   for (const [theme, pool] of Object.entries(GUARDIAN_CATALOG_POOLS)) {
     for (const id of pool.commanders) {
@@ -653,15 +661,16 @@ test("guardian commander and troop pools are pinned to bundled Dominions 6.35 ID
 test("special custom variants align poptypes, magic paths, and hard neutral guardians", () => {
   const expected: Record<"infernal" | "void" | "storm" | "wild" | "volcanic" | "oceanic", {
     theme: keyof typeof GUARDIAN_CATALOG_POOLS;
+    waterTheme: keyof typeof GUARDIAN_CATALOG_POOLS;
     poptypes: readonly number[];
     path: "fire" | "death" | "air" | "glamour" | "water";
   }> = {
-    infernal: { theme: "hell", poptypes: [94], path: "fire" },
-    void: { theme: "abyss", poptypes: [106], path: "death" },
-    storm: { theme: "air", poptypes: [34], path: "air" },
-    wild: { theme: "dream", poptypes: [37, 89], path: "glamour" },
-    volcanic: { theme: "elemental", poptypes: [94], path: "fire" },
-    oceanic: { theme: "custom", poptypes: ARCHETYPE_POPTYPE_POOLS.custom, path: "water" },
+    infernal: { theme: "hell", waterTheme: "hell_water", poptypes: [94], path: "fire" },
+    void: { theme: "abyss", waterTheme: "abyss_water", poptypes: [106], path: "death" },
+    storm: { theme: "air", waterTheme: "storm_water", poptypes: [34], path: "air" },
+    wild: { theme: "dream", waterTheme: "dream_water", poptypes: [37, 89], path: "glamour" },
+    volcanic: { theme: "elemental", waterTheme: "elemental_water", poptypes: [94], path: "fire" },
+    oceanic: { theme: "custom", waterTheme: "water", poptypes: ARCHETYPE_POPTYPE_POOLS.custom, path: "water" },
   };
   const base = createDefaultProject("custom-special-guardians");
   const settings = { ...base.settings, players: 2, throneCount: 4 };
@@ -678,7 +687,7 @@ test("special custom variants align poptypes, magic paths, and hard neutral guar
     const guardians = plane.provinces.flatMap((province) => province.defenders.map((guardian) => ({ province, guardian })));
     assert.ok(guardians.length > 0);
     for (const { province, guardian } of guardians) {
-      const pool = GUARDIAN_CATALOG_POOLS[isWaterProvince(province) ? "water" : spec.theme];
+      const pool = GUARDIAN_CATALOG_POOLS[isWaterProvince(province) ? spec.waterTheme : spec.theme];
       assert.ok(pool.commanders.includes(guardian.commander as never));
       assert.ok(guardian.squads.every((squad) => pool.units.includes(squad.unit as never)));
       assert.equal(guardian.squads.length, 2);
@@ -854,4 +863,20 @@ test("multiplayer map file stems contain only manual-safe letters and underscore
   assert.equal(createDefaultProject("catalog-version").targetVersion, 635);
   assert.equal(sanitizeMapName("Map 6 - King's-Road"), "Map_King_s_Road");
   assert.match(sanitizeMapName("123 ---"), /^[A-Za-z_]+$/);
+  for (const reserved of ["CON", "con", "PRN", "AUX", "NUL"]) {
+    assert.equal(sanitizeMapName(reserved), `${reserved}_map`);
+  }
+});
+
+test("start-plan preflight rejects impossible plane-family allocations before generation", () => {
+  const project = createDefaultProject("start-plan-preflight");
+  project.settings.players = 6;
+  project.settings.startDistribution = { land: 5, coastal: 0, water: 0, cave: 0, other: 1 };
+  assert.deepEqual(preflightStartPlan(project), ["1 other-plane start needs a Cloud, Air, Dream, or Elemental plane."]);
+
+  const withDream = addPlane(project, "dream", { generate: false, autoSize: true });
+  assert.deepEqual(preflightStartPlan(withDream), []);
+
+  withDream.settings.startDistribution = { land: 4, coastal: 0, water: 0, cave: 2, other: 0 };
+  assert.ok(preflightStartPlan(withDream).some((message) => message.includes("need a Cave")));
 });

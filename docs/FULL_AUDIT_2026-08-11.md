@@ -1,12 +1,34 @@
-# Pantokrator Atlas full bug and release audit
+# Pantokrator Atlas audit and remediation record
 
-**Audit date:** 2026-08-11
+**Original audit snapshot:** 2026-08-11
+**Remediation status updated:** 2026-08-11
 
 **Scope:** generation, multiplayer balance, all plane families, UI workflows, accessibility, persistence, project/catalog import, validation, Dominions map compilation, D6M encoding, direct install, ZIP packaging, dependencies, and documentation
 
-**Release decision:** **Hold release until the P1 findings are fixed.**
+**Current release decision:** **The five engineering P1 blockers from the original snapshot are resolved and regression-tested. A seamless-release claim still waits on the external Dominions 6 smoke test described at the end of this record.**
 
-No P0 catastrophic security issue was found. The audit found **5 P1 release blockers**, **17 P2 defects or material release risks**, and several P3 hardening and polish items. The ordinary-size path is already strong: the production build, TypeScript, lint, 154 automated checks in the established development checkout, ordinary eight-plane generation, responsive layout, keyboard editing, and structurally inspected D6M packages all pass. A clean lockfile install exposed an undeclared test runner, documented as P2-17. The blockers occur mainly at persistence boundaries, imported-project boundaries, and the advertised upper limits.
+No P0 catastrophic security issue was found. The original audit found **5 P1 release blockers**, **17 P2 defects or material release risks**, and several P3 hardening and polish items. This document preserves their original evidence and reproductions for traceability; those historical descriptions are not a statement that every item remains present in the current tree.
+
+## Current status
+
+| Original finding | Current disposition |
+|---|---|
+| P1-1 staged-plane restore | **Resolved.** Schema-v1 import round-trips intentionally empty planned planes while validation keeps them out of playable export until generation. |
+| P1-2 province-array/D6M mismatch | **Resolved.** Import rejects arrays that are not stored in local province-number order, and D6M encoding rechecks this invariant. |
+| P1-3 debounce-window loss | **Resolved for the normal workflow.** The header exposes Saving/Saved states, the delay is 200 ms, and **Save now** provides an explicit durability boundary. A browser cannot guarantee completion after a forced process termination, so wait for Saved before closing. |
+| P1-4 silent multi-tab overwrite | **Resolved.** Autosave uses revision fingerprints and compare-and-set writes. A detected stale tab pauses automatic saves behind a persistent Load newer copy / Keep this copy choice. |
+| P1-5 main-thread generation freeze | **Resolved.** Generation runs in a disposable module worker with visible progress, cancellation, stale-result rejection, and complete-result-only commit. |
+
+The original P2 set has also been substantially remediated: all authored start types now share capital cleanup/validation, staging preserves gateways, destructive replacement is confirmed with backup access, New atlas exists, slider history is coalesced, imported command values and custom catalogs use the active validation data, impossible start plans are preflighted, special-plane guardian capacity produces persistent warnings, temperature flags are exclusive, reserved Windows basenames are rewritten, the test runner is declared, and direct install uses staging, backups, rollback, binary-first publication, and cleanup-last ordering.
+
+Current known limitations and release gates:
+
+- A representative compact package and an eight-plane package still need to be installed, loaded, visually inspected, and advanced through at least one AI turn in Dominions 6. Structural `.map`/D6M checks do not replace that external game test.
+- ZIP assembly is still in-memory. The export dialog now warns before cautionary sizes and disables only ZIP when the estimated peak crosses the safety ceiling; direct install remains the large-atlas path.
+- Browser file access has no atomic rename. Direct install therefore provides transaction-like staging and rollback, not filesystem-level atomicity, and reports retained recovery files if rollback itself is denied.
+- Autosave is one browser-local recovery slot, not cloud sync or a recent-project library. Revision conflicts are explicit; portable Editable project JSON remains the durable backup format.
+- Dependency advisories and the P3 resource-ceiling, raw-directive, catalog-trust, tiny-Styx, legibility, and transient-feedback hardening items remain subjects for release maintenance.
+- Some mathematically constrained maps cannot achieve every requested spacing, connection, throne-access, or guardian-density target simultaneously. The generator preserves hard safety rules and reports best-effort quality warnings instead of silently weakening them.
 
 ## Severity definitions
 
@@ -15,9 +37,11 @@ No P0 catastrophic security issue was found. The audit found **5 P1 release bloc
 - **P2:** important correctness, multiplayer-quality, security, or usability defect that should be fixed before a broad release.
 - **P3:** hardening, clarity, accessibility, or infrequent quality issue.
 
-## Release blockers (P1)
+## Historical P1 findings (resolved)
 
-### P1-1: A staged plane makes the saved project unrestorable
+The evidence and requested remedies below describe the pre-remediation snapshot. The current disposition is recorded above and enforced by focused regressions.
+
+### P1-1: A staged plane makes the saved project unrestorable — resolved
 
 **Evidence.** `+ Add plane to plan` deliberately creates an empty draft plane in [`addPlane`](../src/generator.ts#L366-L392). Project autosave and Editable project JSON serialize that state, but [`parseProject`](../src/export.ts#L129-L136) rejects every plane whose province list is empty at [`assertPlane`](../src/export.ts#L251-L270).
 
@@ -35,7 +59,7 @@ throws `project.planes[1].provinces must contain at least one province.`
 
 **Required fix and regression.** Permit empty staged planes in the project schema while keeping them as export-validation errors until Generate runs. Round-trip staged one-through-eight-plane projects through JSON, IndexedDB, and localStorage.
 
-### P1-2: Imported province-array order can desynchronize `.map` commands from D6M geography
+### P1-2: Imported province-array order can desynchronize `.map` commands from D6M geography — resolved
 
 **Evidence.** Validation sorts a copy of province indices and only verifies the set is contiguous in [`validateProject`](../src/dom6.ts#L661-L664). D6M province records and owner values use array position in [`encodeD6m`](../src/dom6.ts#L402-L445), while `.map` commands use each object's explicit `province.index` in [`compileMapText`](../src/dom6.ts#L256-L329).
 
@@ -45,7 +69,7 @@ throws `project.planes[1].provinces must contain at least one province.`
 
 **Required fix and regression.** Canonicalize imported province arrays by index before any geometry/compiler work, or reject arrays unless `province.index === arrayPosition + 1`. Compare every province center, owner raster ID, name, terrain, start, and gateway before and after an imported reorder.
 
-### P1-3: Edits made inside the autosave debounce window are lost on close or reload
+### P1-3: Edits made inside the autosave debounce window are lost on close or reload — resolved
 
 **Live reproduction.** A project-name edit completed, then reload began 134 ms later. Autosave waits 450 ms and the unmount cleanup cancels that timer, so the previous name returned after reload. As a positive control, waiting about 800 ms before reloading retained the same edit.
 
@@ -55,7 +79,7 @@ throws `project.planes[1].provinces must contain at least one province.`
 
 **Required fix and regression.** Track dirty, saving, saved, and failed states; add an explicit Save Project action; persist committed revisions promptly; and use `visibilitychange`/`pagehide` only as best-effort signals, with a synchronous emergency journal where feasible. Warn before unload while dirty. Test unmount/reload at every point from 0-449 ms after text, slider, and province edits.
 
-### P1-4: Multiple tabs silently overwrite one another's autosave
+### P1-4: Multiple tabs silently overwrite one another's autosave — resolved
 
 **Observed concurrent same-origin reproduction.** An eight-plane project was saved in one tab. A second local tab wrote a one-plane project to the same slot. Reload restored the unrelated one-plane project; importing the downloaded eight-plane JSON restored the intended state.
 
@@ -65,7 +89,7 @@ throws `project.planes[1].provinces must contain at least one province.`
 
 **Required fix and regression.** Add stable project IDs and monotonic revisions; reject or fork stale writes; coordinate tabs with `BroadcastChannel` and Web Locks; and provide separate recent-project/autosave slots. Test stale-write rejection with two tabs at the same starting revision.
 
-### P1-5: Large supported generation freezes the browser's main thread
+### P1-5: Large supported generation freezes the browser's main thread — resolved
 
 **Evidence.** The Generate click handler calls `generateProject(source)` synchronously at [`MapMakerApp.tsx`](../src/MapMakerApp.tsx#L421-L430). There is no generation busy state, progress, worker, or cancellation. The table below is a one-seed-per-configuration benchmark of that same synchronous generator in a local Windows x64 Node v24.13.0 harness on an AMD Ryzen 9 7950X3D with 32 logical processors and 63.1 GiB RAM. Time and process RSS were measured in Node, not in the browser; the source architecture independently confirms that equivalent work blocks the browser main thread.
 
@@ -80,7 +104,9 @@ The maximum project eventually had zero validation errors, zero duplicate names,
 
 **Required fix and regression.** Move generation and heavy fairness work to a Web Worker, report plane/stage progress within 100 ms, support cancellation without replacing the current project, and enforce practical performance budgets.
 
-## Important findings (P2)
+## Historical important findings (P2)
+
+This table is retained as the original defect ledger. Most rows now have implemented fixes or bounded mitigations summarized in **Current status**; P2-9 remains a constrained-map quality case and P2-16 remains release-maintenance work.
 
 | ID | Finding and evidence | Required remediation |
 |---|---|---|
@@ -116,12 +142,12 @@ The maximum project eventually had zero validation errors, zero duplicate names,
 - **Transient feedback:** import/export failures rely heavily on a toast that disappears after 3.6 seconds. Keep actionable errors persistently available.
 - **Minor interaction copy:** a same-plane gate still reports `Cross-plane gate linked`; plane and gateway deletion are single-click destructive actions; the default `Pantokrator Atlas` name always creates a filename-normalization warning.
 
-## Verified-good coverage
+## Verification record
 
 The audit did not merely search for failures. It independently verified these release-critical paths:
 
 - Production build, TypeScript, and lint pass.
-- In the established development checkout, `npm test` passes **154/154 checks**: 2 rendered-HTML tests plus 152 TypeScript tests. In a fresh `npm.cmd ci` checkout, the build and 2 rendered tests pass, then the undeclared `tsx` runner blocks the 152 TypeScript tests (P2-17).
+- The lockfile now declares the TypeScript test runner that the full `npm test` command invokes. Production build, the complete JavaScript/TypeScript test suite, typecheck, and lint are required together before merge; focused regression groups cover worker cancellation, project import, autosave conflicts, direct-install rollback, ZIP memory gating, and destructive UI workflows.
 - All 121 plane-kind/variant combinations generate deterministically.
 - Player limits 2, 6, 16, and 32; provinces/player 8, 16, and 30; plane counts 1-8; and supported start categories were exercised.
 - Compatible start plans retained exact categories, hard three-move spacing, and no shared capital surroundings.
@@ -136,7 +162,9 @@ The audit did not merely search for failures. It independently verified these re
 - Keyboard map editing, tab navigation, combobox selection, modal focus trapping/restoration, invalid-import handling, ordinary autosave, and 375 px responsive layout worked in live browser testing.
 - `npm audit --omit=dev` reports zero advisories in the four production dependencies.
 
-## Required remediation order
+## Historical remediation order
+
+The numbered plan below was the original implementation order. Items 1-6 and the declared-runner portion of item 7 are complete; dependency maintenance and the external smoke test remain.
 
 1. Fix project round-trip and autosave integrity (P1-1, P1-3, P1-4).
 2. Fix province-order canonicalization before any further export claims (P1-2).
@@ -148,4 +176,4 @@ The audit did not merely search for failures. It independently verified these re
 
 ## Remaining external smoke test
 
-The installed Dominions 6 executable was discovered locally, but this audit was intentionally read-only outside the repository: it did not write a candidate package into the user's Dominions data directory or launch the game. After the P1 fixes, install a compact one-plane package and a representative eight-plane package, load both in Dominions 6, inspect all planes/gates/starts/thrones, and start at least one AI turn before calling the release seamless.
+The installed Dominions 6 executable was discovered locally, but this audit was intentionally read-only outside the repository: it did not write a candidate package into the user's Dominions data directory or launch the game. Install a compact one-plane package and a representative eight-plane package, load both in Dominions 6, inspect all planes/gates/starts/thrones, and start at least one AI turn before calling the release seamless.

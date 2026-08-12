@@ -2,11 +2,32 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   nationSpecificStartFeatureConflicts,
+  prepareProvinceForPlayerStart,
   setNationSpecificStart,
   type Province,
 } from "../src/domain";
 import { validateProject } from "../src/dom6";
-import { addPlane, calculateFairness, createDefaultProject, generateProject } from "../src/generator";
+import { addPlane, adjacencyFor, calculateFairness, createDefaultProject, generateProject, shortestDistances } from "../src/generator";
+
+test("manual generic and team starts discard independent guardians without erasing authored capital features", () => {
+  const project = createDefaultProject("manual-player-start-prepare");
+  const province = project.planes[0]!.provinces.find((item) => !item.start)!;
+  province.noStart = true;
+  province.throne = "fixed";
+  province.fixedThrone = "1361";
+  province.population = 12_000;
+  province.sites = [{ id: "kept-site", value: "1", known: true }];
+  province.defenders = [{ commander: "34", squads: [] }];
+
+  prepareProvinceForPlayerStart(province);
+
+  assert.equal(province.noStart, false);
+  assert.equal(province.throne, "avoid");
+  assert.equal(province.fixedThrone, undefined);
+  assert.deepEqual(province.defenders, []);
+  assert.equal(province.population, 12_000);
+  assert.equal(province.sites.length, 1);
+});
 
 function populateIndependentFeatures(province: Province): void {
   province.noStart = true;
@@ -148,4 +169,83 @@ test("manual nation-specific starts immediately participate in every geometric f
   assert.ok(after.startSeparation < before.startSeparation, "the newly forced adjacent capital must lower spacing fairness");
   assert.ok(after.notes.some((note) => note.includes("hard three-move")));
   assert.equal(after.startAllocation, before.startAllocation, "a forced nation annotation must not rewrite the generated category allocation");
+});
+
+test("manual generic, team, and specific starts affect geometric fairness equally without double counting", () => {
+  const fixture = createDefaultProject("all-authored-start-fairness");
+  const plane = fixture.planes[0]!;
+  const original = plane.provinces.find((province) => province.start)!;
+  const incident = plane.edges.find((edge) => edge.a === original.id || edge.b === original.id)!;
+  const adjacentId = incident.a === original.id ? incident.b : incident.a;
+  const baseline = calculateFairness(fixture);
+  const scores: number[] = [];
+
+  for (const kind of ["generic", "team", "specific"] as const) {
+    const project = structuredClone(fixture);
+    const province = project.planes[0]!.provinces.find((item) => item.id === adjacentId)!;
+    if (kind === "generic") {
+      province.start = true;
+      prepareProvinceForPlayerStart(province);
+    } else if (kind === "team") {
+      province.teamStart = 0;
+      prepareProvinceForPlayerStart(province);
+    } else {
+      setNationSpecificStart(project, project.planes[0]!.id, province.id, 5);
+    }
+    const fairness = calculateFairness(project);
+    scores.push(fairness.startSeparation);
+    assert.ok(fairness.startSeparation < baseline.startSeparation, `${kind} start did not change fairness`);
+    assert.ok(validateProject(project).some((issue) => issue.severity === "error" && issue.message.includes("distinct multiplayer starts")));
+  }
+  assert.equal(new Set(scores).size, 1, "all authored start types use the same deduplicated geometry");
+
+  const overlaid = structuredClone(fixture);
+  const overlaidProvince = overlaid.planes[0]!.provinces.find((item) => item.id === adjacentId)!;
+  overlaidProvince.start = true;
+  overlaidProvince.teamStart = 0;
+  setNationSpecificStart(overlaid, overlaid.planes[0]!.id, adjacentId, 5);
+  assert.equal(calculateFairness(overlaid).startSeparation, scores[0], "three annotations on one province must count as one capital");
+});
+
+test("regeneration rebuilds the authored-start border, defender, gate, and throne rings", () => {
+  let project = createDefaultProject("authored-start-ring-rebuild");
+  const plane = project.planes[0]!;
+  const candidate = plane.provinces.find((province) => !province.start
+    && plane.edges.some((edge) => (edge.a === province.id || edge.b === province.id) && edge.kind !== "standard"))!;
+  assert.ok(candidate);
+  setNationSpecificStart(project, plane.id, candidate.id, 5);
+  project = addPlane(project, "cave", { generate: false, autoSize: false, provinceTarget: 48 });
+  project = generateProject(project);
+
+  const generatedPlane = project.planes.find((item) => item.id === plane.id)!;
+  const generatedStart = generatedPlane.provinces.find((province) => province.id === candidate.id)!;
+  const adjacency = adjacencyFor(generatedPlane, { traversableOnly: true });
+  const distances = shortestDistances(adjacency, generatedStart.id);
+  assert.ok(generatedPlane.edges.filter((edge) => edge.a === generatedStart.id || edge.b === generatedStart.id)
+    .every((edge) => edge.kind === "standard" || edge.kind === "bridge"));
+  for (const province of generatedPlane.provinces) {
+    if ((distances.get(province.id) ?? Infinity) <= 2) assert.deepEqual(province.defenders, []);
+  }
+  for (const throne of generatedPlane.provinces.filter((province) => province.throne === "preferred" || province.throne === "fixed")) {
+    assert.ok((distances.get(throne.id) ?? 0) >= 2);
+  }
+  for (const gate of project.gates) for (const endpoint of gate.endpoints.filter((item) => item.planeId === generatedPlane.id)) {
+    assert.ok((distances.get(endpoint.provinceId) ?? 0) >= 2);
+  }
+});
+
+test("validation rejects powerful guardian forces inside any authored start ring", () => {
+  const project = createDefaultProject("authored-start-powerful-guardian");
+  const plane = project.planes[0]!;
+  const start = plane.provinces.find((province) => province.start)!;
+  const adjacency = adjacencyFor(plane, { traversableOnly: true });
+  const adjacentId = adjacency.get(start.id)![0]!;
+  const adjacent = plane.provinces.find((province) => province.id === adjacentId)!;
+  adjacent.defenders = [{
+    commander: "92",
+    squads: [{ id: "powerful-1", unit: "205", count: 16 }, { id: "powerful-2", unit: "1278", count: 16 }],
+    experience: 2,
+  }];
+  assert.ok(validateProject(project).some((issue) => issue.provinceId === adjacent.id
+    && issue.severity === "error" && issue.message.includes("powerful independent guardian force adjacent")));
 });

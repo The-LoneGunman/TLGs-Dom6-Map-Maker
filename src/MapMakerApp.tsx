@@ -20,17 +20,20 @@ import {
   TERRAIN_LABELS,
   cloneProject,
   effectiveProvinceTerrainFlags,
+  prepareProvinceForPlayerStart,
   sanitizeMapName,
   setNationSpecificStart,
   type BiomeKey,
   type ComputerPlayer,
   type EdgeKind,
+  type EconomyBalanceMode,
   type GateLink,
   type GateLayout,
   type GenerationSettings,
   type MagicPath,
   type MapProject,
   type OceanLayout,
+  type OverlandTopologyMode,
   type Plane,
   type PlaneConnectionRule,
   type PlaneKind,
@@ -51,9 +54,11 @@ import {
   createDefaultProject,
   defaultPlaneName,
   gateCompatibility,
-  generateProject,
   hashString,
   ISLAND_CHAIN_MIN_WATER_PERCENT,
+  normalizeEconomyBalanceMode,
+  normalizeOverlandTopologyMode,
+  preflightStartPlan,
   removeGeneratedCaveSpecificStarts,
   synchronizePlaneEdges,
 } from "./generator";
@@ -66,9 +71,16 @@ import {
   estimatedPackageBytes,
   installPackage,
   parseProject,
+  zipPackageSafety,
   type ExportProgress,
 } from "./export";
-import { MapCanvas, renderPlanePng } from "./MapCanvas";
+import {
+  isGenerationAbort,
+  startProjectGeneration,
+  type GenerationWorkerProgress,
+  type ProjectGenerationTask,
+} from "./generationWorker";
+import { MapCanvas, canRenderPlanePreview, renderPlanePng } from "./MapCanvas";
 import { CatalogCombobox } from "./catalog/CatalogCombobox";
 import {
   BUILTIN_DOM6_CATALOG,
@@ -79,6 +91,7 @@ import {
   mergeCatalogBundles,
   parseCatalogBundle,
   provinceSiteEntries,
+  selectableUnitEntries,
   siteCompatibility,
   troopUnitEntries,
   type CatalogEntry,
@@ -91,15 +104,41 @@ import {
   provinceAtLocalIndex,
   withoutPlaneGateEndpoints,
 } from "./gatewayEditor";
-import { loadProjectAutosave, saveProjectAutosave, type AutosaveState } from "./autosave";
+import { loadProjectAutosave, saveProjectAutosave, type AutosaveRevision, type AutosaveState } from "./autosave";
+import {
+  appendHistorySnapshot,
+  applyPrimaryTerrain,
+  armedEndpointCopy,
+  atlasReplacementImpact,
+  atlasReplacementNeedsConfirmation,
+  planeRemovalImpact,
+  type AtlasReplacementImpact,
+  type PlaneRemovalImpact,
+} from "./uiWorkflow";
 
 type Tool = "select" | "link" | "gate" | "start" | "throne" | "site";
 type InspectorTab = "terrain" | "gameplay" | "sites" | "advanced";
 type LeftTab = "generate" | "planes" | "scenario";
+type DestructiveConfirmation =
+  | { kind: "new-atlas" }
+  | { kind: "generate"; impact: AtlasReplacementImpact }
+  | { kind: "remove-plane"; planeId: string; impact: PlaneRemovalImpact };
 const INSPECTOR_TABS: readonly InspectorTab[] = ["terrain", "gameplay", "sites", "advanced"];
 const LEFT_TABS: readonly LeftTab[] = ["generate", "planes", "scenario"];
 
 const CATALOG_STORAGE_KEY = "pantokrator-atlas-user-catalog-v1";
+
+/** Browser storage can reject both reads and removals in private/sandboxed contexts. */
+export function removeStoredCustomCatalog(storage?: Pick<Storage, "removeItem">): boolean {
+  try {
+    const target = storage ?? (typeof window !== "undefined" ? window.localStorage : undefined);
+    if (!target) return false;
+    target.removeItem(CATALOG_STORAGE_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
 const START_ALLOCATION_STATUS_ID = "start-allocation-status";
 const TERRAIN_KEYS = (Object.keys(TERRAIN_LABELS) as TerrainKey[]).filter((key) => key !== "freshwater");
 const BIOME_KEYS = Object.keys(BIOME_LABELS) as BiomeKey[];
@@ -188,6 +227,18 @@ const OCEAN_LAYOUTS: Array<{ value: OceanLayout; label: string }> = [
   { value: "inland_sea", label: "Central inland sea" },
 ];
 
+const ECONOMY_BALANCE_MODES: Array<{ value: EconomyBalanceMode; label: string; description: string }> = [
+  { value: "none", label: "None / natural", description: "Keep natural generated populations; starts may have unequal early economies." },
+  { value: "soft", label: "Soft correction", description: "Lightly nudge start economies toward parity, with corrections capped at 12%." },
+  { value: "hard", label: "Hard competitive balance", description: "Strongly equalize early start economies for competitive multiplayer. Default." },
+];
+
+const OVERLAND_TOPOLOGY_MODES: Array<{ value: OverlandTopologyMode; label: string; description: string }> = [
+  { value: "open", label: "Open movement", description: "Turn generated rivers into bridges and other blocking or seasonal overland borders into normal links." },
+  { value: "competitive", label: "Competitive mix", description: "Use a terrain-shaped mix of open routes, rivers, passes, and borders. Default." },
+  { value: "strategic", label: "Strategic regions", description: "Add deterministic regional chokepoints away from capitals while keeping the movement graph connected." },
+];
+
 const EDGE_KINDS: Array<{ value: EdgeKind; label: string }> = [
   { value: "standard", label: "Standard" },
   { value: "road", label: "Road" },
@@ -212,6 +263,8 @@ export function resetGeneratorDefaults(draft: MapProject, activePlaneId: string)
   draft.settings.specialPlaneSizePercent = defaults.settings.specialPlaneSizePercent;
   draft.settings.provinceNameSeed = defaults.settings.provinceNameSeed;
   draft.settings.biomeCohesion = defaults.settings.biomeCohesion;
+  draft.settings.economyBalance = defaults.settings.economyBalance;
+  draft.settings.overlandTopology = defaults.settings.overlandTopology;
   draft.settings.throneCount = defaults.settings.throneCount;
   draft.settings.startDistribution = defaults.settings.startDistribution ? { ...defaults.settings.startDistribution } : undefined;
   draft.settings.startDegreeTarget = defaults.settings.startDegreeTarget;
@@ -249,12 +302,12 @@ export function generationBalanceWarnings(issues: ValidationIssue[]): Validation
   return [spacing, degree].filter((issue): issue is ValidationIssue => issue !== undefined);
 }
 
-export function GenerationBalanceNotice({ issues }: { issues: ValidationIssue[] }) {
+export function GenerationBalanceNotice({ issues, generationWarnings = [] }: { issues: ValidationIssue[]; generationWarnings?: string[] }) {
   const warnings = generationBalanceWarnings(issues);
-  if (!warnings.length) return null;
+  if (!warnings.length && !generationWarnings.length) return null;
   return <p className="warning-copy generation-balance-warning" role="status" aria-live="polite" aria-atomic="true">
     <strong>Generation used a best-effort balance fallback.</strong>{" "}
-    {warnings.map((issue) => issue.message).join(" ")}{" "}
+    {[...generationWarnings, ...warnings.map((issue) => issue.message)].join(" ")}{" "}
     These multiplayer-balance warnings do not block export. Adjust the map size, start mix, or connection target and Generate again if you want stricter parity.
   </p>;
 }
@@ -274,15 +327,24 @@ export function MapMakerApp() {
   const [validationOpen, setValidationOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [replaceAllNamesOpen, setReplaceAllNamesOpen] = useState(false);
+  const [destructiveConfirmation, setDestructiveConfirmation] = useState<DestructiveConfirmation>();
   const [exportProgress, setExportProgress] = useState<ExportProgress>();
   const [exportBusy, setExportBusy] = useState(false);
+  const [generationBusy, setGenerationBusy] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState<GenerationWorkerProgress>();
   const [toast, setToast] = useState<string>();
   const [zoom, setZoom] = useState(1);
   const [hydrated, setHydrated] = useState(false);
   const [autosaveState, setAutosaveState] = useState<AutosaveState>({ backend: "none", errors: [], migrated: false });
+  const [autosaveSaving, setAutosaveSaving] = useState(false);
   const [userCatalog, setUserCatalog] = useState<Dom6CatalogBundle>();
   const importRef = useRef<HTMLInputElement>(null);
   const catalogImportRef = useRef<HTMLInputElement>(null);
+  const generationTaskRef = useRef<ProjectGenerationTask | undefined>(undefined);
+  const currentProjectRef = useRef(project);
+  const rangeEditStartRef = useRef<MapProject | undefined>(undefined);
+  const autosaveRevisionRef = useRef<AutosaveRevision | null>(null);
+  const autosaveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   const activePlane = project.planes.find((plane) => plane.id === activePlaneId) ?? project.planes[0];
   const selected = activePlane?.provinces.find((province) => province.id === selectedId);
@@ -291,11 +353,12 @@ export function MapMakerApp() {
   const startDistribution = project.settings.startDistribution ?? defaultStartDistribution(project.settings.players);
   const caveStartNations = project.settings.caveStartNations ?? [];
   const allocatedStarts = Object.values(startDistribution).reduce((sum, value) => sum + value, 0);
+  const startPlanErrors = useMemo(() => preflightStartPlan(project), [project]);
   const planeConnectionRules = useMemo(() => resolvePlaneConnectionRules(project), [project]);
   const selectedPlaneConnectionRules = planeConnectionRules.filter((rule) => rule.a === activePlane.id || rule.b === activePlane.id);
   const activePlaneGates = gatesTouchingPlane(project.gates, activePlane.id);
   const fairness = useMemo(() => calculateFairness(project), [project]);
-  const issues = useMemo(() => validateProject(project), [project]);
+  const issues = useMemo(() => validateProject(project, catalog), [catalog, project]);
   const topologyAudits = useMemo(() => project.planes.map((plane) => ({
     planeId: plane.id,
     audit: auditPlaneTopology(plane),
@@ -305,18 +368,28 @@ export function MapMakerApp() {
   const errorCount = issues.filter((issue) => issue.severity === "error").length;
   const warningCount = issues.filter((issue) => issue.severity === "warning").length;
   const totalProvinces = project.planes.reduce((sum, plane) => sum + plane.provinces.length, 0);
-  const autosaveLabel = autosaveState.backend === "indexeddb"
-    ? "Device autosave"
-    : autosaveState.backend === "localstorage"
-      ? "Limited autosave"
-      : hydrated ? "Autosave unavailable" : "Loading autosave";
+  const autosaveLabel = autosaveState.conflict
+    ? "Autosave conflict"
+    : autosaveSaving
+      ? "Saving changes"
+      : autosaveState.backend === "indexeddb"
+        ? "Device autosave saved"
+        : autosaveState.backend === "localstorage"
+          ? "Limited autosave saved"
+          : hydrated ? "Autosave unavailable" : "Loading autosave";
   const autosaveError = autosaveState.errors[0]?.message;
+  const armedStatus = linkSource
+    ? armedEndpointCopy(project, "link", linkSource, activePlane?.id ?? "")
+    : gateSource
+      ? armedEndpointCopy(project, "gate", gateSource, activePlane?.id ?? "")
+      : undefined;
 
   useEffect(() => {
     let cancelled = false;
     const timeout = window.setTimeout(() => {
       void loadProjectAutosave().then((result) => {
         if (cancelled) return;
+        autosaveRevisionRef.current = result.revision ?? null;
         setAutosaveState(result);
         if (result.project) {
           setProject(result.project);
@@ -337,6 +410,10 @@ export function MapMakerApp() {
   }, []);
 
   useEffect(() => {
+    currentProjectRef.current = project;
+  }, [project]);
+
+  useEffect(() => {
     const timeout = window.setTimeout(() => {
       try {
         const saved = window.localStorage.getItem(CATALOG_STORAGE_KEY);
@@ -346,26 +423,37 @@ export function MapMakerApp() {
           setUserCatalog(parsed);
         }
       } catch {
-        window.localStorage.removeItem(CATALOG_STORAGE_KEY);
-        setToast("A saved custom catalog was invalid and has been ignored.");
+        const cleared = removeStoredCustomCatalog();
+        setToast(cleared
+          ? "A saved custom catalog was invalid and has been ignored."
+          : "Custom catalog storage is unavailable. Bundled Dominions data remains available for this session.");
       }
     }, 0);
     return () => window.clearTimeout(timeout);
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || autosaveState.conflict) return;
     const timeout = window.setTimeout(() => {
-      void saveProjectAutosave(project).then((state) => {
+      setAutosaveSaving(true);
+      autosaveQueueRef.current = autosaveQueueRef.current.catch(() => undefined).then(async () => {
+        const state = await saveProjectAutosave(project, undefined, { expectedRevision: autosaveRevisionRef.current });
         setAutosaveState(state);
-        if (state.backend === "none") setToast("Autosave is unavailable. Download the project to keep these changes.");
+        if (state.conflict) {
+          setToast("Autosave paused because another tab saved a newer copy. Choose which copy to keep.");
+        } else {
+          autosaveRevisionRef.current = state.revision ?? autosaveRevisionRef.current;
+          if (state.backend === "none") setToast("Autosave is unavailable. Download the project to keep these changes.");
+        }
       }).catch(() => {
         setAutosaveState({ backend: "none", errors: [], migrated: false });
         setToast("Autosave is unavailable. Download the project to keep these changes.");
+      }).finally(() => {
+        if (currentProjectRef.current === project) setAutosaveSaving(false);
       });
-    }, 450);
+    }, 200);
     return () => window.clearTimeout(timeout);
-  }, [hydrated, project]);
+  }, [autosaveState.conflict, hydrated, project]);
 
   useEffect(() => {
     if (!toast) return;
@@ -373,20 +461,42 @@ export function MapMakerApp() {
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
+  useEffect(() => () => {
+    const task = generationTaskRef.current;
+    generationTaskRef.current = undefined;
+    task?.cancel();
+  }, []);
+
   const commit = useCallback((next: MapProject, remember = true) => {
+    const previous = currentProjectRef.current;
     if (remember) {
-      setUndoStack((stack) => [...stack.slice(-29), project]);
-      setRedoStack([]);
+      setUndoStack((stack) => appendHistorySnapshot(stack, previous));
     }
+    // A new edit branches away from Redo, including coalesced range edits.
+    setRedoStack([]);
+    currentProjectRef.current = next;
+    setAutosaveSaving(true);
     setProject(next);
-  }, [project]);
+  }, []);
 
   const mutate = useCallback((recipe: (draft: MapProject) => void, remember = true) => {
-    const draft = cloneProject(project);
+    const draft = cloneProject(currentProjectRef.current);
     recipe(draft);
     draft.updatedAt = new Date().toISOString();
     commit(draft, remember);
-  }, [commit, project]);
+  }, [commit]);
+
+  const beginRangeEdit = useCallback(() => {
+    if (!rangeEditStartRef.current) rangeEditStartRef.current = currentProjectRef.current;
+    setRedoStack([]);
+  }, []);
+
+  const finishRangeEdit = useCallback(() => {
+    const startingProject = rangeEditStartRef.current;
+    rangeEditStartRef.current = undefined;
+    if (!startingProject || startingProject === currentProjectRef.current) return;
+    setUndoStack((stack) => appendHistorySnapshot(stack, startingProject));
+  }, []);
 
   const updateSelected = useCallback((recipe: (province: Province) => void) => {
     if (!activePlane || !selectedId) return;
@@ -400,9 +510,12 @@ export function MapMakerApp() {
   const handleUndo = () => {
     const previous = undoStack.at(-1);
     if (!previous) return;
+    rangeEditStartRef.current = undefined;
     setUndoStack((stack) => stack.slice(0, -1));
-    setRedoStack((stack) => [...stack.slice(-29), project]);
+    setRedoStack((stack) => appendHistorySnapshot(stack, currentProjectRef.current));
+    currentProjectRef.current = previous;
     setProject(previous);
+    setAutosaveSaving(true);
     setSelectedId(undefined);
     setLinkSource(undefined);
     setGateSource(undefined);
@@ -411,12 +524,65 @@ export function MapMakerApp() {
   const handleRedo = () => {
     const next = redoStack.at(-1);
     if (!next) return;
+    rangeEditStartRef.current = undefined;
     setRedoStack((stack) => stack.slice(0, -1));
-    setUndoStack((stack) => [...stack.slice(-29), project]);
+    setUndoStack((stack) => appendHistorySnapshot(stack, currentProjectRef.current));
+    currentProjectRef.current = next;
     setProject(next);
+    setAutosaveSaving(true);
     setSelectedId(undefined);
     setLinkSource(undefined);
     setGateSource(undefined);
+  };
+
+  const launchGeneration = () => {
+    if (generationTaskRef.current) return;
+    const source = cloneProject(project);
+    source.settings.gateDirection = "bidirectional";
+    const launchProject = project;
+    setGenerationBusy(true);
+    setGenerationProgress({
+      phase: "queued",
+      message: `Preparing ${source.planes.length} planned plane${source.planes.length === 1 ? "" : "s"} for background generation…`,
+    });
+    const task = startProjectGeneration(source, { onProgress: setGenerationProgress });
+    generationTaskRef.current = task;
+    void task.promise.then((next) => {
+      if (currentProjectRef.current !== launchProject) {
+        setToast("Generation finished, but the project changed while it was running, so the result was safely discarded. Generate again to use the latest settings.");
+        return;
+      }
+      commit(next);
+      setActivePlaneId(next.planes[0]?.id ?? "");
+      setSelectedId(undefined);
+      setLinkSource(undefined);
+      setGateSource(undefined);
+      const notes: string[] = [];
+      if (source.settings.oceanLayout === "island_chains"
+        && source.settings.waterPercent < ISLAND_CHAIN_MIN_WATER_PERCENT) {
+        notes.push(`Island chains used the ${ISLAND_CHAIN_MIN_WATER_PERCENT}% effective water minimum.`);
+      }
+    const nextIssues = validateProject(next, catalog);
+      const continentNote = nextIssues.find((issue) => issue.severity === "warning"
+        && issue.message.startsWith("Requested ") && issue.message.includes("major continents"));
+      if (continentNote) notes.push(continentNote.message);
+      if (generationBalanceWarnings(nextIssues).length) {
+        notes.push("Balance warning: start spacing or connection parity used a best-effort fallback; review the non-blocking details below Generate.");
+      }
+      if (next.generationWarnings?.length) {
+        notes.push(`${next.generationWarnings.length} constrained-generation warning${next.generationWarnings.length === 1 ? "" : "s"} recorded below Generate.`);
+      }
+      setToast(`Generated ${next.planes.reduce((sum, plane) => sum + plane.provinces.length, 0)} provinces from seed “${next.seed}”.${notes.length ? ` ${notes.join(" ")}` : ""}`);
+    }).catch((error: unknown) => {
+      if (!isGenerationAbort(error)) {
+        setToast(error instanceof Error ? error.message : "Background map generation failed.");
+      }
+    }).finally(() => {
+      if (generationTaskRef.current !== task) return;
+      generationTaskRef.current = undefined;
+      setGenerationBusy(false);
+      setGenerationProgress(undefined);
+    });
   };
 
   const handleGenerate = () => {
@@ -425,27 +591,87 @@ export function MapMakerApp() {
       setToast(`Start allocation totals ${allocatedStarts}; it must equal ${project.settings.players} players.`);
       return;
     }
-    const source = cloneProject(project);
-    source.settings.gateDirection = "bidirectional";
-    const next = generateProject(source);
-    commit(next);
+    if (startPlanErrors.length) {
+      setLeftTab("generate");
+      setToast(`Generation cannot start: ${startPlanErrors[0]}`);
+      return;
+    }
+    if (generationTaskRef.current) return;
+    const impact = atlasReplacementImpact(project);
+    if (atlasReplacementNeedsConfirmation(impact)) {
+      setDestructiveConfirmation({ kind: "generate", impact });
+      return;
+    }
+    launchGeneration();
+  };
+
+  const handleCancelGeneration = () => {
+    const task = generationTaskRef.current;
+    if (!task) return;
+    generationTaskRef.current = undefined;
+    task.cancel();
+    setGenerationBusy(false);
+    setGenerationProgress(undefined);
+    setToast("Generation cancelled. The current atlas was not changed.");
+  };
+
+  const startNewAtlas = () => {
+    const task = generationTaskRef.current;
+    generationTaskRef.current = undefined;
+    task?.cancel();
+    const next = createDefaultProject();
+    currentProjectRef.current = next;
+    rangeEditStartRef.current = undefined;
+    setProject(next);
+    setAutosaveSaving(true);
     setActivePlaneId(next.planes[0]?.id ?? "");
     setSelectedId(undefined);
     setLinkSource(undefined);
     setGateSource(undefined);
-    const notes: string[] = [];
-    if (source.settings.oceanLayout === "island_chains"
-      && source.settings.waterPercent < ISLAND_CHAIN_MIN_WATER_PERCENT) {
-      notes.push(`Island chains used the ${ISLAND_CHAIN_MIN_WATER_PERCENT}% effective water minimum.`);
-    }
-    const nextIssues = validateProject(next);
-    const continentNote = nextIssues.find((issue) => issue.severity === "warning"
-      && issue.message.startsWith("Requested ") && issue.message.includes("major continents"));
-    if (continentNote) notes.push(continentNote.message);
-    if (generationBalanceWarnings(nextIssues).length) {
-      notes.push("Balance warning: start spacing or connection parity used a best-effort fallback; review the non-blocking details below Generate.");
-    }
-    setToast(`Generated ${next.planes.reduce((sum, plane) => sum + plane.provinces.length, 0)} provinces from seed “${next.seed}”.${notes.length ? ` ${notes.join(" ")}` : ""}`);
+    setUndoStack([]);
+    setRedoStack([]);
+    setTool("select");
+    setPreview("normal");
+    setInspectorTab("terrain");
+    setLeftTab("generate");
+    setValidationOpen(false);
+    setExportOpen(false);
+    setReplaceAllNamesOpen(false);
+    setGenerationBusy(false);
+    setGenerationProgress(undefined);
+    setToast("Started a new atlas with generator defaults. The previous atlas is not in Undo; use its downloaded backup to restore it.");
+  };
+
+  const removePlane = (planeId: string) => {
+    const source = currentProjectRef.current;
+    if (source.planes.length <= 1) return;
+    const index = source.planes.findIndex((plane) => plane.id === planeId);
+    if (index < 0) return;
+    const nextId = source.planes[index === 0 ? 1 : index - 1]?.id;
+    mutate((draft) => {
+      draft.planes = draft.planes.filter((plane) => plane.id !== planeId);
+      draft.gates = withoutPlaneGateEndpoints(draft.gates, planeId);
+      draft.specificStarts = draft.specificStarts.filter((start) => start.planeId !== planeId);
+      draft.settings.planeConnections = draft.settings.planeConnections?.filter((rule) => rule.a !== planeId && rule.b !== planeId);
+    });
+    setActivePlaneId(nextId ?? "");
+    setSelectedId(undefined);
+    setLinkSource(undefined);
+    setGateSource(undefined);
+  };
+
+  const requestRemovePlane = (planeId: string) => {
+    const impact = planeRemovalImpact(project, planeId);
+    if (impact) setDestructiveConfirmation({ kind: "remove-plane", planeId, impact });
+  };
+
+  const confirmDestructiveAction = () => {
+    const action = destructiveConfirmation;
+    if (!action) return;
+    setDestructiveConfirmation(undefined);
+    if (action.kind === "new-atlas") startNewAtlas();
+    else if (action.kind === "generate") launchGeneration();
+    else removePlane(action.planeId);
   };
 
   const handleRegenerateProvinceNames = () => {
@@ -503,8 +729,10 @@ export function MapMakerApp() {
 
   const resetCatalog = () => {
     setUserCatalog(undefined);
-    window.localStorage.removeItem(CATALOG_STORAGE_KEY);
-    setToast("Custom catalog entries removed; bundled Dominions 6.35 data remains available.");
+    const cleared = removeStoredCustomCatalog();
+    setToast(cleared
+      ? "Custom catalog entries removed; bundled Dominions 6.35 data remains available."
+      : "Custom catalog entries were removed for this session, but browser storage could not be cleared; they may return after reload.");
   };
 
   const downloadCatalogTemplate = () => {
@@ -548,10 +776,7 @@ export function MapMakerApp() {
     if (tool === "start") {
       updateProvinceById(activePlane.id, provinceId, (province) => {
         province.start = !province.start;
-        if (province.start) {
-          province.noStart = false;
-          province.throne = "avoid";
-        }
+        if (province.start) prepareProvinceForPlayerStart(province);
       });
       return;
     }
@@ -608,7 +833,7 @@ export function MapMakerApp() {
     if (tool === "gate") {
       if (!gateSource) {
         setGateSource({ planeId: activePlane.id, provinceId });
-        setToast("Switch planes, then choose the destination province.");
+        setToast("Gate source armed. Choose any other province on this plane or another plane.");
         return;
       }
       const sourcePlane = project.planes.find((plane) => plane.id === gateSource.planeId);
@@ -629,8 +854,9 @@ export function MapMakerApp() {
           endpoints: [gateSource, { planeId: activePlane.id, provinceId }],
         });
       });
+      const samePlane = gateSource.planeId === activePlane.id;
       setGateSource(undefined);
-      setToast("Cross-plane gate linked.");
+      setToast(samePlane ? "Same-plane gateway linked." : "Cross-plane gateway linked.");
     }
   };
 
@@ -699,10 +925,49 @@ export function MapMakerApp() {
     }
   };
 
+  const saveAutosaveNow = async (replaceNewer = false) => {
+    setAutosaveSaving(true);
+    try {
+      await autosaveQueueRef.current.catch(() => undefined);
+      const state = replaceNewer
+        ? await saveProjectAutosave(project)
+        : await saveProjectAutosave(project, undefined, { expectedRevision: autosaveRevisionRef.current });
+      setAutosaveState(state);
+      if (state.conflict) {
+        setToast("Another tab has a newer autosave. Reload that copy or explicitly keep this one.");
+        return;
+      }
+      autosaveRevisionRef.current = state.revision ?? autosaveRevisionRef.current;
+      setToast(state.backend === "none" ? "Autosave is unavailable; download Editable project JSON." : "Project saved on this device.");
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "The project could not be saved.");
+    } finally {
+      setAutosaveSaving(false);
+    }
+  };
+
+  const reloadAutosaveAfterConflict = async () => {
+    const result = await loadProjectAutosave();
+    if (!result.project) {
+      setToast("The newer autosave is no longer available; the current atlas was kept.");
+      return;
+    }
+    autosaveRevisionRef.current = result.revision ?? null;
+    setAutosaveState(result);
+    setProject(result.project);
+    setActivePlaneId(result.project.planes[0]?.id ?? "");
+    setSelectedId(undefined);
+    setLinkSource(undefined);
+    setGateSource(undefined);
+    setUndoStack([]);
+    setRedoStack([]);
+    setToast("Loaded the newer device autosave.");
+  };
+
   if (!activePlane) return <main className="empty-state">No plane is available.</main>;
 
   return (
-    <main className="atlas-shell">
+    <main className="atlas-shell" aria-busy={!hydrated} inert={!hydrated}>
       <header className="topbar">
         <div className="brand-block">
           <div className="brand-sigil" aria-hidden="true">P</div>
@@ -719,12 +984,14 @@ export function MapMakerApp() {
             onChange={(event) => mutate((draft) => { draft.name = event.target.value; })}
             aria-label="Project name"
           />
-          <span className={`autosave ${autosaveState.backend === "none" && hydrated ? "failed" : ""}`} role="status" aria-live="polite" aria-atomic="true" title={autosaveError}>
+          <span className={`autosave ${(autosaveState.backend === "none" && hydrated) || autosaveState.conflict ? "failed" : ""}`} role="status" aria-live="polite" aria-atomic="true" title={autosaveError}>
             <i aria-hidden="true" /> {autosaveLabel}
             {autosaveError && <span className="sr-only">. {autosaveError}</span>}
           </span>
         </div>
         <div className="top-actions">
+          <button className="button quiet" type="button" aria-haspopup="dialog" onClick={() => setDestructiveConfirmation({ kind: "new-atlas" })}>New atlas</button>
+          <button className="button quiet" type="button" disabled={!hydrated || autosaveSaving} onClick={() => { void saveAutosaveNow(false); }}>Save now</button>
           <button className="icon-button" type="button" onClick={handleUndo} disabled={!undoStack.length} title="Undo" aria-label="Undo">↶</button>
           <button className="icon-button" type="button" onClick={handleRedo} disabled={!redoStack.length} title="Redo" aria-label="Redo">↷</button>
           <button className="button quiet" type="button" onClick={() => setValidationOpen(true)}>
@@ -733,6 +1000,12 @@ export function MapMakerApp() {
           <button className="button primary" type="button" onClick={() => setExportOpen(true)}>Install / export</button>
         </div>
       </header>
+
+      {autosaveState.conflict && <section className="autosave-conflict" role="alert" aria-live="assertive">
+        <div><strong>A newer device autosave exists.</strong><span>Another Atlas tab changed the shared copy. Automatic saving is paused so neither version is silently overwritten.</span></div>
+        <button className="button quiet" type="button" onClick={() => { void reloadAutosaveAfterConflict(); }}>Load newer copy</button>
+        <button className="button primary" type="button" onClick={() => { void saveAutosaveNow(true); }}>Keep this copy</button>
+      </section>}
 
       <div className="workbench">
         <aside className="left-panel panel">
@@ -803,11 +1076,17 @@ export function MapMakerApp() {
                   draft.settings.startDistribution = { ...distribution, land: Math.max(0, draft.settings.players - nonLand) };
                 })}>Put remainder on land</button>}
               </div>
+              {startPlanErrors.length > 0 && (
+                <div id="start-plan-errors" className="warning-copy start-plan-errors" role="alert" aria-live="polite" aria-atomic="true">
+                  <strong>Generation plan cannot place all starts.</strong>
+                  <ul>{startPlanErrors.map((message) => <li key={message}>{message}</li>)}</ul>
+                </div>
+              )}
               <NumberField label="Target useful connections at starts" value={project.settings.startDegreeTarget ?? 4} min={1} max={8} onChange={(value) => mutate((draft) => { draft.settings.startDegreeTarget = value; })} />
               <p className="microcopy">Land, coast, water, cave, and other counts must total the player count. Four useful connections is the recommended multiplayer baseline; targets from five to eight use the closest feasible common degree when the province geometry cannot give every start the requested value.</p>
               <Divider />
               <SectionHeading kicker="WORLD SHAPE" title={`${project.planes.length}-plane generation plan`} />
-              <RangeField label="Water provinces" value={project.settings.waterPercent} suffix="%" min={0} max={60} onChange={(value) => mutate((draft) => { draft.settings.waterPercent = value; }, false)} />
+              <RangeField label="Water provinces" value={project.settings.waterPercent} suffix="%" min={0} max={60} onInteractionStart={beginRangeEdit} onInteractionEnd={finishRangeEdit} onChange={(value) => mutate((draft) => { draft.settings.waterPercent = value; }, false)} />
               <Field label="Overland ocean layout">
                 <select value={project.settings.oceanLayout ?? "natural"} onChange={(event) => mutate((draft) => { draft.settings.oceanLayout = event.target.value as OceanLayout; })}>
                   {OCEAN_LAYOUTS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
@@ -824,8 +1103,22 @@ export function MapMakerApp() {
                 />
                 <p className="field-note">This is a topology target. If the water quota and wrapping cannot sustain every requested landmass, Generate and validation report the achieved count.</p>
               </>}
-              <RangeField label="Biome cohesion" value={project.settings.biomeCohesion} suffix="%" min={0} max={100} onChange={(value) => mutate((draft) => { draft.settings.biomeCohesion = value; }, false)} />
+              <RangeField label="Biome cohesion" value={project.settings.biomeCohesion} suffix="%" min={0} max={100} onInteractionStart={beginRangeEdit} onInteractionEnd={finishRangeEdit} onChange={(value) => mutate((draft) => { draft.settings.biomeCohesion = value; }, false)} />
               <p className="field-note">Lower cohesion creates more local variation and patchwork; higher cohesion creates larger contiguous biome regions. Minimum terrain variety remains enforced.</p>
+              <Divider />
+              <SectionHeading kicker="MULTIPLAYER POLICY" title="Balance and overland routes" />
+              <Field label="Economy balance">
+                <select value={normalizeEconomyBalanceMode(project.settings.economyBalance)} onChange={(event) => mutate((draft) => { draft.settings.economyBalance = event.target.value as EconomyBalanceMode; })}>
+                  {ECONOMY_BALANCE_MODES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                </select>
+              </Field>
+              <p className="field-note">{ECONOMY_BALANCE_MODES.find((item) => item.value === normalizeEconomyBalanceMode(project.settings.economyBalance))!.description}</p>
+              <Field label="Overland topology">
+                <select value={normalizeOverlandTopologyMode(project.settings.overlandTopology)} onChange={(event) => mutate((draft) => { draft.settings.overlandTopology = event.target.value as OverlandTopologyMode; })}>
+                  {OVERLAND_TOPOLOGY_MODES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                </select>
+              </Field>
+              <p className="field-note">{OVERLAND_TOPOLOGY_MODES.find((item) => item.value === normalizeOverlandTopologyMode(project.settings.overlandTopology))!.description} This affects only solid Surface and surface-like Custom planes; sparse and cave realms keep their authored route profiles.</p>
               <button className="button quiet wide" type="button" onClick={handleRegenerateProvinceNames}>Reroll generated names (preserve manual)</button>
               <p className="field-note">Names follow each plane and its effective terrain, including coasts, flooded caves, and the River Styx. Names edited in the province inspector are marked manual and survive map generation and name rerolls.</p>
               <button
@@ -860,8 +1153,22 @@ export function MapMakerApp() {
               <Toggle label="Wrap east / west" checked={activePlane.wrapX} onChange={(value) => updateWrap("wrapX", value)} />
               <Toggle label="Wrap north / south" checked={activePlane.wrapY} onChange={(value) => updateWrap("wrapY", value)} />
               <button className="button quiet wide" type="button" onClick={() => setLeftTab("planes")}>Configure plane archetypes &amp; selected links</button>
-              <button className="button generate-button" type="button" disabled={allocatedStarts !== project.settings.players} aria-describedby={START_ALLOCATION_STATUS_ID} onClick={handleGenerate}><span>✦</span> Generate balanced atlas ({project.planes.length} plane{project.planes.length === 1 ? "" : "s"})</button>
-              <GenerationBalanceNotice issues={issues} />
+              <button
+                className="button generate-button"
+                type="button"
+                disabled={allocatedStarts !== project.settings.players || startPlanErrors.length > 0 || generationBusy}
+                aria-describedby={`${START_ALLOCATION_STATUS_ID}${startPlanErrors.length ? " start-plan-errors" : ""}${generationBusy ? " generation-progress" : ""}`}
+                onClick={handleGenerate}
+              ><span>✦</span> {generationBusy ? "Generating atlas…" : `Generate balanced atlas (${project.planes.length} plane${project.planes.length === 1 ? "" : "s"})`}</button>
+              {generationBusy && generationProgress && (
+                <div id="generation-progress" className="generation-progress" role="status" aria-live="polite" aria-atomic="true" aria-busy="true">
+                  <progress aria-label="Atlas generation in progress" />
+                  <strong>{generationProgress.message}</strong>
+                  <small>The existing atlas remains available and is replaced only after a complete result.</small>
+                  <button className="button quiet danger-text" type="button" onClick={handleCancelGeneration}>Cancel generation</button>
+                </div>
+              )}
+              <GenerationBalanceNotice issues={issues} generationWarnings={project.generationWarnings} />
               <button
                 className="button quiet wide"
                 type="button"
@@ -943,20 +1250,7 @@ export function MapMakerApp() {
                 </div>
               </details>
               {project.planes.length > 1 && (
-                <button className="text-button danger-text" type="button" onClick={() => {
-                  const index = project.planes.findIndex((plane) => plane.id === activePlane.id);
-                  const nextId = project.planes[index === 0 ? 1 : index - 1]?.id;
-                  mutate((draft) => {
-                    draft.planes = draft.planes.filter((plane) => plane.id !== activePlane.id);
-                    draft.gates = withoutPlaneGateEndpoints(draft.gates, activePlane.id);
-                    draft.specificStarts = draft.specificStarts.filter((start) => start.planeId !== activePlane.id);
-                    draft.settings.planeConnections = draft.settings.planeConnections?.filter((rule) => rule.a !== activePlane.id && rule.b !== activePlane.id);
-                  });
-                  setActivePlaneId(nextId ?? "");
-                  setSelectedId(undefined);
-                  setLinkSource(undefined);
-                  setGateSource(undefined);
-                }}>Remove this plane</button>
+                <button className="text-button danger-text" type="button" aria-haspopup="dialog" disabled={generationBusy} title={generationBusy ? "Cancel generation before removing a plane." : undefined} onClick={() => requestRemovePlane(activePlane.id)}>Remove this plane…</button>
               )}
               <Divider />
               <SectionHeading kicker="PLANNED GENERATION LINKS" title={`Next-generation links from ${activePlane.name}`} />
@@ -1044,7 +1338,10 @@ export function MapMakerApp() {
               ))}
             </div>
             <div className="canvas-controls">
-              {(linkSource || gateSource) && <span className="pending-link">Endpoint armed</span>}
+              {armedStatus && <div className="pending-link">
+                <span role="status" aria-live="polite" aria-atomic="true" title={armedStatus}>{armedStatus}</span>
+                <button type="button" onClick={() => { setLinkSource(undefined); setGateSource(undefined); }}>Cancel endpoint</button>
+              </div>}
               <label>Condition preview
                 <select value={preview} onChange={(event) => setPreview(event.target.value as PreviewCondition)}>
                   {CONDITIONS.map((condition) => <option value={condition.value} key={condition.value}>{condition.label}</option>)}
@@ -1095,7 +1392,7 @@ export function MapMakerApp() {
                 ))}
               </div>
               <div id="inspector-active-panel" className="panel-scroll inspector-scroll" role="tabpanel" aria-labelledby={`inspector-tab-${inspectorTab}`}>
-                {inspectorTab === "terrain" && <TerrainInspector province={selected} update={updateSelected} />}
+                {inspectorTab === "terrain" && <TerrainInspector planeId={activePlane.id} province={selected} update={updateSelected} mutateProject={mutate} />}
                 {inspectorTab === "gameplay" && <GameplayInspector catalog={catalog} project={project} planeId={activePlane.id} province={selected} update={updateSelected} mutateProject={mutate} />}
                 {inspectorTab === "sites" && <SitesDefenseInspector
                   catalog={catalog}
@@ -1129,6 +1426,14 @@ export function MapMakerApp() {
         <span>{formatBytes(estimatedPackageBytes(project))} package</span>
       </footer>
 
+      {destructiveConfirmation && <DestructiveConfirmationDialog
+        action={destructiveConfirmation}
+        project={project}
+        onClose={() => setDestructiveConfirmation(undefined)}
+        onBackup={() => { downloadProject(project); setToast("Editable backup downloaded. Keep it until you are satisfied with the replacement."); }}
+        onConfirm={confirmDestructiveAction}
+      />}
+
       {validationOpen && <ValidationDrawer issues={issues} fairness={fairness} onClose={() => setValidationOpen(false)} onSelectIssue={(issue) => {
         if (issue.planeId) setActivePlaneId(issue.planeId);
         if (issue.provinceId) setSelectedId(issue.provinceId);
@@ -1157,19 +1462,17 @@ export function MapMakerApp() {
   );
 }
 
-function TerrainInspector({ province, update }: { province: Province; update: (recipe: (province: Province) => void) => void }) {
+function TerrainInspector({ planeId, province, update, mutateProject }: { planeId: string; province: Province; update: (recipe: (province: Province) => void) => void; mutateProject: (recipe: (project: MapProject) => void) => void }) {
   const inherentFlags = effectiveProvinceTerrainFlags({ terrain: province.terrain, terrainFlags: undefined, freshwater: false });
   const effectiveFlags = effectiveProvinceTerrainFlags(province);
   const additionalFlags = ADDITIVE_TERRAIN_FLAGS.filter((flag) => !inherentFlags.has(flag));
   return (
     <div className="inspector-stack">
       <SectionHeading kicker="MECHANICAL TERRAIN" title="Biome & terrain" />
-      <Field label="Visual / primary terrain"><select value={province.terrain} onChange={(event) => update((item) => {
-        item.terrain = event.target.value as TerrainKey;
-        const nextInherent = effectiveProvinceTerrainFlags({ terrain: item.terrain, terrainFlags: undefined, freshwater: false });
-        item.terrainFlags = item.terrainFlags?.filter((flag) => !nextInherent.has(flag));
-        if (!item.terrainFlags?.length) item.terrainFlags = undefined;
-      })}>{TERRAIN_KEYS.map((key) => <option value={key} key={key}>{TERRAIN_LABELS[key]}</option>)}</select></Field>
+      <Field label="Visual / primary terrain"><select value={province.terrain} onChange={(event) => {
+        const terrain = event.target.value as TerrainKey;
+        mutateProject((draft) => { applyPrimaryTerrain(draft, planeId, province.id, terrain); });
+      }}>{TERRAIN_KEYS.map((key) => <option value={key} key={key}>{TERRAIN_LABELS[key]}</option>)}</select></Field>
       <Field label="Biome"><select value={province.biome} onChange={(event) => update((item) => { item.biome = event.target.value as BiomeKey; })}>{BIOME_KEYS.map((key) => <option value={key} key={key}>{BIOME_LABELS[key]}</option>)}</select></Field>
       <div className="choice-grid">
         <CheckCard label="Small province" checked={province.small} onChange={(value) => update((item) => { item.small = value; if (value) item.large = false; })} />
@@ -1223,8 +1526,14 @@ function GameplayInspector({ catalog, project, planeId, province, update, mutate
   return (
     <div className="inspector-stack">
       <SectionHeading kicker="MULTIPLAYER" title="Starts & thrones" />
-      <Toggle label="Generic player start" checked={province.start} onChange={(value) => update((item) => { item.start = value; if (value) { item.noStart = false; item.throne = "avoid"; } })} />
-      <OptionalNumberField label="Team-start group" value={province.teamStart} min={0} onChange={(value) => update((item) => { item.teamStart = value; })} />
+      <Toggle label="Generic player start" checked={province.start} onChange={(value) => update((item) => {
+        item.start = value;
+        if (value) prepareProvinceForPlayerStart(item);
+      })} />
+      <OptionalNumberField label="Team-start group" value={province.teamStart} min={0} onChange={(value) => update((item) => {
+        item.teamStart = value;
+        if (value !== undefined) prepareProvinceForPlayerStart(item);
+      })} />
       <CatalogCombobox label="Specific-start nation" value={specific?.nation} entries={playableNations} placeholder="Search playable nation name or ID" onCommit={(value) => {
         const nation = optionalNumber(value);
         mutateProject((draft) => {
@@ -1266,10 +1575,12 @@ export function SitesDefenseInspector({ catalog, plane, province, protectedStart
   const ordinarySites = placeableSites.filter((entry) => entry.provenanceId !== "dom6inspector-6.35-cfac4311" || entry.tags?.includes("ordinary-site"));
   const sitePool = showSpecialSites ? placeableSites : ordinarySites;
   const siteChoices = showTerrainMismatches ? sitePool : sitePool.filter((entry) => siteStatus(entry).compatible);
-  const roleCommanders = commanderUnitEntries(catalog.units);
-  const roleTroops = troopUnitEntries(catalog.units);
-  const commanderChoices = showAllGuardianUnits ? catalog.units : roleCommanders;
-  const troopChoices = showAllGuardianUnits ? catalog.units : roleTroops;
+  const selectableUnits = selectableUnitEntries(catalog.units);
+  const internalUnitCount = catalog.units.length - selectableUnits.length;
+  const roleCommanders = commanderUnitEntries(selectableUnits);
+  const roleTroops = troopUnitEntries(selectableUnits);
+  const commanderChoices = showAllGuardianUnits ? selectableUnits : roleCommanders;
+  const troopChoices = showAllGuardianUnits ? selectableUnits : roleTroops;
   return (
     <div className="inspector-stack">
       <SectionHeading kicker="MAGIC SITES" title="Placed sites" />
@@ -1293,17 +1604,17 @@ export function SitesDefenseInspector({ catalog, plane, province, protectedStart
       <Divider />
       <SectionHeading kicker="UNIQUE INITIAL DEFENSE" title="Guardian groups" />
       <div className="info-card amber"><strong>Map-only boundary</strong><p>These commanders and squads are unique initial independents. Persistent purchasable PD composition is defined by a vanilla poptype or nation; a wholly new PD roster requires enabling a separate mod.</p></div>
-      <div className="catalog-filter-bar"><span>{showAllGuardianUnits ? `All ${catalog.units.length.toLocaleString()} vanilla units available; role filters cover ${roleCommanders.length.toLocaleString()} commanders / ${roleTroops.length.toLocaleString()} troops` : `${roleCommanders.length.toLocaleString()} nation-recruitable commanders / ${roleTroops.length.toLocaleString()} nation-recruitable troops`}</span><button type="button" className={!showAllGuardianUnits ? "active" : ""} aria-pressed={!showAllGuardianUnits} onClick={() => setShowAllGuardianUnits((value) => !value)}>{showAllGuardianUnits ? "Use role-focused lists" : `Search all ${catalog.units.length.toLocaleString()} units`}</button></div>
-      <p className="microcopy">Role-focused lists come from the pinned Inspector leader/troop recruitment tables, not unit-name guesses. Dominions map commands can instantiate unusual monster IDs in either role, so the full-catalog search remains available.</p>
+      <div className="catalog-filter-bar"><span>{showAllGuardianUnits ? `All ${selectableUnits.length.toLocaleString()} gameplay records available; role filters cover ${roleCommanders.length.toLocaleString()} commanders / ${roleTroops.length.toLocaleString()} troops` : `${roleCommanders.length.toLocaleString()} known commanders / ${roleTroops.length.toLocaleString()} known troops`}</span><button type="button" className={!showAllGuardianUnits ? "active" : ""} aria-pressed={!showAllGuardianUnits} onClick={() => setShowAllGuardianUnits((value) => !value)}>{showAllGuardianUnits ? "Use role-focused lists" : `Search all ${selectableUnits.length.toLocaleString()} units`}</button></div>
+      <p className="microcopy">Role-focused lists combine the pinned Inspector nation and magic-site recruitment tables, not unit-name guesses. {internalUnitCount.toLocaleString()} Test, Debug, XXX, or Unused data records are hidden from normal browsing. Dominions map commands can still instantiate any verified raw numeric ID, and an already selected hidden record remains visible.</p>
       {province.defenders.map((defense, defenseIndex) => (
         <div className="defense-card" key={`${defense.commander}-${defenseIndex}`}>
           <div className="card-heading"><strong>Guardian group {defenseIndex + 1}</strong><button type="button" aria-label={`Remove guardian group ${defenseIndex + 1}`} onClick={() => update((item) => { item.defenders.splice(defenseIndex, 1); })}>Remove</button></div>
-          <CatalogCombobox label="Commander" value={defense.commander} entries={includeSelectedEntry(commanderChoices, catalog.units, defense.commander)} placeholder={`Search ${commanderChoices.length.toLocaleString()} ${showAllGuardianUnits ? "vanilla units" : "known commanders"} by name or ID`} onCommit={(value) => update((item) => { item.defenders[defenseIndex]!.commander = value; })} />
+          <CatalogCombobox label="Commander" value={defense.commander} entries={includeSelectedEntry(commanderChoices, catalog.units, defense.commander)} placeholder={`Search ${commanderChoices.length.toLocaleString()} ${showAllGuardianUnits ? "gameplay units" : "known commanders"} by name or ID`} onCommit={(value) => update((item) => { item.defenders[defenseIndex]!.commander = value; })} />
           <Field label="Commander display name"><input value={defense.commanderName ?? ""} onChange={(event) => update((item) => { item.defenders[defenseIndex]!.commanderName = event.target.value || undefined; })} /></Field>
           {defense.squads.map((squad, squadIndex) => (
             <div className="squad-row" key={squad.id}>
-              <input type="number" min={1} value={squad.count} aria-label={`Guardian group ${defenseIndex + 1}, squad ${squadIndex + 1} count`} onChange={(event) => update((item) => { item.defenders[defenseIndex]!.squads[squadIndex]!.count = numberValue(event.target.value, 1); })} />
-              <CatalogCombobox compact label={`Squad ${squadIndex + 1} unit`} value={squad.unit} entries={includeSelectedEntry(troopChoices, catalog.units, squad.unit)} placeholder={`Search ${troopChoices.length.toLocaleString()} ${showAllGuardianUnits ? "vanilla units" : "known troops"} by name or ID`} onCommit={(value) => update((item) => { item.defenders[defenseIndex]!.squads[squadIndex]!.unit = value; })} />
+              <input type="number" min={1} max={1000} value={squad.count} aria-label={`Guardian group ${defenseIndex + 1}, squad ${squadIndex + 1} count`} onChange={(event) => update((item) => { item.defenders[defenseIndex]!.squads[squadIndex]!.count = boundedInteger(event.target.value, 1, 1, 1000); })} />
+              <CatalogCombobox compact label={`Squad ${squadIndex + 1} unit`} value={squad.unit} entries={includeSelectedEntry(troopChoices, catalog.units, squad.unit)} placeholder={`Search ${troopChoices.length.toLocaleString()} ${showAllGuardianUnits ? "gameplay units" : "known troops"} by name or ID`} onCommit={(value) => update((item) => { item.defenders[defenseIndex]!.squads[squadIndex]!.unit = value; })} />
               <button type="button" onClick={() => update((item) => { item.defenders[defenseIndex]!.squads.splice(squadIndex, 1); })} aria-label={`Remove guardian group ${defenseIndex + 1}, squad ${squadIndex + 1}`}>×</button>
             </div>
           ))}
@@ -1318,7 +1629,7 @@ export function SitesDefenseInspector({ catalog, plane, province, protectedStart
               <Field label="Specific items (one per line)"><textarea rows={3} value={(defense.items ?? []).join("\n")} onChange={(event) => update((item) => { item.defenders[defenseIndex]!.items = lines(event.target.value); })} /></Field>
               <Toggle label="Clear commander's innate magic first" checked={defense.clearMagic ?? false} onChange={(value) => update((item) => { item.defenders[defenseIndex]!.clearMagic = value || undefined; })} />
               <div className="bodyguard-fields">
-                <CatalogCombobox label="Bodyguard unit" value={defense.bodyguard} entries={includeSelectedEntry(troopChoices, catalog.units, defense.bodyguard)} placeholder={`Search ${troopChoices.length.toLocaleString()} ${showAllGuardianUnits ? "vanilla units" : "known troops"} by name or ID`} onCommit={(value) => update((item) => {
+                <CatalogCombobox label="Bodyguard unit" value={defense.bodyguard} entries={includeSelectedEntry(troopChoices, catalog.units, defense.bodyguard)} placeholder={`Search ${troopChoices.length.toLocaleString()} ${showAllGuardianUnits ? "gameplay units" : "known troops"} by name or ID`} onCommit={(value) => update((item) => {
                   const group = item.defenders[defenseIndex]!;
                   group.bodyguard = value || undefined;
                   if (!value) group.bodyguardCount = undefined;
@@ -1464,6 +1775,49 @@ export function ExistingGatewaysEditor({ project, activePlane, gates, mutateProj
   </div>;
 }
 
+function DestructiveConfirmationDialog({ action, project, onClose, onBackup, onConfirm }: {
+  action: DestructiveConfirmation;
+  project: MapProject;
+  onClose: () => void;
+  onBackup: () => void;
+  onConfirm: () => void;
+}) {
+  const dialogRef = useDialogFocus<HTMLElement>(onClose);
+  const provinceCount = project.planes.reduce((sum, plane) => sum + plane.provinces.length, 0);
+  const content = action.kind === "new-atlas"
+    ? {
+        kicker: "NEW ATLAS",
+        title: "Replace the current atlas?",
+        description: "A fresh default project will replace this atlas in the editor and in device autosave. Selection and Undo/Redo history will be cleared, so Undo cannot restore it.",
+        details: [`${project.planes.length} plane${project.planes.length === 1 ? "" : "s"}`, `${provinceCount} provinces`, `${project.gates.length} gateways`],
+        confirmLabel: "Start new atlas",
+      }
+    : action.kind === "generate"
+      ? {
+          kicker: "GENERATE MAP",
+          title: "Replace the current map geometry?",
+          description: "Generate rebuilds provinces, borders, starts, sites, guardians, and gateways for the planned planes. Manual province names are preserved. Undo can restore this version once, but a downloaded backup is the safest recovery point.",
+          details: [`${action.impact.planeCount} planned plane${action.impact.planeCount === 1 ? "" : "s"}`, `${action.impact.provinceCount} current provinces`, `${action.impact.gatewayCount} current gateways`],
+          confirmLabel: "Generate and replace",
+        }
+      : {
+          kicker: "REMOVE PLANE",
+          title: `Remove ${action.impact.planeName}?`,
+          description: "This removes the plane and its start assignments, planned links, and touching gateway endpoints. Undo can restore the edit; download a backup if you need a durable copy.",
+          details: [`${action.impact.provinceCount} provinces`, `${action.impact.gatewayCount} touching gateways`, `${action.impact.specificStartCount} nation-specific starts`],
+          confirmLabel: "Remove plane",
+        };
+  return <div className="modal-backdrop"><section ref={dialogRef} className="confirmation-dialog" tabIndex={-1} role="alertdialog" aria-modal="true" aria-labelledby="destructive-confirmation-title" aria-describedby="destructive-confirmation-description">
+    <div className="dialog-heading"><div><p className="eyebrow">{content.kicker}</p><h2 id="destructive-confirmation-title">{content.title}</h2></div><button type="button" onClick={onClose} aria-label="Cancel and close">×</button></div>
+    <div className="confirmation-body">
+      <p id="destructive-confirmation-description">{content.description}</p>
+      <ul>{content.details.map((detail) => <li key={detail}>{detail}</li>)}</ul>
+      <div className="confirmation-backup"><strong>Keep a recovery copy first</strong><p>Download the editable project JSON before continuing. Opening that file restores the atlas, even after autosave changes.</p><button className="button quiet" type="button" onClick={onBackup}>Download backup</button></div>
+      <div className="confirmation-actions"><button className="button quiet" type="button" onClick={onClose}>Cancel</button><button className="button primary danger-action" type="button" onClick={onConfirm}>{content.confirmLabel}</button></div>
+    </div>
+  </section></div>;
+}
+
 function ValidationDrawer({ issues, fairness, onClose, onSelectIssue }: { issues: ValidationIssue[]; fairness: ReturnType<typeof calculateFairness>; onClose: () => void; onSelectIssue: (issue: ValidationIssue) => void }) {
   const dialogRef = useDialogFocus<HTMLElement>(onClose);
   return <div className="drawer-backdrop"><aside ref={dialogRef} className="validation-drawer" tabIndex={-1} aria-modal="true" role="dialog" aria-label="Map validation">
@@ -1476,6 +1830,8 @@ function ValidationDrawer({ issues, fairness, onClose, onSelectIssue }: { issues
 
 export function ExportDialog({ project, activePlane, issues, progress, busy, onClose, onInstall, onZip, onProject, onPreview, onValidate }: { project: MapProject; activePlane: Plane; issues: ValidationIssue[]; progress?: ExportProgress; busy: boolean; onClose: () => void; onInstall: () => void; onZip: () => void; onProject: () => void; onPreview: () => void; onValidate: () => void }) {
   const errors = issues.filter((issue) => issue.severity === "error").length;
+  const zipSafety = zipPackageSafety(project);
+  const zipBlocked = zipSafety.level === "blocked";
   const dialogRef = useDialogFocus<HTMLElement>(onClose, busy);
   const progressPercent = Math.max(0, Math.min(100, progress?.percent ?? 0));
   const progressMessage = progress?.message ?? "Preparing the export";
@@ -1491,8 +1847,20 @@ export function ExportDialog({ project, activePlane, issues, progress, busy, onC
     <div className="package-summary"><div className="package-glyph">D6</div><div><strong>{sanitizeMapName(project.name)}.map</strong><span>{project.planes.length} plane{project.planes.length === 1 ? "" : "s"} · {project.planes.reduce((sum, plane) => sum + plane.provinces.length, 0)} provinces · {formatBytes(estimatedPackageBytes(project))}</span></div><i className={errors ? "bad" : "good"}>{errors ? "!" : "✓"}</i></div>
     {errors ? <div className="export-blocked"><strong>{errors} compatibility blocker{errors === 1 ? "" : "s"}</strong><p>Resolve export errors before building the package.</p><button className="button quiet" type="button" onClick={onValidate}>Review validation</button></div> : <div className="export-options">
       <button className="export-option primary-option" type="button" onClick={onInstall} disabled={busy}><span className="option-icon" aria-hidden="true">↳</span><span><strong>Install directly</strong><small>Choose the Dominions 6 <code>maps</code> folder once; the ready-to-play folder is written there.</small></span><b>Recommended</b></button>
-      <button className="export-option" type="button" onClick={onZip} disabled={busy}><span className="option-icon" aria-hidden="true">↓</span><span><strong>Download ready ZIP</strong><small>Extract the included folder into your Dominions 6 user-data <code>maps</code> directory.</small></span></button>
+      <button
+        className="export-option"
+        type="button"
+        onClick={onZip}
+        disabled={busy || zipBlocked}
+        aria-describedby={zipSafety.message ? "zip-memory-safety" : undefined}
+        title={zipBlocked ? zipSafety.message : undefined}
+      ><span className="option-icon" aria-hidden="true">↓</span><span><strong>Download ready ZIP</strong><small>{zipBlocked ? "Unavailable at this package size; use direct install or Editable project JSON." : "Extract the included folder into your Dominions 6 user-data maps directory."}</small></span></button>
     </div>}
+    {!errors && zipSafety.message && <div
+      id="zip-memory-safety"
+      className="warning-copy zip-memory-safety"
+      role={zipBlocked ? "alert" : "status"}
+    ><strong>{zipBlocked ? "ZIP download blocked for browser memory safety." : "Large ZIP memory warning."}</strong>{" "}{zipSafety.message} Estimated peak working memory: {formatBytes(zipSafety.estimatedPeakBytes)}. Direct install and Editable project JSON remain available.</div>}
     {busy && <div
       className="export-progress"
       role="progressbar"
@@ -1504,7 +1872,7 @@ export function ExportDialog({ project, activePlane, issues, progress, busy, onC
       aria-valuenow={progressPercent}
       aria-valuetext={`${progressMessage}. ${progressPercent}%. Plane ${progressPlane} of ${progressPlaneCount}.`}
     ><div><span>{progressMessage}</span><strong>{progressPercent}%</strong></div><i aria-hidden="true"><b style={{ width: `${progressPercent}%` }} /></i><small>Plane {progressPlane} of {progressPlaneCount}</small></div>}
-    <div className="secondary-exports"><button type="button" onClick={onProject} disabled={busy}>Editable project JSON</button><button type="button" onClick={onPreview} disabled={busy}>High-res {activePlane.width}×{activePlane.height} preview of {planeDisplayLabel(project, activePlane)}</button></div>
+    <div className="secondary-exports"><button type="button" onClick={onProject} disabled={busy}>Editable project JSON</button><button type="button" onClick={onPreview} disabled={busy || !canRenderPlanePreview(activePlane)} title={!canRenderPlanePreview(activePlane) ? "Fix the plane dimensions before exporting a preview." : undefined}>High-res {activePlane.width}×{activePlane.height} preview of {planeDisplayLabel(project, activePlane)}</button></div>
     <p className="export-note"><strong>Zero-mod export.</strong> Native <code>.d6m</code> files let Dominions render condition changes. The package also includes host settings, the editable project, and a balance report.</p>
   </section></div>;
 }
@@ -1512,9 +1880,46 @@ export function ExportDialog({ project, activePlane, issues, progress, busy, onC
 function SectionHeading({ kicker, title }: { kicker: string; title: string }) { return <div className="section-heading"><p className="eyebrow">{kicker}</p><h2>{title}</h2></div>; }
 function Divider() { return <div className="divider" />; }
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="field"><span>{label}</span>{children}</label>; }
-function NumberField({ label, value, min, max, describedBy, onChange }: { label: string; value: number; min: number; max: number; describedBy?: string; onChange: (value: number) => void }) { return <Field label={label}><input type="number" value={value} min={min} max={max} aria-describedby={describedBy} onChange={(event) => onChange(numberValue(event.target.value, min))} /></Field>; }
-function OptionalNumberField({ label, value, min, max, disabled = false, onChange }: { label: string; value?: number; min: number; max?: number; disabled?: boolean; onChange: (value?: number) => void }) { return <Field label={label}><input type="number" value={value ?? ""} min={min} max={max} disabled={disabled} placeholder="Auto" onChange={(event) => onChange(optionalNumber(event.target.value))} /></Field>; }
-function RangeField({ label, value, suffix, min, max, onChange }: { label: string; value: number; suffix: string; min: number; max: number; onChange: (value: number) => void }) { return <label className="range-field"><span>{label}<strong>{value}{suffix}</strong></span><input type="range" min={min} max={max} value={value} onChange={(event) => onChange(numberValue(event.target.value, min))} /></label>; }
+function NumberField({ label, value, min, max, describedBy, onChange }: { label: string; value: number; min: number; max: number; describedBy?: string; onChange: (value: number) => void }) { return <Field label={label}><input type="number" value={value} min={min} max={max} aria-describedby={describedBy} onChange={(event) => onChange(boundedInteger(event.target.value, min, min, max))} /></Field>; }
+function OptionalNumberField({ label, value, min, max, disabled = false, onChange }: { label: string; value?: number; min: number; max?: number; disabled?: boolean; onChange: (value?: number) => void }) { return <Field label={label}><input type="number" value={value ?? ""} min={min} max={max} disabled={disabled} placeholder="Auto" onChange={(event) => {
+  if (!event.target.value.trim()) onChange(undefined);
+  else onChange(boundedInteger(event.target.value, min, min, max ?? Number.MAX_SAFE_INTEGER));
+}} /></Field>; }
+function RangeField({ label, value, suffix, min, max, onInteractionStart, onInteractionEnd, onChange }: {
+  label: string;
+  value: number;
+  suffix: string;
+  min: number;
+  max: number;
+  onInteractionStart: () => void;
+  onInteractionEnd: () => void;
+  onChange: (value: number) => void;
+}) {
+  const interactionActive = useRef(false);
+  const begin = () => {
+    if (interactionActive.current) return;
+    interactionActive.current = true;
+    onInteractionStart();
+  };
+  const finish = () => {
+    if (!interactionActive.current) return;
+    interactionActive.current = false;
+    onInteractionEnd();
+  };
+  return <label className="range-field"><span>{label}<strong>{value}{suffix}</strong></span><input
+    type="range"
+    min={min}
+    max={max}
+    value={value}
+    onPointerDown={begin}
+    onPointerUp={finish}
+    onPointerCancel={finish}
+    onKeyDown={begin}
+    onKeyUp={finish}
+    onBlur={finish}
+    onChange={(event) => { begin(); onChange(numberValue(event.target.value, min)); }}
+  /></label>;
+}
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) { return <label className="toggle-row"><span>{label}</span><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} /><i /></label>; }
 function CheckCard({ label, checked, onChange, compact = false }: { label: string; checked: boolean; onChange: (value: boolean) => void; compact?: boolean }) { return <label className={`check-card ${compact ? "compact" : ""} ${checked ? "checked" : ""}`}><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} /><i>{checked ? "✓" : ""}</i><span>{label}</span></label>; }
 
@@ -1832,6 +2237,11 @@ function useDialogFocus<T extends HTMLElement>(onClose: () => void, closeDisable
 }
 
 function numberValue(value: string, fallback: number): number { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : fallback; }
+function boundedInteger(value: string, fallback: number, minimum: number, maximum: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(maximum, Math.max(minimum, Math.round(parsed)));
+}
 function optionalNumber(value: string): number | undefined { if (!value.trim()) return undefined; const parsed = Number(value); return Number.isFinite(parsed) ? parsed : undefined; }
 function optionalBooleanValue(value: boolean | undefined): "inherit" | "on" | "off" { return value === undefined ? "inherit" : value ? "on" : "off"; }
 function parseOptionalBoolean(value: string): boolean | undefined { return value === "on" ? true : value === "off" ? false : undefined; }

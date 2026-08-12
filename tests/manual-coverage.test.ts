@@ -3,6 +3,7 @@ import test from "node:test";
 import { addPlane, adjacencyFor, createDefaultProject } from "../src/generator";
 import { compileMapText, validateProject } from "../src/dom6";
 import { parseProject } from "../src/export";
+import { BUILTIN_DOM6_CATALOG, createCatalogTemplate, mergeCatalogBundles } from "../src/catalog";
 
 test("every plane map starts with the manual-required dom2title command", () => {
   const project = addPlane(createDefaultProject("manual-plane-title"), "underworld");
@@ -148,6 +149,74 @@ test("validation counts distinct generic, team, and nation-specific start locati
 
   project.specificStarts.push({ nation: 6, planeId: project.planes[0]!.id, provinceId: candidates[1]!.id });
   assert.ok(validateProject(project).some((issue) => issue.severity === "error" && issue.message.includes("more than one nation-specific start")));
+});
+
+test("team and nation-specific starts receive the full capital safety validation", () => {
+  const project = createDefaultProject("manual-protected-start-safety");
+  project.settings.startDistribution = undefined;
+  const plane = project.planes[0]!;
+  const candidates = plane.provinces.filter((province) => !province.start && !province.noStart).slice(0, 2);
+  assert.equal(candidates.length, 2);
+  const [team, specific] = candidates;
+  team!.teamStart = 0;
+  team!.defenders = [{ commander: "34", squads: [] }];
+  specific!.defenders = [{ commander: "34", squads: [] }];
+  project.specificStarts.push({ nation: 5, planeId: plane.id, provinceId: specific!.id });
+
+  const issues = validateProject(project).filter((issue) => issue.severity === "error");
+  assert.ok(issues.some((issue) => issue.provinceId === team!.id && issue.message.includes("guardian groups")));
+  assert.ok(issues.some((issue) => issue.provinceId === specific!.id && issue.message.includes("guardian groups")));
+});
+
+test("validation honors the same merged custom catalog shown by the editor", () => {
+  const project = createDefaultProject("manual-custom-catalog-validation");
+  const province = project.planes[0]!.provinces.find((item) => !item.start)!;
+  province.poptype = 9_001;
+  province.fort = 9_002;
+  const custom = createCatalogTemplate("6.35");
+  const provenanceId = custom.provenance[0]!.id;
+  custom.poptypes.push({ id: 9_001, name: "Mod population", provenanceId });
+  custom.forts.push({ id: 9_002, name: "Mod fortress", provenanceId });
+
+  assert.ok(validateProject(project).some((issue) => issue.severity === "error" && issue.message.includes("population type 9001")));
+  const catalog = mergeCatalogBundles(BUILTIN_DOM6_CATALOG, custom);
+  assert.equal(validateProject(project, catalog).some((issue) => issue.severity === "error"
+    && (issue.message.includes("population type 9001") || issue.message.includes("fortification 9002"))), false);
+});
+
+test("integer-valued directives reject fractional, unsafe, negative, and out-of-UI-range values", () => {
+  const project = createDefaultProject("manual-numeric-hardening");
+  const plane = project.planes[0]!;
+  const province = plane.provinces.find((item) => !item.start)!;
+  project.targetVersion = 1000;
+  project.victoryPoints = 1000;
+  province.teamStart = Number.MAX_SAFE_INTEGER + 1;
+  plane.edges[0]!.kind = "custom";
+  plane.edges[0]!.special = 1.5;
+  project.gates[0] = { id: "unsafe-gate", gateNumber: Number.MAX_SAFE_INTEGER + 1, endpoints: [] };
+  province.sites = [{ id: "negative-site", value: "-3", known: false }];
+  province.defenders = [{
+    commander: "-1",
+    bodyguard: "-2",
+    bodyguardCount: 1001,
+    magic: { fire: 11 },
+    squads: [{ id: "negative-squad", unit: "-4", count: 1001 }],
+  }];
+
+  const messages = validateProject(project).filter((issue) => issue.severity === "error").map((issue) => issue.message);
+  for (const fragment of [
+    "600 to 999",
+    "1 to 999",
+    "whole-number bitmask",
+    "non-negative safe integer",
+    "positive safe integers",
+    "numeric magic-site ID",
+    "numeric commander ID",
+    "numeric bodyguard ID",
+    "numeric squad-unit ID",
+    "1 to 1000",
+    "fire magic",
+  ]) assert.ok(messages.some((message) => message.includes(fragment)), fragment);
 });
 
 test("validation rejects blocked gates and ignores them for plane connectivity", () => {

@@ -32,9 +32,11 @@ test("site and guardian editor renders complete role-aware catalog affordances",
   assert.match(html, /Nation home\/capital sites and Thrones of Ascension stay excluded/);
   assert.match(html, /Include all 971 non-capital sites/);
   assert.match(html, /Search 900 ordinary sites by name or ID/);
-  assert.match(html, /All 4,091 vanilla units available; role filters cover 627 commanders \/ 679 troops/);
+  assert.match(html, /All 4,078 gameplay records available; role filters cover 850 commanders \/ 842 troops/);
   assert.match(html, /Use role-focused lists/);
-  assert.match(html, /Search 4,091 vanilla units by name or ID/);
+  assert.match(html, /Search 4,078 gameplay units by name or ID/);
+  assert.match(html, /13 Test, Debug, XXX, or Unused data records are hidden from normal browsing/);
+  assert.match(html, /raw numeric ID/);
   assert.match(html, /Spectral Commander \(#2844\)/);
   assert.match(html, /Phantasmal Warrior \(#3624\)/);
   assert.match(html, /not unit-name guesses/);
@@ -45,6 +47,13 @@ test("role-focused lists preserve an already selected unusual vanilla monster", 
   const entries = includeSelectedEntry(filtered, BUILTIN_DOM6_CATALOG.units, 2844);
   assert.equal(entries.length, 1);
   assert.equal(entries[0]?.name, "Spectral Commander");
+});
+
+test("normal browsing can preserve an already selected internal raw ID", () => {
+  const entries = includeSelectedEntry([], BUILTIN_DOM6_CATALOG.units, 4135);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0]?.name, "Debug Senpai");
+  assert.ok(entries[0]?.tags?.includes("internal-unit-record"));
 });
 
 test("guardian creation is disabled on every authored start type", () => {

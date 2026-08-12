@@ -10,7 +10,7 @@ type CompactUnit = readonly [id: number, name: string, roleFlags: number];
 type CompactSite = readonly [id: number, name: string, terrainMask: number, magicPath: string, rarity: number, siteFlags: number];
 type CompactNation = readonly [id: number, name: string, subtitle: string, abbreviation: string, era: number];
 
-if (catalogData.format !== "pantokrator-atlas/compact-catalog" || catalogData.formatVersion !== 2) {
+if (catalogData.format !== "pantokrator-atlas/compact-catalog" || catalogData.formatVersion !== 3) {
   throw new Error("Bundled Dominions catalog has an unsupported compact format.");
 }
 
@@ -33,6 +33,12 @@ const SPECIAL_NATIONS = new Map<number, string>([
   [2, "Special Independents (e.g. Horrors)"],
   [4, "Roaming Independents (e.g. Barbarians)"],
 ]);
+
+const UNIT_ROLE_NATION_COMMANDER = 1;
+const UNIT_ROLE_NATION_TROOP = 2;
+const UNIT_ROLE_SITE_COMMANDER = 4;
+const UNIT_ROLE_SITE_TROOP = 8;
+const UNIT_INTERNAL_RECORD = 16;
 
 /**
  * Built-in entries retain source-level provenance. Poptypes and forts come
@@ -95,14 +101,15 @@ export const BUILTIN_DOM6_CATALOG: Dom6CatalogBundle = {
   units: compactUnits.map(([id, name, roleFlags]) => ({
     id,
     name,
-    subtitle: (roleFlags & 1) !== 0
-      ? "Nation-recruitable commander"
-      : (roleFlags & 2) !== 0
-        ? "Nation-recruitable troop"
-        : undefined,
+    subtitle: unitSubtitle(roleFlags),
     tags: [
-      ...((roleFlags & 1) !== 0 ? ["nation-recruitable-commander"] : []),
-      ...((roleFlags & 2) !== 0 ? ["nation-recruitable-troop"] : []),
+      ...((roleFlags & (UNIT_ROLE_NATION_COMMANDER | UNIT_ROLE_SITE_COMMANDER)) !== 0 ? ["known-commander"] : []),
+      ...((roleFlags & (UNIT_ROLE_NATION_TROOP | UNIT_ROLE_SITE_TROOP)) !== 0 ? ["known-troop"] : []),
+      ...((roleFlags & UNIT_ROLE_NATION_COMMANDER) !== 0 ? ["nation-recruitable-commander"] : []),
+      ...((roleFlags & UNIT_ROLE_NATION_TROOP) !== 0 ? ["nation-recruitable-troop"] : []),
+      ...((roleFlags & UNIT_ROLE_SITE_COMMANDER) !== 0 ? ["site-recruitable-commander"] : []),
+      ...((roleFlags & UNIT_ROLE_SITE_TROOP) !== 0 ? ["site-recruitable-troop"] : []),
+      ...((roleFlags & UNIT_INTERNAL_RECORD) !== 0 ? ["internal-unit-record"] : []),
     ],
     provenanceId: "dom6inspector-6.35-cfac4311",
   })),
@@ -141,12 +148,27 @@ function readCompactUnits(value: unknown): CompactUnit[] {
       || typeof row[2] !== "number"
       || !Number.isSafeInteger(row[2])
       || row[2] < 0
-      || row[2] > 3
+      || row[2] > 31
     ) {
       throw new Error(`Bundled units[${index}] has an invalid compact row.`);
     }
     return [row[0], row[1], row[2]];
   });
+}
+
+function unitSubtitle(roleFlags: number): string | undefined {
+  if ((roleFlags & UNIT_INTERNAL_RECORD) !== 0) return "Internal/debug data record";
+  const nationCommander = (roleFlags & UNIT_ROLE_NATION_COMMANDER) !== 0;
+  const siteCommander = (roleFlags & UNIT_ROLE_SITE_COMMANDER) !== 0;
+  const nationTroop = (roleFlags & UNIT_ROLE_NATION_TROOP) !== 0;
+  const siteTroop = (roleFlags & UNIT_ROLE_SITE_TROOP) !== 0;
+  if (nationCommander && siteCommander) return "Nation- and site-recruitable commander";
+  if (nationCommander) return "Nation-recruitable commander";
+  if (siteCommander) return "Site-recruitable commander";
+  if (nationTroop && siteTroop) return "Nation- and site-recruitable troop";
+  if (nationTroop) return "Nation-recruitable troop";
+  if (siteTroop) return "Site-recruitable troop";
+  return undefined;
 }
 
 function readCompactSites(value: unknown): CompactSite[] {

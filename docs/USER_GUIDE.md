@@ -31,7 +31,7 @@ Pantokrator Atlas currently runs from its GitHub source repository; it is not in
 
 Repository: [The-LoneGunman/TLGs-Dom6-Map-Maker](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker)
 
-> **Current build warning:** this is a source/testing build, not yet a seamless public release. Review the [full bug and release audit](FULL_AUDIT_2026-08-11.md) before relying on it for a campaign. Until the P1 findings are fixed, use only one Pantokrator Atlas tab at a time and download **Editable project JSON** backups frequently.
+> **Current build status:** this is a source/testing build, not yet a packaged public release. The P1 engineering blockers found by the 2026-08-11 audit have regression-tested fixes; the remaining release gate is a live Dominions 6 smoke test of representative installed packages. Review the [audit and remediation record](FULL_AUDIT_2026-08-11.md), and keep **Editable project JSON** backups for important maps.
 
 If the repository is private, the owner must first invite your GitHub account as a collaborator. Sign in to that authorized account in GitHub or GitHub Desktop before trying to download it. Someone without repository access cannot install the program from this link; the owner must grant access or publish a release/public copy.
 
@@ -120,15 +120,15 @@ The recommended order is:
 5. Make detailed manual changes.
 6. Validate and export.
 
-If you regenerate accidentally, use **Undo** immediately. Generate participates in the 30-state project history.
+On a populated atlas, Generate first shows what will be replaced and offers **Download backup**. After you confirm, the completed generation is still one Undoable project edit.
 
-Also add all planned planes before manually creating gateways. Due to a current defect, **Add plane to plan** clears the entire existing actual-gateway list, including unrelated manually authored gateways; use **Undo** immediately if this happens unexpectedly. Removing a plane removes its specific starts and its gateway endpoints; groups left with fewer than two endpoints are removed.
+Adding a plane to the generation plan preserves every existing actual gateway; the new draft does not receive endpoints until you generate or add them manually. Removing a plane removes its specific starts and only the gateway endpoints on that plane; groups left with fewer than two endpoints are removed.
 
 ## Screen layout
 
 The application has four main areas:
 
-- **Header:** project name, autosave state, Undo, Redo, Validate, and Install / export.
+- **Header:** project name, autosave state, New atlas, Save now, Undo, Redo, Validate, and Install / export.
 - **Setup panel:** Generate, Planes, and Scenario tabs.
 - **Map workbench:** the active plane, editing tools, condition preview, zoom, plane strip, and generation/fairness status.
 - **Province inspector:** Terrain, Gameplay, Sites & PD, and Advanced tabs for the selected province.
@@ -154,13 +154,19 @@ Generation controls define the next generated atlas. Changing most of them does 
 | Ocean layout | Natural / varied |
 | Major continents | 3 |
 | Biome cohesion | 68% |
+| Economy balance | Hard competitive balance |
+| Overland topology | Competitive mix |
 | Bonus-plane size | 30% of core |
 | Recommended throne locations | 8 |
 | Resolution | 3840 x 2160 |
 | Initial plane | Surface, Temperate, 96 provinces |
 | Initial wrapping | East/west and north/south |
 
-Device autosave may restore your previous atlas instead of showing a fresh project.
+Device autosave may restore your previous atlas instead of showing a fresh project. Use **New atlas** in the header when you deliberately want a clean project.
+
+### New atlas
+
+Opens an explicit replacement confirmation for the current project. The dialog lists the current plane, province, and gateway totals and offers **Download backup** before continuing. Confirming creates the fresh-project defaults above, clears the selection and armed tools, and clears Undo/Redo history. The new project becomes the device autosave, so the downloaded editable JSON is the recovery path for the replaced atlas.
 
 ### Reset generator defaults
 
@@ -199,7 +205,7 @@ Each category accepts 0-32. The five values must total Players exactly, or Gener
 
 **Put remainder on land** appears when too few starts are allocated and fills the unassigned slots with Land starts.
 
-Make sure the required plane families exist. For example, Cave starts need a cave-family plane and Other starts need an appropriate bonus realm. If a requested category cannot be produced exactly, validation reports an error.
+Make sure the required plane families exist. For example, Cave starts need a cave-family plane and Other starts need an appropriate bonus realm. An impossible category displays a persistent **Generation plan cannot place all starts** summary and disables Generate until you add a compatible plane or change the allocation; the same condition remains an export-validation error for imported projects.
 
 ### Deterministic cave-start nations
 
@@ -257,6 +263,22 @@ Range: **0-100%**. Default: **68%**.
 
 The generator still enforces minimum terrain variety, so the relationship is directional rather than a promise that every low-cohesion seed will have fewer same-terrain neighbors than every high-cohesion seed.
 
+### Economy balance
+
+- **None / natural:** preserves generated populations without correcting unequal early economies.
+- **Soft correction:** nudges start economies toward parity, caps corrections at 12%, and applies less than half the Hard adjustment.
+- **Hard competitive balance (default):** strongly equalizes early start economies for competitive multiplayer.
+
+This policy changes generated population values, not the identity of independently recruitable poptypes or a nation's persistent post-capture PD roster.
+
+### Overland topology
+
+- **Open movement:** turns generated rivers into bridges and other blocking or seasonal overland borders into ordinary links.
+- **Competitive mix (default):** keeps a terrain-shaped mix of open routes, rivers, passes, and borders.
+- **Strategic regions:** adds deterministic regional chokepoints away from every capital while keeping the movement graph connected.
+
+This policy affects only solid Surface and surface-like Custom planes. Cave-family and sparse special realms keep their own chamber, corridor, hub, Styx, and route profiles.
+
 ### Province-name controls
 
 **Reroll generated names (preserve manual)** immediately renames generated provinces on every plane without changing geography. Names use plane, terrain, coast, flooded-cave, and Styx context. Names edited in the province inspector and legacy names with no provenance are preserved. The action is Undoable.
@@ -310,7 +332,11 @@ Switches to Planes without changing the map. Use it to finish plane planning bef
 
 Rebuilds every planned plane from the seed and settings. It recreates terrain, topology, starts, generated gateways, throne recommendations, independent details, and generated names. It refreshes generated cave-nation assignments and applies planned bidirectional plane links.
 
-It preserves plane/Scenario configuration and manually authored province names. Do not expect other detailed province edits to survive. Generation returns to plane 1, clears current selections, reports the province total and seed, and is Undoable.
+It preserves plane/Scenario configuration and manually authored province names. Do not expect other detailed province edits to survive. On any populated atlas, a confirmation lists the current replacement scope and offers an editable JSON backup before generation begins. Generation returns to plane 1, clears current selections, reports the province total and seed, and is Undoable.
+
+Generation runs in a background browser worker, so large eight-plane atlases do not freeze the editor. The progress card appears immediately and **Cancel generation** stops the worker without replacing the current atlas. You can inspect or edit the current atlas while generation runs; if the project changes before the worker finishes, Atlas safely discards that now-stale result and asks you to Generate again with the latest settings.
+
+Closing or navigating away from the app also cancels active generation. Atlas never commits a partially generated plane: the existing project is replaced only after the worker returns the complete atlas, and a successful replacement remains Undoable.
 
 ### Generation balance notice
 
@@ -318,6 +344,7 @@ Appears when generation safely used a best-effort result, especially:
 
 - Start spacing below the preferred scale-aware target while retaining the hard three-step floor.
 - Unequal start connection counts.
+- A manually constrained special plane cannot retain the intended number of themed guardian provinces outside every capital's protected two-ring.
 
 These warnings do not block export. Hard spacing failures remain red validation errors.
 
@@ -333,7 +360,7 @@ Use it for older imported projects that show topology errors.
 - **Cave core:** `Cave starts x provinces/player`, divided among auto-sized Cave and Great Cavern planes, minimum 18 each.
 - A solid, ordinary Surface-like Custom plane can count as core.
 - **Bonus plane:** bonus percentage x combined generated core total, independently for each auto-sized bonus plane.
-- A bonus plane also reserves at least eight provinces for every start allocated there.
+- An auto-sized bonus plane with starts expands its minimum using the requested start-degree target, leaving room for capital two-rings and neutral themed guardians whenever the 800-province ceiling permits it.
 - Every auto bonus plane has a minimum of 18 and maximum of 800.
 - Manual targets are 8-800 and are not changed by Players, Provinces/player, or the bonus percentage.
 - Manual core sizes still contribute to the core total used to size auto bonus planes.
@@ -346,7 +373,7 @@ An atlas can have **one to eight planes**. Archetype, variant, auto-sizing, and 
 
 ### Add plane to plan
 
-Stages a new auto-sized Underworld draft with no provinces. Configure it, then Generate. Add all planes before manually creating actual gateways because this action clears the current actual-gateway list.
+Stages a new auto-sized Underworld draft with no provinces. Configure it, then Generate. Existing actual gateways are preserved; the draft has no endpoints until generation or manual gateway editing adds them.
 
 ### Plane name
 
@@ -411,7 +438,7 @@ Sparse-plane art appears behind ownerless areas in the editor and PNG preview. D
 
 ### Remove this plane
 
-Available when the atlas has more than one plane. It removes the plane, its nation-specific starts, its planned-link rules, and its gateway endpoints. Gateway groups left with fewer than two endpoints are removed.
+Available when the atlas has more than one plane. A confirmation lists the affected provinces, touching gateways, and nation-specific starts and offers a backup first. Confirming removes the plane, its nation-specific starts, its planned-link rules, and its gateway endpoints. Gateway groups left with fewer than two endpoints are removed, and the full edit is Undoable.
 
 ## Planned links and existing gateways
 
@@ -477,6 +504,8 @@ Selects a province and opens the inspector.
 
 Click two provinces on the active plane.
 
+After the first click, the armed-state banner identifies the source plane and province number. If you switch planes, return to the source plane for a shared-border destination, or click a province on the active plane to replace the source. **Cancel endpoint** clears the pending source.
+
 - Existing links are not duplicated.
 - On a solid plane, provinces must share a positive-length visible border.
 - On a sparse plane, a new link creates the corresponding visible and D6M corridor.
@@ -487,7 +516,7 @@ Use Gate for cross-plane travel or a remote connection that should not be a norm
 
 ### Gate
 
-Click the first province, switch planes if desired, then click the destination. Clicking the armed province again cancels. The tool creates a new two-endpoint gateway with the next unused number. It also permits a remote same-plane pair.
+Click the first province, switch planes if desired, then click the destination. The armed-state banner retains the exact source while you navigate; **Cancel endpoint** or clicking the armed province again cancels. The tool creates a new two-endpoint gateway with the next unused number and reports whether the result is same-plane or cross-plane. It permits a remote same-plane pair.
 
 ### Start
 
@@ -534,9 +563,9 @@ The primary terrain controls artwork and contributes mechanical flags:
 - Cave swamp = Cave + Swamp
 - Cave waste = Cave + Waste
 - Cave highlands = Cave + Highland
-- Cave wall = blocked Cave-wall terrain and No start
+- Cave wall = blocked Cave-wall terrain; selecting it also removes generic, team, and nation-specific starts, throne setup, and guardian groups
 
-Changing primary terrain does not automatically recalculate manually edited population, poptype, guardians, or biome.
+Changing primary terrain does not normally recalculate manually edited population, poptype, guardians, or biome. Cave wall is the safety exception: blocked space cannot retain a start, throne, or guardian group.
 
 #### Biome
 
@@ -621,8 +650,9 @@ Compatibility includes plain, forest, mountain, waste, farm, sea, coast, swamp, 
 
 Guardian groups are explicit initial independent defenders, not replenishing post-capture PD.
 
-- The standard picker searches all 4,091 bundled vanilla monster IDs.
-- **Use role-focused lists** filters to identified nation-recruitable commanders and troops; unusual summons and independents remain available in the full list.
+- The standard picker browses 4,078 gameplay unit records. Thirteen explicitly named Test, Debug, XXX, or Unused source records stay hidden during normal browsing.
+- **Use role-focused lists** filters to 850 known commanders and 842 known troops, combining nation recruitment with magic-site recruitment slots; unusual summons and independents remain available in the broader list.
+- All 4,091 bundled source IDs remain valid for exact raw numeric-ID entry. A hidden record already selected in an imported project remains visible.
 - A group contains a Commander, optional display name, and any number of squads.
 - Each squad has a unit and count.
 - Commander details include experience 0-900, random items 0-4, specific item names, Clear innate magic, bodyguard unit/count, and Fire/Air/Water/Earth/Astral/Death/Nature/Glamour/Blood/Holy levels 0-10.
@@ -683,11 +713,13 @@ Use the official map manual. Rare scenario commands such as `#god`, `#dominionst
 
 The bundled Dominions 6.35 catalogs contain:
 
-- 4,091 units
+- 4,091 raw unit records (4,078 shown in normal browsing)
 - 1,253 sites
 - 82 population types
 - 106 active/special nations
 - 28 forts
+
+Coverage is current through Dominions 6.35, including LA Pyrène (#123), LA Zemaitia (#124), post-manual units through Gnu Clan Commander (#4134), and thrones through #1405; see the [content catalog and provenance notes](CONTENT_CATALOG.md).
 
 Pickers search names, aliases, tags, and numeric IDs and show up to 12 ranked matches.
 
@@ -738,17 +770,17 @@ Clicking a validation issue that identifies a plane/province navigates to it whe
 
 ### Autosave
 
-An autosave is scheduled 450 ms after the last project change, and the asynchronous storage write completes sometime after that. Closing or reloading during this interval can lose the latest edit. The green autosave badge identifies the selected storage backend; it does not prove that the latest change is durable.
+An autosave is scheduled 200 ms after the last project change, and the asynchronous storage write completes sometime after that. The header changes from **Saving changes** to a saved state only after the write finishes. Closing or reloading while **Saving changes** is visible can still lose the latest edit; use **Save now** before closing when the map matters.
 
 - **Device autosave:** IndexedDB, the preferred large-project store.
 - **Limited autosave:** localStorage fallback with a smaller quota.
 - **Autosave unavailable:** no browser copy could be written; download project JSON immediately.
 
-Autosave belongs to this browser and site profile. It is not cloud synchronization, and clearing browser data removes it. All Pantokrator Atlas tabs on the same origin share one current-project slot, so the last tab to write replaces the only durable autosave copy. Use one tab at a time and download Editable project JSON backups frequently. There is currently no **New atlas** or **Clear autosave** command; **Reset generator defaults** preserves the existing planes, provinces, gateways, and manual edits. Undo history is session-only and does not return after a reload.
+Autosave belongs to this browser and site profile. It is not cloud synchronization, and clearing browser data removes it. All Pantokrator Atlas tabs on the same origin share one current-project slot. Saves use a compare-and-set revision check: if another tab changed that slot, automatic saving pauses and a persistent conflict bar asks you to **Load newer copy** or explicitly **Keep this copy**. This prevents a stale tab from silently replacing the detected newer revision, but it is still one recovery slot rather than a recent-project library. **New atlas** deliberately replaces the current autosave after a backup-oriented confirmation and clears history; **Reset generator defaults** preserves the existing planes, provinces, gateways, and manual edits. There is no separate Clear autosave command. Undo history is session-only and does not return after a reload.
 
 ### Undo and Redo
 
-The header buttons keep up to 30 project snapshots. A new remembered edit clears Redo. Undo/Redo restores project data and clears the selected province and armed Link/Gate endpoint, but it does not restore UI-only state such as zoom, pan, tool, inspector tab, condition preview, or temporary catalog filters.
+The header buttons keep up to 30 project snapshots. Every new edit clears stale Redo, including Water and Biome slider changes. A continuous pointer drag or held-key slider adjustment is stored as one Undo step. Undo/Redo restores project data and clears the selected province and armed Link/Gate endpoint, but it does not restore UI-only state such as zoom, pan, tool, inspector tab, condition preview, or temporary catalog filters.
 
 There is no global Ctrl/Cmd+Z shortcut; use the visible buttons.
 
@@ -776,6 +808,7 @@ A playable package contains:
 - `atlas_project.json`.
 - `balance_report.txt`.
 - `host_settings.txt`.
+- `host_topology.txt` — a host-only spoiler dossier listing every plane, local/global province number, start/throne marker, connection, border type, and gateway endpoint. Do not distribute it to players.
 
 The first plane uses the normalized map name with no suffix. Later plane display names do not change the `_planeN` file convention.
 
@@ -785,13 +818,15 @@ Choose **Install directly** and select the top-level Dominions user-data `maps` 
 
 In Dominions, use **Tools & Manuals -> Open User Data Directory** to find the correct location, then select its `maps` folder in the picker.
 
-Back up an existing same-named map folder before direct reinstall. Installation is not yet atomic: a permission, quota, memory, or encoding failure can leave the previous folder partially updated. Direct reinstall removes obsolete Atlas-generated `_planeN.map` and `_planeN.d6m` files when the new atlas has fewer planes. It does not broadly delete unrelated assets.
+Back up an existing same-named map folder before an important reinstall. The browser file API has no atomic rename, so Atlas uses a recoverable transaction instead: it stages every file, keeps disk-backed copies of existing Atlas targets, publishes all D6Ms before their `.map` references, rolls touched targets back after a failure, and removes temporary and obsolete numbered-plane files last. If rollback or cleanup itself is denied, Atlas keeps recoverable backup files and reports that the install must be retried before hosting. It does not broadly delete unrelated assets.
 
 ### Download ready ZIP
 
 Extract the single contained map folder into the Dominions user-data `maps` directory. When replacing an older export, delete or replace the old same-named folder first. Do not merge the ZIP into it, because stale numbered plane files would remain active.
 
 If you added custom battle assets manually, back them up before replacing the folder and copy them into the new one afterward.
+
+Atlas estimates ZIP working memory before assembly. Large packages show a warning in the export dialog; packages estimated to exceed the browser safety ceiling disable only **Download ready ZIP**. **Install directly**, **Editable project JSON**, and the active-plane preview remain available. Direct install is the recommended path for large multi-plane 4K atlases because it stages one D6M at a time instead of retaining the entire ZIP in memory.
 
 ### Editable project JSON
 
@@ -803,7 +838,7 @@ Exports the active plane at its configured resolution using the currently select
 
 ### Filename normalization
 
-Folder and file stems are normalized to a letters/underscores name with a maximum of 64 characters. The export dialog shows the actual result. On Windows, avoid the reserved names `CON`, `PRN`, `AUX`, and `NUL`; the current normalizer does not rewrite them. A normalization warning does not block export.
+Folder and file stems are normalized to a letters/underscores name with a maximum of 64 characters. The export dialog shows the actual result. Windows device basenames `CON`, `PRN`, `AUX`, and `NUL` are automatically suffixed with `_map`. A normalization warning does not block export.
 
 ### Browser limitations
 
@@ -823,7 +858,7 @@ For the setup and inspector tab groups, Arrow keys move between tabs and Home/En
 
 In catalog fields, type a name or ID, use Up/Down to move through results, Enter to commit, and Escape to close and restore the previous value.
 
-Validation and export dialogs trap focus. Escape closes them unless package export is busy. Export progress, autosave, start allocation, selected province/tool, and balance notices are announced to assistive technology. The layout reflows on narrow screens and respects reduced-motion settings.
+Validation, replacement-confirmation, and export dialogs trap focus. Escape closes them unless package export is busy. Export progress, autosave, start allocation, selected province/tool, armed endpoints, and balance notices are announced to assistive technology. The layout reflows on narrow screens and respects reduced-motion settings.
 
 ## Troubleshooting
 
@@ -843,13 +878,13 @@ Validation and export dialogs trap focus. Escape closes them unless package expo
 | Plane not linked to main plane | Add/regenerate a valid gateway path to plane 1. |
 | Dry/aquatic gateway mismatch | Move an endpoint so both sides have matching water status or regenerate. This blocks export. |
 | Gate or throne at/adjacent to a start | Move it or regenerate; generated placement normally protects a two-ring exclusion zone. |
-| Direct folder access unavailable | Use Download ready ZIP. |
+| Direct folder access unavailable | Use Download ready ZIP. If ZIP is disabled by the memory ceiling, lower resolution/plane count or move the project to a supported browser for direct install. Editable project JSON remains available. |
 | Map does not appear in Dominions | Confirm `user data/maps/<Map_Name>/<Map_Name>.map`; avoid the game installation or doubled folder nesting. |
 | Removed planes still appear | Delete/replace the old folder before extracting a new ZIP, or use direct reinstall. |
 | ZIP is slow or memory-heavy | Use direct install, lower resolution, or reduce plane sizes/count. |
 | Autosave unavailable / storage full | Download Editable project JSON immediately. |
-| Latest edit disappeared after reload | Reload may have occurred before the delayed async autosave completed, or another same-origin tab replaced the shared slot. Use one tab and keep frequent Editable project JSON backups. |
-| Planned plane disappears after reopen / JSON will not open | A newly staged plane is empty until Generate and the current importer rejects that draft. Generate immediately after adding planned planes, or Undo the staging action before leaving. |
+| Latest edit disappeared after reload | Reload may have occurred while **Saving changes** was still visible. Use **Save now**, wait for a saved badge, and keep Editable project JSON backups. A same-origin revision conflict now pauses autosave and presents an explicit choice instead of silently overwriting. |
+| Planned plane is empty after reopen | Expected: a staged plane round-trips in autosave/JSON but remains a playable-export error until you configure it and Generate. |
 | JSON will not open | Use a schema-v1 Atlas `.atlas.json` or package `atlas_project.json`, not a ZIP/map/D6M/catalog file. |
 | Filename changed | Export normalized it. Use the folder/file stem shown in the package summary. |
 | Unknown catalog ID | Enable matching custom content. Catalog metadata does not install a mod. |

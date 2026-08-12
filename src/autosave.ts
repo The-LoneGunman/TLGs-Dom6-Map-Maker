@@ -10,6 +10,7 @@ const PROJECT_RECORD_KEY = "project-v1";
 
 export type AutosaveBackend = "indexeddb" | "localstorage" | "none";
 export type AutosaveOperation = "read" | "write" | "remove" | "parse" | "serialize" | "unavailable";
+export type AutosaveRevision = string;
 
 export interface AutosaveIssue {
   backend: Exclude<AutosaveBackend, "none">;
@@ -21,6 +22,17 @@ export interface AutosaveState {
   backend: AutosaveBackend;
   errors: AutosaveIssue[];
   migrated: boolean;
+  /** Fingerprint of the durable record selected or written by this operation. */
+  revision?: AutosaveRevision | null;
+  /** Present when an optimistic save was refused because durable state changed. */
+  conflict?: AutosaveConflict;
+}
+
+export interface AutosaveConflict {
+  expectedRevision: AutosaveRevision | null;
+  /** Undefined means a backend could not be read safely. Null means no record exists. */
+  currentRevision: AutosaveRevision | null | undefined;
+  backend: AutosaveBackend;
 }
 
 export interface LoadedProjectAutosave extends AutosaveState {
@@ -31,11 +43,27 @@ export interface AutosaveDriver {
   get(): Promise<string | null>;
   set(value: string): Promise<void>;
   remove(): Promise<void>;
+  compareAndSet?(
+    expectedRevision: AutosaveRevision | null,
+    value: string,
+  ): Promise<{ saved: boolean; current: string | null }>;
+  removeIfRevision?(
+    expectedRevision: AutosaveRevision | null,
+  ): Promise<{ removed: boolean; current: string | null }>;
 }
 
 export interface AutosaveDrivers {
   indexeddb?: AutosaveDriver;
   localstorage?: AutosaveDriver;
+}
+
+export interface SaveProjectAutosaveOptions {
+  /**
+   * Refuse the write unless durable state still has this revision. Pass null
+   * after loading an empty slot; omit the option only for an unconditional
+   * legacy write.
+   */
+  expectedRevision?: AutosaveRevision | null;
 }
 
 /**
@@ -51,13 +79,16 @@ export async function loadProjectAutosave(
   let localStorageAvailable = false;
   let indexedDbProject: MapProject | undefined;
   let indexedDbSerialized: string | undefined;
+  let indexedDbRaw: string | null = null;
   let localStorageProject: MapProject | undefined;
   let localStorageSerialized: string | undefined;
+  let localStorageRaw: string | null = null;
 
   if (drivers.indexeddb) {
     try {
       const serialized = await drivers.indexeddb.get();
       indexedDbAvailable = true;
+      indexedDbRaw = serialized;
       if (serialized !== null) {
         try {
           indexedDbProject = parseProject(serialized);
@@ -77,6 +108,7 @@ export async function loadProjectAutosave(
     try {
       const serialized = await drivers.localstorage.get();
       localStorageAvailable = true;
+      localStorageRaw = serialized;
       if (serialized !== null) {
         try {
           localStorageProject = parseProject(serialized);
@@ -104,7 +136,13 @@ export async function loadProjectAutosave(
         errors.push(issue("localstorage", "remove", error));
       }
     }
-    return { project: indexedDbProject, backend: "indexeddb", errors, migrated: false };
+    return {
+      project: indexedDbProject,
+      backend: "indexeddb",
+      errors,
+      migrated: false,
+      revision: autosaveRevision(indexedDbSerialized!),
+    };
   }
 
   if (localStorageProject && localStorageSerialized) {
@@ -119,18 +157,31 @@ export async function loadProjectAutosave(
             errors.push(issue("localstorage", "remove", error));
           }
         }
-        return { project: localStorageProject, backend: "indexeddb", errors, migrated: true };
+        return {
+          project: localStorageProject,
+          backend: "indexeddb",
+          errors,
+          migrated: true,
+          revision: autosaveRevision(localStorageSerialized),
+        };
       } catch (error) {
         errors.push(issue("indexeddb", "write", error));
       }
     }
-    return { project: localStorageProject, backend: "localstorage", errors, migrated: false };
+    return {
+      project: localStorageProject,
+      backend: "localstorage",
+      errors,
+      migrated: false,
+      revision: autosaveRevision(localStorageSerialized),
+    };
   }
 
   return {
     backend: preferredAvailableBackend(indexedDbAvailable, localStorageAvailable),
     errors,
     migrated: false,
+    revision: revisionForStoredValue(indexedDbRaw ?? localStorageRaw),
   };
 }
 
@@ -138,6 +189,7 @@ export async function loadProjectAutosave(
 export async function saveProjectAutosave(
   project: MapProject,
   drivers: AutosaveDrivers = createBrowserAutosaveDrivers(),
+  options: SaveProjectAutosaveOptions = {},
 ): Promise<AutosaveState> {
   const errors: AutosaveIssue[] = [];
   let serialized: string;
@@ -147,18 +199,47 @@ export async function saveProjectAutosave(
     errors.push(issue("indexeddb", "serialize", error));
     return { backend: "none", errors, migrated: false };
   }
+  const nextRevision = autosaveRevision(serialized);
+  const expectedRevision = options.expectedRevision;
+  const guarded = expectedRevision !== undefined;
+  let snapshot: AutosaveSnapshot | undefined;
+
+  if (guarded) {
+    snapshot = await inspectAutosave(drivers);
+    errors.push(...snapshot.errors);
+    if (!snapshot.readSafe || snapshot.revision !== expectedRevision) {
+      return conflictState(expectedRevision, snapshot, errors);
+    }
+  }
 
   if (drivers.indexeddb) {
     try {
-      await drivers.indexeddb.set(serialized);
+      if (guarded) {
+        const result = await compareAndSetValue(
+          drivers.indexeddb,
+          snapshot!.backendRevisions.indexeddb ?? null,
+          serialized,
+        );
+        if (!result.saved) return conflictAfterRace(expectedRevision, drivers, errors);
+      } else {
+        await drivers.indexeddb.set(serialized);
+      }
       if (drivers.localstorage) {
         try {
-          await drivers.localstorage.remove();
+          if (guarded) {
+            const result = await removeIfUnchanged(
+              drivers.localstorage,
+              snapshot!.backendRevisions.localstorage ?? null,
+            );
+            if (!result.removed) return conflictAfterRace(expectedRevision, drivers, errors);
+          } else {
+            await drivers.localstorage.remove();
+          }
         } catch (error) {
           errors.push(issue("localstorage", "remove", error));
         }
       }
-      return { backend: "indexeddb", errors, migrated: false };
+      return { backend: "indexeddb", errors, migrated: false, revision: nextRevision };
     } catch (error) {
       errors.push(issue("indexeddb", "write", error));
     }
@@ -168,8 +249,17 @@ export async function saveProjectAutosave(
 
   if (drivers.localstorage) {
     try {
-      await drivers.localstorage.set(serialized);
-      return { backend: "localstorage", errors, migrated: false };
+      if (guarded) {
+        const result = await compareAndSetValue(
+          drivers.localstorage,
+          snapshot!.backendRevisions.localstorage ?? null,
+          serialized,
+        );
+        if (!result.saved) return conflictAfterRace(expectedRevision, drivers, errors);
+      } else {
+        await drivers.localstorage.set(serialized);
+      }
+      return { backend: "localstorage", errors, migrated: false, revision: nextRevision };
     } catch (error) {
       errors.push(issue("localstorage", "write", error));
     }
@@ -221,6 +311,22 @@ export function createIndexedDbDriver(factory: IDBFactory): AutosaveDriver {
         database.close();
       }
     },
+    async compareAndSet(expectedRevision, value) {
+      const database = await openAutosaveDatabase(factory);
+      try {
+        return await compareAndSetIndexedDbValue(database, expectedRevision, value);
+      } finally {
+        database.close();
+      }
+    },
+    async removeIfRevision(expectedRevision) {
+      const database = await openAutosaveDatabase(factory);
+      try {
+        return await removeIndexedDbValueIfRevision(database, expectedRevision);
+      } finally {
+        database.close();
+      }
+    },
   };
 }
 
@@ -234,6 +340,18 @@ export function createLocalStorageDriver(storage: Pick<Storage, "getItem" | "set
     },
     async remove() {
       storage.removeItem(LEGACY_PROJECT_AUTOSAVE_KEY);
+    },
+    async compareAndSet(expectedRevision, value) {
+      const current = storage.getItem(LEGACY_PROJECT_AUTOSAVE_KEY);
+      if (revisionForStoredValue(current) !== expectedRevision) return { saved: false, current };
+      storage.setItem(LEGACY_PROJECT_AUTOSAVE_KEY, value);
+      return { saved: true, current: value };
+    },
+    async removeIfRevision(expectedRevision) {
+      const current = storage.getItem(LEGACY_PROJECT_AUTOSAVE_KEY);
+      if (revisionForStoredValue(current) !== expectedRevision) return { removed: false, current };
+      storage.removeItem(LEGACY_PROJECT_AUTOSAVE_KEY);
+      return { removed: true, current: null };
     },
   };
 }
@@ -288,6 +406,56 @@ function removeIndexedDbValue(database: IDBDatabase): Promise<void> {
   return mutateIndexedDb(database, (store) => store.delete(PROJECT_RECORD_KEY), "remove");
 }
 
+function compareAndSetIndexedDbValue(
+  database: IDBDatabase,
+  expectedRevision: AutosaveRevision | null,
+  value: string,
+): Promise<{ saved: boolean; current: string | null }> {
+  return conditionallyMutateIndexedDb(database, expectedRevision, (store) => {
+    store.put(value, PROJECT_RECORD_KEY);
+  }, "write").then((result) => ({ saved: result.mutated, current: result.mutated ? value : result.current }));
+}
+
+function removeIndexedDbValueIfRevision(
+  database: IDBDatabase,
+  expectedRevision: AutosaveRevision | null,
+): Promise<{ removed: boolean; current: string | null }> {
+  return conditionallyMutateIndexedDb(database, expectedRevision, (store) => {
+    store.delete(PROJECT_RECORD_KEY);
+  }, "remove").then((result) => ({ removed: result.mutated, current: result.mutated ? null : result.current }));
+}
+
+function conditionallyMutateIndexedDb(
+  database: IDBDatabase,
+  expectedRevision: AutosaveRevision | null,
+  action: (store: IDBObjectStore) => void,
+  operation: "write" | "remove",
+): Promise<{ mutated: boolean; current: string | null }> {
+  return new Promise((resolve, reject) => {
+    let transaction: IDBTransaction;
+    let current: string | null = null;
+    let mutated = false;
+    try {
+      transaction = database.transaction(OBJECT_STORE_NAME, "readwrite");
+      const store = transaction.objectStore(OBJECT_STORE_NAME);
+      const request = store.get(PROJECT_RECORD_KEY);
+      request.onsuccess = () => {
+        current = typeof request.result === "string" ? request.result : null;
+        if (revisionForStoredValue(current) !== expectedRevision) return;
+        mutated = true;
+        action(store);
+      };
+      request.onerror = () => transaction.abort();
+    } catch (error) {
+      reject(error);
+      return;
+    }
+    transaction.oncomplete = () => resolve({ mutated, current });
+    transaction.onerror = () => reject(transaction.error ?? new Error(`IndexedDB conditional ${operation} transaction failed.`));
+    transaction.onabort = () => reject(transaction.error ?? new Error(`IndexedDB conditional ${operation} transaction was aborted.`));
+  });
+}
+
 function mutateIndexedDb(
   database: IDBDatabase,
   action: (store: IDBObjectStore) => IDBRequest,
@@ -306,6 +474,154 @@ function mutateIndexedDb(
     transaction.onerror = () => reject(transaction.error ?? new Error(`IndexedDB ${operation} transaction failed.`));
     transaction.onabort = () => reject(transaction.error ?? new Error(`IndexedDB ${operation} transaction was aborted.`));
   });
+}
+
+interface AutosaveSnapshot {
+  backend: AutosaveBackend;
+  revision: AutosaveRevision | null;
+  backendRevisions: Partial<Record<Exclude<AutosaveBackend, "none">, AutosaveRevision | null>>;
+  errors: AutosaveIssue[];
+  readSafe: boolean;
+}
+
+interface AutosaveCandidate {
+  backend: Exclude<AutosaveBackend, "none">;
+  available: boolean;
+  raw: string | null;
+  revision: AutosaveRevision | null;
+  project?: MapProject;
+}
+
+async function inspectAutosave(drivers: AutosaveDrivers): Promise<AutosaveSnapshot> {
+  const errors: AutosaveIssue[] = [];
+  let readSafe = true;
+  const read = async (
+    backend: Exclude<AutosaveBackend, "none">,
+    driver: AutosaveDriver | undefined,
+  ): Promise<AutosaveCandidate> => {
+    if (!driver) return { backend, available: false, raw: null, revision: null };
+    try {
+      const raw = await driver.get();
+      const candidate: AutosaveCandidate = {
+        backend,
+        available: true,
+        raw,
+        revision: revisionForStoredValue(raw),
+      };
+      return candidate;
+    } catch (error) {
+      readSafe = false;
+      errors.push(issue(backend, "read", error));
+      return { backend, available: false, raw: null, revision: null };
+    }
+  };
+
+  const [indexeddb, localstorage] = await Promise.all([
+    read("indexeddb", drivers.indexeddb),
+    read("localstorage", drivers.localstorage),
+  ]);
+  // Parsing a full atlas is only needed when two different valid-looking
+  // backends compete. The normal IndexedDB-only save path stays lightweight.
+  if (indexeddb.raw !== null && localstorage.raw !== null && indexeddb.raw !== localstorage.raw) {
+    for (const candidate of [indexeddb, localstorage]) {
+      try {
+        candidate.project = parseProject(candidate.raw!);
+      } catch (error) {
+        errors.push(issue(candidate.backend, "parse", error));
+      }
+    }
+  }
+  let selected: AutosaveCandidate | undefined;
+  if (indexeddb.raw !== null && (localstorage.raw === null || indexeddb.raw === localstorage.raw)) {
+    selected = indexeddb;
+  } else if (localstorage.raw !== null && indexeddb.raw === null) {
+    selected = localstorage;
+  } else if (indexeddb.project && (
+    !localstorage.project || projectTimestamp(indexeddb.project) > projectTimestamp(localstorage.project)
+  )) {
+    selected = indexeddb;
+  } else if (localstorage.project) {
+    selected = localstorage;
+  } else if (indexeddb.raw !== null) {
+    selected = indexeddb;
+  } else if (localstorage.raw !== null) {
+    selected = localstorage;
+  }
+
+  return {
+    backend: selected?.backend ?? preferredAvailableBackend(indexeddb.available, localstorage.available),
+    revision: selected?.revision ?? null,
+    backendRevisions: {
+      ...(indexeddb.available ? { indexeddb: indexeddb.revision } : {}),
+      ...(localstorage.available ? { localstorage: localstorage.revision } : {}),
+    },
+    errors,
+    readSafe,
+  };
+}
+
+async function compareAndSetValue(
+  driver: AutosaveDriver,
+  expectedRevision: AutosaveRevision | null,
+  value: string,
+): Promise<{ saved: boolean; current: string | null }> {
+  if (driver.compareAndSet) return driver.compareAndSet(expectedRevision, value);
+  const current = await driver.get();
+  if (revisionForStoredValue(current) !== expectedRevision) return { saved: false, current };
+  await driver.set(value);
+  return { saved: true, current: value };
+}
+
+async function removeIfUnchanged(
+  driver: AutosaveDriver,
+  expectedRevision: AutosaveRevision | null,
+): Promise<{ removed: boolean; current: string | null }> {
+  if (driver.removeIfRevision) return driver.removeIfRevision(expectedRevision);
+  const current = await driver.get();
+  if (revisionForStoredValue(current) !== expectedRevision) return { removed: false, current };
+  await driver.remove();
+  return { removed: true, current: null };
+}
+
+function conflictState(
+  expectedRevision: AutosaveRevision | null,
+  snapshot: AutosaveSnapshot,
+  errors: AutosaveIssue[],
+): AutosaveState {
+  return {
+    backend: snapshot.backend,
+    errors,
+    migrated: false,
+    revision: snapshot.readSafe ? snapshot.revision : undefined,
+    conflict: {
+      expectedRevision,
+      currentRevision: snapshot.readSafe ? snapshot.revision : undefined,
+      backend: snapshot.backend,
+    },
+  };
+}
+
+async function conflictAfterRace(
+  expectedRevision: AutosaveRevision | null,
+  drivers: AutosaveDrivers,
+  errors: AutosaveIssue[],
+): Promise<AutosaveState> {
+  const latest = await inspectAutosave(drivers);
+  return conflictState(expectedRevision, latest, [...errors, ...latest.errors]);
+}
+
+/** Stable compact fingerprint used as an optimistic autosave revision token. */
+export function autosaveRevision(serialized: string): AutosaveRevision {
+  let hash = 0xcbf29ce484222325n;
+  for (let index = 0; index < serialized.length; index += 1) {
+    hash ^= BigInt(serialized.charCodeAt(index));
+    hash = BigInt.asUintN(64, hash * 0x100000001b3n);
+  }
+  return `fnv1a64:${serialized.length}:${hash.toString(16).padStart(16, "0")}`;
+}
+
+function revisionForStoredValue(value: string | null): AutosaveRevision | null {
+  return value === null ? null : autosaveRevision(value);
 }
 
 function preferredAvailableBackend(indexedDbAvailable: boolean, localStorageAvailable: boolean): AutosaveBackend {

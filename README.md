@@ -4,7 +4,7 @@ Pantokrator Atlas is a local-first Dominions 6 map maker. It creates determinist
 
 New to the program? Start with the [complete user guide](docs/USER_GUIDE.md) for the recommended workflow and a reference for every generator, plane, scenario, province, validation, and export option.
 
-Release readiness and known blockers are tracked in the [2026-08-11 full bug and release audit](docs/FULL_AUDIT_2026-08-11.md). Resolve its P1 findings before treating the current build as a seamless public release.
+Release readiness is tracked in the [2026-08-11 audit and remediation record](docs/FULL_AUDIT_2026-08-11.md). Its five engineering P1 findings are resolved and regression-tested; a representative live Dominions 6 install/load/AI-turn smoke test remains before treating the source build as a seamless public release.
 
 ## Included map features
 
@@ -24,7 +24,7 @@ Release readiness and known blockers are tracked in the [2026-08-11 full bug and
 - Ownership-boundary topology: every positive-length shared border is an exported neighbour, including wrap seams
 - Searchable Dominions 6.35 catalogs: 4,091 units, 1,253 sites, 82 poptypes, 106 active/special nations, and 28 forts
 - Terrain-compatible hidden/known selection across all 900 ordinary province sites plus an explicit 71-site non-random/non-home expansion, with 208 nation home references excluded and a separate 74-site throne-only fixed-throne selector
-- Unique initial independent commanders, squads, bodyguards, items, cleared/assigned magic, experience, and equipment; all 4,091 vanilla monster IDs are searchable by default, with optional factual filters for 627 nation-recruitable commanders and 679 troops
+- Unique initial independent commanders, squads, bodyguards, items, cleared/assigned magic, experience, and equipment; 4,078 gameplay unit records are browsable by default, with factual nation/site recruitment filters covering 850 known commanders and 842 troops; all 4,091 source IDs remain accepted as raw numeric references
 - Province ownership, poptypes, population, unrest, forts, temples, labs, and owned PD level
 - Battle maps, skyboxes, colors, host restrictions, AI players, victory points, and raw advanced directives
 - Fully additive Dominions terrain flags (including freshwater land, forest + swamp, and sea + mountains/underwater forest) with native game-rendered winter, forest, waste, farm, submergence, water, and kelp changes
@@ -44,6 +44,8 @@ Sparse cave, cloud, underworld, infernal, abyssal, dream, and elemental realms u
 Cave and Cavern generation includes connected flooded chambers whose terrain remains additively both Sea and Cave. Every Underworld is crossed edge-to-edge by a connected, named River Styx band with Death + Water site bias, amphibious spectral guardians, two connected dry banks, and one or two controlled bridge crossings. Newly staged Underworld planes therefore default to no wrap; manually enabling both wrap axes is preserved but validation warns that a single river band cannot truly divide a torus. When both realms have enough safe aquatic provinces, a bounded share of surface-to-underground gate pairs link ocean to subterranean water while retaining at least one dry entrance. This follows Illwinter's official Hollow World precedent, where sea provinces have linked underground levels and several entrances are underwater.
 
 Natural, single-continent, multiple-continent, and inland-sea layouts preserve the requested feasible water quota. Island chains require enough surrounding sea to read as islands, so Generate raises and records any lower request to an effective 48% minimum. Multiple-continent cuts use the exported movement topology; when the selected water quota and wrapping cannot sustain every requested continent, validation reports the achieved component count instead of silently presenting one connected landmass as several continents.
+
+Generation offers explicit multiplayer policy controls. Economy balance can preserve natural values, apply a capped soft correction, or use the default hard competitive correction. Solid overland realms can favor open travel, the default terrain-shaped competitive mix, or connected strategic regions with capital-safe chokepoints; cave and sparse special realms retain their purpose-built topology profiles.
 
 `Players x provinces per player` budgets only core Surface, Cave, Cavern, and surface-like solid Custom realms. Each auto-sized bonus realm independently uses the Generate-tab bonus-plane percentage of the combined core total; values above 100% intentionally make every bonus plane larger than all core realms combined, subject to the 800-province per-plane cap. Manual plane sizes are never changed by that setting.
 
@@ -84,4 +86,4 @@ Older saved projects created before ownership-boundary topology may show a **Syn
 - [Official Dominions 6 file formats](https://illwinter.com/dom6/dom6fileformats.pdf)
 - [Official Dominions 6 modding manual](https://illwinter.com/dom6/dom6modman.pdf)
 
-The bundled population and fort tables are transcribed from the official map manual. Unit, site, nation, special-plane, and site-location indexes are generated from the pinned Dom6 Inspector 6.35 data revision documented in `src/catalog/data/NOTICE.md`; its nation recruitment tables supply commander/troop roles and its nation attributes identify home-site references without name guessing. The same pinned nation, epithet, home-site, plane, and Nexus entries generate the reserved-name blacklist used by the province namer. The GPL-3.0 license is included beside the generated catalog.
+The bundled population and fort tables are transcribed from the official map manual. Unit, site, nation, special-plane, and site-location indexes are generated from the pinned Dom6 Inspector 6.35 data revision documented in `src/catalog/data/NOTICE.md`; its nation recruitment tables supply commander/troop roles and its nation attributes identify home-site references without name guessing. The same pinned nation, epithet, home-site, plane, and Nexus entries generate the reserved-name blacklist used by the province namer. The GPL-3.0 license is included beside the generated catalog. [Post-publication content coverage and exact IDs](docs/CONTENT_CATALOG.md) include LA Pyrène #123, LA Zemaitia #124, current named units through Gnu Clan Commander #4134, and thrones through #1405.

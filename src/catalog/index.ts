@@ -13,9 +13,13 @@ export { provinceSiteLocationMask, siteCompatibility, type SiteCompatibility } f
 export {
   NATION_RECRUITABLE_COMMANDER_TAG,
   NATION_RECRUITABLE_TROOP_TAG,
+  KNOWN_COMMANDER_TAG,
+  KNOWN_TROOP_TAG,
+  INTERNAL_UNIT_RECORD_TAG,
   ORDINARY_SITE_TAG,
   commanderUnitEntries,
   provinceSiteEntries,
+  selectableUnitEntries,
   troopUnitEntries,
 } from "./selection";
 export type { CatalogCollection, CatalogEntry, CatalogProvenance, Dom6CatalogBundle } from "./types";

@@ -115,6 +115,17 @@ test("busy export has perceivable progress and dialog Tab/Escape containment", (
   assert.equal(dialogShouldClose("Enter", false), false);
 });
 
+test("generation exposes an interruptible background progress status", () => {
+  const source = readFileSync(new URL("../src/MapMakerApp.tsx", import.meta.url), "utf8");
+  assert.match(source, /id="generation-progress"[^>]*role="status"[^>]*aria-live="polite"[^>]*aria-atomic="true"[^>]*aria-busy="true"/);
+  assert.match(source, /<progress aria-label="Atlas generation in progress"/);
+  assert.match(source, />Cancel generation<\/button>/);
+  assert.match(source, /The current atlas was not changed/);
+  assert.match(source, /id="start-plan-errors"[^>]*role="alert"[^>]*aria-live="polite"/);
+  assert.match(source, /disabled=\{allocatedStarts !== project\.settings\.players \|\| startPlanErrors\.length > 0 \|\| generationBusy\}/);
+  assert.match(source, /if \(startPlanErrors\.length\)[\s\S]*Generation cannot start/);
+});
+
 test("CSS preserves focus visibility and reflows the complete workbench", () => {
   const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(css, /\.toggle-row input:focus-visible \+ i,[\s\S]*\.check-card input:focus-visible \+ i/);

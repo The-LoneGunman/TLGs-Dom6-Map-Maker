@@ -3,7 +3,15 @@ import test from "node:test";
 import type { Plane } from "../src/domain";
 import { createDefaultProject } from "../src/generator";
 import { createProvinceOwnershipModel } from "../src/geometry";
-import { planeBackgroundAsset, provinceAtOwnershipPoint, renderPlanePng, samplePlaneOwnership } from "../src/MapCanvas";
+import { canRenderPlanePreview, planeBackgroundAsset, provinceAtOwnershipPoint, renderPlanePng, samplePlaneOwnership } from "../src/MapCanvas";
+
+test("preview dimensions are rejected before allocating a canvas", () => {
+  assert.equal(canRenderPlanePreview({ width: 3840, height: 2160 }), true);
+  assert.equal(canRenderPlanePreview({ width: 2880, height: 2880 }), true);
+  assert.equal(canRenderPlanePreview({ width: 3841, height: 2160 }), false);
+  assert.equal(canRenderPlanePreview({ width: 1.5, height: 100 }), false);
+  assert.equal(canRenderPlanePreview({ width: 0, height: 100 }), false);
+});
 
 function sparsePreviewFixture(): Plane {
   const plane = createDefaultProject("sparse-preview-fixture").planes[0]!;
