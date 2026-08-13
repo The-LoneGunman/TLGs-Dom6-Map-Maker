@@ -10,14 +10,13 @@ Projects, imported catalogs, and generated packages remain in your browser profi
 
 ## Run locally on Windows
 
-1. Install [Node.js 22.13.0 or newer](https://nodejs.org/en/download).
-2. Download `Pantokrator-Atlas-Windows.zip` from the [latest release](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/latest).
-3. Extract the ZIP to a writable folder.
-4. Double-click **Start Pantokrator Atlas.cmd** and leave its terminal window open while using the application.
+1. Download `Pantokrator-Atlas-Setup-x64.exe` from the [latest release](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/latest).
+2. Run the setup and optionally select the Desktop shortcut.
+3. Open **Pantokrator Atlas** from the Start Menu and leave its terminal window open while using the application.
 
-The release contains the tested production build, so it does not need an npm install, build step, or internet connection at runtime. The launcher serves Atlas only on your computer, chooses a free port from 3000 through 3099, and opens the GUI automatically.
+The installer is per-user, needs no administrator access, and includes a private Node.js runtime plus the tested production build. It does not run npm, download dependencies, or need internet access after download. The launcher serves Atlas only on your computer, chooses a free port from 3000 through 3099, and opens the GUI automatically. Remove it later through **Windows Settings -> Apps -> Installed apps**.
 
-Do not run the launcher from inside the ZIP. Edge or Chrome is recommended because its folder-access support enables **Install directly**; other current browsers can use **Download ready ZIP**. See the [quick start](docs/USER_GUIDE.md#quick-start) for updates, backups, security details, and troubleshooting.
+The setup is not currently code-signed, so Windows may show an unknown-publisher warning. Download it only from this repository's release page; a `.sha256` file is supplied for verification. The portable `Pantokrator-Atlas-Windows.zip` remains available, but it requires Node.js 22.13.0 or newer and must be extracted before use. Edge or Chrome is recommended because its folder-access support enables **Install directly**; other current browsers can use **Download ready ZIP**. See the [quick start](docs/USER_GUIDE.md#quick-start) for updates, backups, and troubleshooting.
 
 ## What it can generate
 

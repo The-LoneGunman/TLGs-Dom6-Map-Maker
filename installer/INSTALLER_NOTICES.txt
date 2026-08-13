@@ -1,0 +1,12 @@
+PANTOKRATOR ATLAS INSTALLER RUNTIME NOTICE
+=========================================
+
+The Windows installer bundles a private Node.js runtime so users do not need to
+install Node.js, npm packages, or build tools. The complete Node.js distribution
+license and third-party notices are installed as runtime\NODE_LICENSE.txt.
+
+The setup executable is built with Inno Setup. Inno Setup remains subject to its
+own terms and is not relicensed by Pantokrator Atlas's 0BSD license.
+
+Pantokrator Atlas application and bundled-data licensing remains documented in
+LICENSE, THIRD_PARTY_LICENSES.txt, and licenses\dom6-catalog after installation.

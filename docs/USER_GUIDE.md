@@ -35,13 +35,16 @@ Use the local Windows release if you want an offline copy. Source, releases, and
 
 ### 2. Run a local Windows copy
 
-1. Install [Node.js](https://nodejs.org/en/download) **22.13.0 or newer** from the official site.
-2. Download `Pantokrator-Atlas-Windows.zip` from the [latest GitHub release](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/latest).
-3. Extract the ZIP to a normal writable folder such as Documents. Do not run it from inside the compressed archive and do not place it in the Steam game directory.
-4. Open the extracted `Pantokrator-Atlas` folder and double-click **Start Pantokrator Atlas.cmd**.
-5. Keep the launcher terminal open while using Atlas. Press **Ctrl+C** there, or close it, when finished.
+1. Download `Pantokrator-Atlas-Setup-x64.exe` from the [latest GitHub release](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/latest).
+2. Run setup. Installation is for the current Windows user and does not require administrator access. The optional Desktop shortcut is unchecked by default.
+3. Open **Pantokrator Atlas** from the Start Menu.
+4. Keep the launcher terminal open while using Atlas. Press **Ctrl+C** there, or close it, when finished.
 
-The launcher runs only on your computer and opens Atlas when ready. The release works offline after Node.js is installed. If port 3000 is occupied, the launcher prints and opens another local address.
+The installer includes the tested application and a private Node.js runtime. It does not modify the system Node.js installation, run npm, or download dependencies. The launcher runs only on your computer and opens Atlas when ready. If port 3000 is occupied, it prints and opens another local address.
+
+The setup is not currently code-signed, so Windows may show an unknown-publisher warning. Download it only from the project's GitHub release page. Each installer has a matching `.sha256` file for integrity verification.
+
+For a portable copy instead, download `Pantokrator-Atlas-Windows.zip`, install [Node.js 22.13.0 or newer](https://nodejs.org/en/download), extract the archive to a writable folder, and run **Start Pantokrator Atlas.cmd** there. Never run the launcher inside the ZIP or from the Steam game directory.
 
 Hosted and local copies use separate browser storage. Use **Editable project JSON** to move projects between them.
 
@@ -49,7 +52,9 @@ Hosted and local copies use separate browser storage. Use **Editable project JSO
 
 Before updating, open **Install / export -> Editable project JSON** and save important work. Atlas projects belong in browser storage and project JSON backups, not as edits inside the application source folder.
 
-Download the new release, extract it to a new folder, and launch it. Do not merge a new release over an old application folder.
+Download and run the newer setup; it upgrades the existing per-user installation. For a portable copy, extract the new release to a new folder instead of merging it over the old one.
+
+Uninstall through **Windows Settings -> Apps -> Installed apps -> Pantokrator Atlas**. Uninstall removes application files and shortcuts but does not delete browser-held autosave data. Export important projects as editable JSON before uninstalling or changing local addresses.
 
 ### 3. Make your first map
 
@@ -801,8 +806,9 @@ Validation, replacement-confirmation, and export dialogs trap focus. Escape clos
 
 | Message or symptom | Meaning and response |
 |---|---|
-| Double-click says Node.js is required | Install Node.js 22.13.0 or newer from the official link opened by the launcher, then run the launcher again. Atlas does not silently install system software. |
-| Launcher startup fails | Keep the extracted release in a writable folder, do not run inside the ZIP, and retry. If it still fails, include the complete terminal error in a [GitHub issue](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/issues). |
+| Windows shows Unknown publisher | The setup is not currently code-signed. Confirm it came from this project's GitHub release and verify the matching `.sha256` file before proceeding. |
+| Portable copy says Node.js is required | Install Node.js 22.13.0 or newer from the official link opened by the launcher, then run it again. The installed edition bundles its own private runtime. |
+| Launcher startup fails | For the installer edition, reinstall the latest setup. For a portable copy, keep the extracted release in a writable folder and do not run inside the ZIP. If it still fails, include the complete terminal error in a [GitHub issue](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/issues). |
 | GUI opens on a different local port and the autosave looks empty | Browser storage is separated by origin. Stop the program occupying port 3000 and relaunch, or open the old port and export **Editable project JSON** before moving to the new address. |
 | Generate is disabled | The five start categories may not total Players, or every compatible plane for a requested category may block generated starts. Read the persistent generation-plan summary, correct the counts, or permit starts on a suitable plane. |
 | Compatibility blocker / playable export unavailable | Open Validate and resolve every red Error. Warnings and fairness alone do not block export. |
