@@ -1,108 +1,93 @@
 # Pantokrator Atlas
 
-Pantokrator Atlas is a local-first Dominions 6 map maker. It creates deterministic, multiplayer-friendly native `.d6m` maps, supports one to eight linked planes, and exports a complete ready-to-play map folder without requiring a mod.
+Pantokrator Atlas is a local-first map maker for Dominions 6. It generates deterministic, multiplayer-oriented native `.d6m` maps with up to eight linked planes and exports a complete, ready-to-play map folder without requiring a mod.
 
-New to the program? Start with the [complete user guide](docs/USER_GUIDE.md) for the recommended workflow and a reference for every generator, plane, scenario, province, validation, and export option.
+- [Open the hosted GUI](https://pantokrator-atlas.mbatlle7.chatgpt.site)
+- [Download the latest Windows release](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/latest)
+- [Read the complete user guide](docs/USER_GUIDE.md)
 
-Release readiness is tracked in the [2026-08-11 audit and remediation record](docs/FULL_AUDIT_2026-08-11.md). Its engineering blockers are resolved and regression-tested. Both compact and representative eight-plane generated packages passed the installed Dominions 6 scripted new-game loader; the eight-plane game created its native game state and generated underworld map pair successfully.
+Projects, imported catalogs, and generated packages remain in your browser profile or on your device. Pantokrator Atlas does not upload or synchronize them.
 
-## Run Pantokrator Atlas
+## Run locally on Windows
 
-[Open Pantokrator Atlas in your browser](https://pantokrator-atlas.mbatlle7.chatgpt.site) for the simplest no-install route. Use a current Chromium-based browser such as Edge or Chrome. The application remains local-first; projects and generated packages stay on your device unless you deliberately move them.
+1. Install [Node.js 22.13.0 or newer](https://nodejs.org/en/download).
+2. Download `Pantokrator-Atlas-Windows.zip` from the [latest release](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/latest).
+3. Extract the ZIP to a writable folder.
+4. Double-click **Start Pantokrator Atlas.cmd** and leave its terminal window open while using the application.
 
-For a local Windows copy, install [Node.js 22.13.0 or newer](https://nodejs.org/en/download), download and extract `Pantokrator-Atlas-Windows.zip` from the [latest GitHub release](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/latest), then double-click **Start Pantokrator Atlas.cmd**. The release already contains the tested production build: no npm command, dependency download, or internet connection is needed to run it. The launcher selects a free loopback-only port and opens the GUI.
+The release contains the tested production build, so it does not need an npm install, build step, or internet connection at runtime. The launcher serves Atlas only on your computer, chooses a free port from 3000 through 3099, and opens the GUI automatically.
 
-Do not run the launcher inside the ZIP. Extract it to a normal writable folder first, and keep its terminal window open while using the local GUI. See the [user guide quick start](docs/USER_GUIDE.md#quick-start) for GitHub Desktop, command-line, update, security, and troubleshooting details.
+Do not run the launcher from inside the ZIP. Edge or Chrome is recommended because its folder-access support enables **Install directly**; other current browsers can use **Download ready ZIP**. See the [quick start](docs/USER_GUIDE.md#quick-start) for updates, backups, security details, and troubleshooting.
 
-## License
+## What it can generate
 
-Pantokrator Atlas application code and original project materials are released under the highly permissive [0BSD license](LICENSE). Bundled JavaScript dependencies retain their own licenses and notices in [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt). The generated Dominions selector catalog is a separately licensed third-party-derived component: its Dom6 Inspector source, pinned revision, scope, and GPL-3.0 terms are preserved in [`src/catalog/data/NOTICE.md`](src/catalog/data/NOTICE.md) and [`src/catalog/data/LICENSE.dom6inspector.txt`](src/catalog/data/LICENSE.dom6inspector.txt). The root 0BSD license does not replace or weaken dependency or catalog terms.
+- Coherent biomes, additive Dominions terrain flags, varied province shapes, configurable wrapping, and ownership-derived movement borders
+- Natural oceans, a single continent, multiple continents, island chains, or a central inland sea
+- Surface, cave, cavern, cloud, air, underworld, infernal, abyss, dream, elemental, and custom plane archetypes
+- Sparse special realms with themed negative-space backdrops, irregular chambers, corridors, and hubs
+- Flooded cave provinces, safe water-to-water interplane links, and an edge-to-edge River Styx with two banks and controlled crossings
+- Compatible, hub, chain, ring, or manually configured gate networks between planes
+- Scale-aware start spacing, configurable start allocations, plane-level start blocking, cave-start nations, throne placement, and warnings when requested spacing cannot fit
+- Plane- and terrain-specific province names, populations, recruitment themes, guardians, sites, and initial guardian strength
+- Searchable bundled Dominions catalogs for nations, units, sites, poptypes, forts, and thrones
+- Scenario controls for ownership, armies, commanders, magic, sites, forts, temples, labs, AI players, victory points, battle maps, skyboxes, and advanced directives
+- Editable project JSON, browser autosave, Undo/Redo, preview PNGs, direct folder installation, and ZIP export
+- Validation for topology, start safety, gates, terrain, catalog IDs, filenames, directives, and `.d6m` structure
 
-## Included map features
+For every generator, plane, scenario, province, catalog, validation, and export control, use the [user guide](docs/USER_GUIDE.md).
 
-- Coherent procedural biomes with controlled terrain variety and plane-specific site/population themes
-- Topology-aware overland ocean presets: natural, single continent, multiple continents, island chains, and a central inland sea
-- Surface, cave, cavern, cloud, air, underworld, hell, abyss, dream, elemental, and custom plane archetypes
-- Pre-generation plane planning with independent names, sizes, terrain variants, wrapping, display flags, and colors
-- Per-plane **Block generated starts** policies, with automatic reallocation to eligible realms and preflight errors when the requested start mix cannot fit
-- Exact land, coastal, water, cave, and other-plane start allocations
-- One-click Generate-tab default reset that preserves the current map and participates in Undo
-- Deterministic plane-, terrain-, coast-, flooded-cave-, and Styx-aware province names with project-wide uniqueness, capital-name protection, and a reroll that preserves manual edits
-- Ordered deterministic cave-start nations, bound to generated cave capitals with `#specstart` when special starts are enabled
-- Configurable minimum start degree and scale-aware capital spacing: starts never share a one-ring province, larger maps seek progressively wider separation, and any infeasible shared-degree or preferred-distance target is reported as an accessible best-effort warning
-- Start exclusion zones for generated thrones, gates, and unique independent guardians; assigning a nation-specific capital atomically removes all conflicting independent-province setup
-- Preferred, avoided, and catalog-verified fixed throne locations
-- Up to eight planes connected through compatible, hub, chain, ring, or explicit gate graphs
-- Standard, road, river, bridge, mountain, impassable, and custom borders
-- Ownership-boundary topology: every positive-length shared border is an exported neighbour, including wrap seams
-- Searchable Dominions 6.35 catalogs: 4,091 units, 1,253 sites, 82 poptypes, 106 active/special nations, and 28 forts
-- Terrain-compatible hidden/known selection across all 900 ordinary province sites plus an explicit 71-site non-random/non-home expansion, with 208 nation home references excluded and a separate 74-site throne-only fixed-throne selector
-- Unique initial independent commanders, squads, bodyguards, items, cleared/assigned magic, experience, and equipment; 4,078 gameplay unit records are browsable by default, with factual nation/site recruitment filters covering 850 known commanders and 842 troops; all 4,091 source IDs remain accepted as raw numeric references
-- Province ownership, poptypes, population, unrest, forts, temples, labs, and owned PD level
-- Battle maps, skyboxes, colors, host restrictions, AI players, victory points, and raw advanced directives
-- Fully additive Dominions terrain flags (including freshwater land, forest + swamp, and sea + mountains/underwater forest) with native game-rendered winter, forest, waste, farm, submergence, water, and kelp changes
-- Sparse non-overland chambers and corridors with native owner-0 negative space shared by D6M output, interactive hit-testing, and themed editor/PNG backdrops for cavern, cloud, underworld, infernal, abyssal, dream, and elemental realms
-- Adaptive illustrated editor/PNG materials for earth, foliage, stone, and water: mathematically periodic textures stay at map-relative scale, clip to canonical ownership, survive wrap seams, and suppress or simplify detail when a province is too small or narrow
-- IndexedDB-first device autosave with localStorage fallback, legacy migration, and a visible failure state for atlas sizes that exceed browser quotas
-- Direct installation through the browser File System Access API, plus a ready-to-install ZIP fallback
-- Validation for filenames, command ranges, catalog IDs, start safety, site terrain, topology, gates, and `.d6m` structure
+## Typical workflow
 
-## Plane and gate behavior
+1. Choose player count, provinces per player, start allocation, ocean style, and output size on **Generate**.
+2. Add or customize planes, their sizes, start policies, terrain variants, and links on **Planes**.
+3. Generate the atlas and review its balance notices and validation report.
+4. Inspect or edit provinces, borders, gateways, starts, thrones, guardians, sites, and scenario settings.
+5. Save **Editable project JSON** as a backup, then use **Install directly** or **Download ready ZIP**.
 
-Dominions connects every province carrying the same `#gate` number in both directions. Pantokrator Atlas therefore treats plane links as an undirected graph and does not promise unsupported one-way travel. Presets quickly seed the full graph; the Planes tab then shows only the selected plane’s destinations so each next-generation link and gate-pair count can be customized without an all-plane matrix. A separate Existing gateways editor lists the saved gate groups touching that plane, including every endpoint’s local province index and stable ID, and lets you reassign endpoints, edit the shared gate number, or delete the group. The compatible preset favors surface-to-cave/cavern, surface-to-cloud/air, and cave-family-to-underworld/hell/abyss links.
+`Players x provinces per player` sizes only core Surface, Cave, Cavern, and surface-like solid Custom realms. Auto-sized bonus planes are added as a configurable percentage of that core total; percentages above 100% are allowed. Manual plane sizes are preserved.
 
-Generated gate and throne endpoints prefer provinces at least two graph steps from every generic, team, and nation-specific start. On a cramped custom plane, validation exposes any deterministic fallback that had to use the adjacent ring.
+Start provinces and their directly connected neighbors are protected from generated thrones and guardians. Gates prefer endpoints farther from starts and produce a warning when a constrained map requires a closer fallback. Assigning a nation-specific start clears conflicting independent setup from its capital. Start-blocked planes remain available for later manual or nation-specific allocation.
 
-Sparse cave, cloud, underworld, infernal, abyssal, dream, and elemental realms use subdued illustrated art behind ownerless space in the editor and high-resolution PNG preview. Dominions' native D6M v3 format has no second raster/underlay field: its single `#imagefile` is the D6M itself, so the game renders owner-zero space with its own presentation rather than loading these preview backdrops. See [realm backdrop asset provenance](docs/ASSET_PROVENANCE.md) for the original OpenAI ImageGen inventory.
+## Dominions engine boundaries
 
-Every plane also uses a small universal material library in the editor and PNG preview. The renderer tiles these textures in one map-relative coordinate system rather than stretching a texture to each polygon. Terrain marks use resolution-independent shape metrics: tiny provinces omit unsafe ornament, narrow corridors receive a fitted micro treatment, and large hubs receive additional deterministic detail. See the [illustrated asset specification](docs/ILLUSTRATED_ASSET_SPEC.md) for the acceptance contract and fallback rules.
+Pantokrator Atlas produces native, zero-mod map packages. A few engine distinctions are therefore important:
 
-Cave and Cavern generation includes connected flooded chambers whose terrain remains additively both Sea and Cave. Every Underworld is crossed edge-to-edge by a connected, named River Styx band with Death + Water site bias, amphibious spectral guardians, two connected dry banks, and one or two controlled bridge crossings. Newly staged Underworld planes therefore default to no wrap; manually enabling both wrap axes is preserved but validation warns that a single river band cannot truly divide a torus. When both realms have enough safe aquatic provinces, a bounded share of surface-to-underground gate pairs link ocean to subterranean water while retaining at least one dry entrance. This follows Illwinter's official Hollow World precedent, where sea provinces have linked underground levels and several entrances are underwater.
+- Provinces sharing a `#gate` number are connected in both directions; native map gates are not one-way.
+- A map can define initial independent guardians and an owned province's numeric defence level. A new replenishing post-capture province-defence roster requires a nation or poptype supplied by a `.dm` mod.
+- `#poptype` controls vanilla local recruitment but does not replace the independent army Dominions initially generates.
+- Referenced custom battle maps and skyboxes must be copied into the exported map folder separately.
+- Steam Workshop publishing remains a Steam/Dominions workflow outside Pantokrator Atlas.
 
-Natural, single-continent, multiple-continent, and inland-sea layouts preserve the requested feasible water quota. Island chains require enough surrounding sea to read as islands, so Generate raises and records any lower request to an effective 48% minimum. Multiple-continent cuts use the exported movement topology; when the selected water quota and wrapping cannot sustain every requested continent, validation reports the achieved component count instead of silently presenting one connected landmass as several continents.
-
-Generation offers explicit multiplayer policy controls. Economy balance can preserve natural values, apply a capped soft correction, or use the default hard competitive correction. Solid overland realms can favor open travel, the default terrain-shaped competitive mix, or connected strategic regions with capital-safe chokepoints; cave and sparse special realms retain their purpose-built topology profiles.
-
-`Players x provinces per player` budgets only core Surface, Cave, Cavern, and surface-like solid Custom realms. Each auto-sized bonus realm independently uses the Generate-tab bonus-plane percentage of the combined core total; values above 100% intentionally make every bonus plane larger than all core realms combined, subject to the 800-province per-plane cap. Manual plane sizes are never changed by that setting.
-
-Leaving the cave-start nation list empty preserves Dominions' native cave preference. Within the requested capacity, configured entries are guaranteed generated cave capitals through `#specstart` in the displayed priority order when the host enables special starts; the UI warns when the list exceeds that capacity. Auto-sized Cave and Cavern core planes share the cave-start province budget, while the main overland plane follows the combined land, coastal, and water allocation.
-
-Generated province names use original, historically rooted geographic vocabulary rather than copied third-party map lists. The grammar combines the plane archetype or Custom variant with effective additive terrain flags, so flooded caves, kelp seas, forested highlands, and Styx provinces receive different language. Names are unique across the entire atlas and avoid normalized matches with playable nation names and epithets, nation home-site names, and official special-realm labels from the pinned catalog. Editing a name in the province inspector marks it manual; map regeneration and the ordinary Generate-tab reroll leave it untouched. Older projects without name provenance can use the separately confirmed **Replace every province name** action to repair legacy duplicates; it replaces manual names too, but remains Undoable. Dominions can still apply a nation's homeland name to a start when special starts are enabled unless the scenario author explicitly turns on `#nohomelandnames`.
-
-## Important PD distinction
-
-Standalone map files can author unique initial independent guardians and set an owned province's numeric `#defence` level. A completely new, replenishing post-capture PD unit roster is defined by a nation or poptype in a `.dm` mod. Pantokrator Atlas stays zero-mod, so it does not mislabel initial guardians as persistent custom PD.
-
-`#poptype` selects vanilla local recruitment; the map manual does not define separate PD-roster IDs, and poptype does not replace the independent army initially randomized by Dominions. Generated unique guardians are explicit map-only initial defenders.
-
-## Manual coverage
-
-All map-command families in the Dominions 6 Map Making Manual are either represented by structured controls, generated from native `.d6m` geography, or available in the scoped map/plane/province directive editors. The `.d6m` owner raster replaces hand-authored `#pb` runs and lets Dominions render terrain transformations without separate TGA variants. Rare scenario commands such as `#god`, `#dominionstr`, and `#scale ...` remain in the advanced map-directive editor because their order can be scenario-specific.
-
-Terrain follows the manual's additive 64-bit model rather than treating forest, swamp, waste, highland, mountains, farm, fresh water, sea, deep sea, and cave as mutually exclusive. The primary terrain controls the generated artwork while additional flags preserve every legal mechanical combination; validation warns when a province exceeds the manual's recommendation of at most two adverse terrain types.
-
-Skybox and custom battle-map directives are supported, but their referenced external `.tga`, `.rgb`, or `.d3m` assets must also exist in the map folder; validation calls this out. Steam Workshop upload and its optional banner/visibility metadata remain a Steam/Dominions workflow rather than part of ordinary ready-to-play map installation.
-
-## Development
+## Develop from source
 
 ```powershell
 npm.cmd ci
 npm.cmd run dev
+```
+
+Before submitting a change, run the release checks:
+
+```powershell
 npm.cmd run typecheck
 npm.cmd test
 npm.cmd run lint
+npm.cmd run licenses:check
 ```
 
-Development uses the live-reloading server. End users should use the hosted GUI or the root-level Windows launcher, which serves a tested production build bound only to `127.0.0.1` without installing npm packages. The source-checkout launcher can still install and rebuild automatically when a packaged build is absent.
+The development server live-reloads source changes. The root launcher can also prepare a raw source checkout, but the hosted GUI or release ZIP is the recommended route for players.
 
-The default output is 3840×2160. Square output is available at 2880×2880; custom output is hard-limited to 8,294,400 pixels so malformed settings cannot allocate a multi-gigabyte browser raster. The D6M encoder streams one plane at a time during direct installation; ZIP export holds the package in memory and is best for smaller atlases.
+## Documentation and references
 
-Older saved projects created before ownership-boundary topology may show a **Synchronize visible borders** action. It preserves valid authored border types, adds missing shared-border neighbours, and removes stale links that cross province interiors.
-
-## Format and data references
-
+- [Complete user guide](docs/USER_GUIDE.md)
+- [Bundled content catalog and post-manual IDs](docs/CONTENT_CATALOG.md)
+- [Illustrated asset specification](docs/ILLUSTRATED_ASSET_SPEC.md)
+- [Asset provenance](docs/ASSET_PROVENANCE.md)
 - [Official Dominions 6 map-making manual](https://illwinter.com/dom6/dom6mapman.pdf)
 - [Official Dominions 6 file formats](https://illwinter.com/dom6/dom6fileformats.pdf)
 - [Official Dominions 6 modding manual](https://illwinter.com/dom6/dom6modman.pdf)
 
-The bundled population and fort tables are transcribed from the official map manual. Unit, site, nation, special-plane, and site-location indexes are generated from the pinned Dom6 Inspector 6.35 data revision documented in `src/catalog/data/NOTICE.md`; its nation recruitment tables supply commander/troop roles and its nation attributes identify home-site references without name guessing. The same pinned nation, epithet, home-site, plane, and Nexus entries generate the reserved-name blacklist used by the province namer. The catalog's separate GPL-3.0 license is included beside it as `src/catalog/data/LICENSE.dom6inspector.txt`. [Post-publication content coverage and exact IDs](docs/CONTENT_CATALOG.md) include LA Pyrène #123, LA Zemaitia #124, current named units through Gnu Clan Commander #4134, and thrones through #1405.
+The bundled population and fort tables come from the official map manual. Unit, site, nation, special-plane, and site-location indexes are generated from the pinned Dom6 Inspector revision documented in [`src/catalog/data/NOTICE.md`](src/catalog/data/NOTICE.md).
+
+## License
+
+Pantokrator Atlas application code and original project materials use the permissive [0BSD license](LICENSE). Bundled dependencies retain their licenses and notices in [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt). The generated Dominions selector catalog retains its separately documented source and GPL-3.0 terms in [`src/catalog/data/NOTICE.md`](src/catalog/data/NOTICE.md) and [`src/catalog/data/LICENSE.dom6inspector.txt`](src/catalog/data/LICENSE.dom6inspector.txt).
