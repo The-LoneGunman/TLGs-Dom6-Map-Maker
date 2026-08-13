@@ -27,7 +27,12 @@ async function exists(filePath) {
 }
 
 function normalizeText(value) {
-  return value.replace(/\r\n?/g, "\n").trim();
+  return value
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .trim();
 }
 
 async function packageNotices(packagePath) {
