@@ -3,7 +3,11 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 title Pantokrator Atlas
 
-where node.exe >nul 2>&1
+set "ATLAS_NODE=%~dp0runtime\node.exe"
+if not exist "%ATLAS_NODE%" (
+  set "ATLAS_NODE=node.exe"
+  where node.exe >nul 2>&1
+)
 if errorlevel 1 (
   echo.
   echo Pantokrator Atlas needs Node.js 22.13.0 or newer.
@@ -15,7 +19,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-node.exe "%~dp0scripts\start-atlas.mjs" %*
+"%ATLAS_NODE%" "%~dp0scripts\start-atlas.mjs" %*
 set "ATLAS_EXIT=%ERRORLEVEL%"
 
 if not "%ATLAS_EXIT%"=="0" (
