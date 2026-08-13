@@ -124,7 +124,7 @@ jobs:
           New-Item -ItemType Directory -Force candidate/tools | Out-Null
           gh release download is-6_7_3 --repo jrsoftware/issrc --pattern innosetup-6.7.3.exe --dir candidate/tools
           Push-Location candidate/tools
-          gh release verify-asset innosetup-6.7.3.exe --repo jrsoftware/issrc
+          gh release verify-asset is-6_7_3 innosetup-6.7.3.exe --repo jrsoftware/issrc
           Pop-Location
           $compilerInstaller = (Resolve-Path candidate/tools/innosetup-6.7.3.exe).Path
           $signature = Get-AuthenticodeSignature -LiteralPath $compilerInstaller
