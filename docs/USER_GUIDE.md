@@ -21,82 +21,54 @@ This guide covers the recommended workflow, every major option in the interface,
 - [Installing and exporting](#installing-and-exporting)
 - [Keyboard and accessibility controls](#keyboard-and-accessibility-controls)
 - [Troubleshooting](#troubleshooting)
+- [License and bundled data](#license-and-bundled-data)
 - [Dominions engine boundaries](#dominions-engine-boundaries)
 
 ## Quick start
 
-### 1. Obtain the program from GitHub
+### 1. Choose the hosted or local GUI
 
-Pantokrator Atlas currently runs from its GitHub source repository; it is not installed through Steam or a standalone Windows installer.
+The hosted GUI is the recommended no-install route when its public link is listed in the README or current GitHub release. Open it in a current Chromium-based browser such as Edge or Chrome. Atlas is local-first: its autosave, imported catalogs, and generated downloads remain in that browser profile or on your device; they are not cloud-synchronized.
 
-Repository: [The-LoneGunman/TLGs-Dom6-Map-Maker](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker)
+Use the local Windows route if you want a copy on your computer, are testing unreleased source, or cannot use the hosted deployment. The official repository and releases are at [The-LoneGunman/TLGs-Dom6-Map-Maker](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker).
 
-> **Current build status:** this is a source/testing build, not yet a packaged public release. The engineering blockers found by the release audits have regression-tested fixes, and a compact generated package has passed the installed Dominions 6 scripted new-game loader. The remaining release gate is an in-game smoke test of a representative eight-plane package and its gates. Review the [audit and remediation record](FULL_AUDIT_2026-08-11.md), and keep **Editable project JSON** backups for important maps.
+> **Release verification:** engineering blockers found by the release audits have regression-tested fixes. Compact and representative eight-plane packages both passed the installed Dominions 6 scripted new-game loader; the eight-plane game produced its native game state and underworld map pair. Consult the [audit and remediation record](FULL_AUDIT_2026-08-11.md) for the complete evidence, and keep **Editable project JSON** backups for important maps.
 
-If the repository is private, the owner must first invite your GitHub account as a collaborator. Sign in to that authorized account in GitHub or GitHub Desktop before trying to download it. Someone without repository access cannot install the program from this link; the owner must grant access or publish a release/public copy.
+### 2. Run a local Windows copy
 
-Choose one acquisition method:
+1. Install [Node.js](https://nodejs.org/en/download) **22.13.0 or newer** from the official site.
+2. Open the [latest GitHub release](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/latest) and download `Pantokrator-Atlas-Windows.zip`. This release asset includes a tested production build. For an unreleased test build, **Code -> Download ZIP** contains the same launcher but must build from source on first use.
+3. Extract the ZIP to a normal writable folder such as Documents. Do not run it from inside the compressed archive and do not place it in the Steam game directory.
+4. Open the extracted `Pantokrator-Atlas` folder and double-click **Start Pantokrator Atlas.cmd**.
+5. Leave the terminal open. A release copy starts its included production build immediately and opens the browser only after Atlas is ready. A raw source checkout installs the exact dependencies recorded in `package-lock.json` and builds on first use; later launches skip unchanged setup work.
+6. Keep the launcher terminal open while using Atlas. Press **Ctrl+C** there, or close the terminal, when finished.
 
-#### GitHub Desktop on Windows
+The launcher binds only to `127.0.0.1`, so it does not expose Atlas to other computers on the network. It never changes PowerShell execution policy and does not install Node or any other system software itself. The release bundle needs no internet access; a raw source checkout needs access when npm must install or update locked dependencies. If port 3000 is occupied, it uses the first available port through 3099 and prints the exact address.
 
-1. Install [GitHub Desktop](https://desktop.github.com/) and sign in.
-2. Open the repository link above in your browser.
-3. Select **Code -> Open with GitHub Desktop**, or in GitHub Desktop choose **File -> Clone repository -> URL** and enter:
+Edge or Chrome is recommended for **Install directly** because it supports folder access. Other current browsers can still use **Download ready ZIP**. Hosted and local copies have separate browser storage, as do local copies running on different ports; use **Editable project JSON** when moving a project between them.
 
-   ```text
-   https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker.git
-   ```
+### Updating a local copy
 
-4. Choose a local folder and select **Clone**.
-5. Use **Fetch origin** and **Pull origin** in GitHub Desktop whenever you want the newest version.
+Before updating, open **Install / export -> Editable project JSON** and save important work. Atlas projects belong in browser storage and project JSON backups, not as edits inside the application source folder.
 
-#### Download a source ZIP
+- **Release ZIP:** download the new release, extract it to a new folder, and launch it. Do not merge a new release over an old folder.
+- **GitHub Desktop:** clone the repository, use **Fetch origin** and **Pull origin**, then double-click the launcher. It detects changed source or dependencies and refreshes only what is needed.
+- **Git command line:** clone with `git clone https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker.git`; later use `git pull --ff-only`, then run the launcher.
 
-1. Sign in to GitHub and open the repository.
-2. Choose **Code -> Download ZIP**.
-3. Extract the ZIP to a normal writable folder such as Documents. Do not run it from inside the compressed archive.
-4. To update later, download a new ZIP and replace the old source folder after backing up any files you deliberately added there. Atlas projects should be backed up with **Editable project JSON**, not kept as source-code changes.
+The repository is public, so the source, tagged releases, checksums, license texts, and issue tracker are available without requesting access.
 
-#### Git command line
+### Manual developer startup
 
-If Git is installed:
-
-```powershell
-git clone https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker.git
-cd "TLGs-Dom6-Map-Maker"
-```
-
-Later updates use:
-
-```powershell
-git pull --ff-only
-```
-
-### 2. Install the runtime and dependencies
-
-Install [Node.js](https://nodejs.org/) **22.13.0 or newer**. GitHub Desktop users still need Node.js because the application runs locally through Node and npm.
-
-Open PowerShell, Command Prompt, or a terminal in the cloned/extracted project folder, then run:
+Contributors can still use the live-reloading development server:
 
 ```powershell
 npm.cmd ci
-```
-
-This installs the exact JavaScript dependencies recorded in the committed lockfile. Internet access is required the first time and whenever dependencies change.
-
-### 3. Start Pantokrator Atlas
-
-From the project folder:
-
-```powershell
 npm.cmd run dev
 ```
 
-Keep that terminal open while using the application. Open the local address shown by the development server, normally [http://localhost:3000/](http://localhost:3000/). Stop the server with **Ctrl+C** in the terminal.
+Open the address printed by the server. Before contributing a change, also run `npm.cmd run typecheck`, `npm.cmd test`, and `npm.cmd run lint`. These commands are not required for the one-click production launcher.
 
-If port 3000 is already occupied, the development server may show a different local port; open the exact address printed in the terminal.
-
-### 4. Make your first map
+### 3. Make your first map
 
 1. In **Generate**, enter a seed, player count, provinces per player, and a start allocation whose total equals the player count.
 2. Open **Planes** and add every plane you want. Configure each plane's archetype, variant, size, wrapping, and planned links.
@@ -882,7 +854,11 @@ Validation, replacement-confirmation, and export dialogs trap focus. Escape clos
 
 | Message or symptom | Meaning and response |
 |---|---|
-| PowerShell says `npm.ps1 cannot be loaded` | Windows execution policy blocked the PowerShell shim. Run `npm.cmd ci` and `npm.cmd run dev`, or use Command Prompt. Do not weaken the machine's execution policy merely to start Atlas. |
+| Double-click says Node.js is required | Install Node.js 22.13.0 or newer from the official link opened by the launcher, then run the launcher again. Atlas does not silently install system software. |
+| Launcher dependency installation fails | A release bundle does not install dependencies; confirm that you downloaded `Pantokrator-Atlas-Windows.zip`, not GitHub's automatic source archive. For a source checkout, confirm internet access, free disk space, and access to `registry.npmjs.org`, then retry. The launcher uses `npm ci` and the committed lockfile; do not download replacement packages from an unofficial site. |
+| Launcher build or startup fails | Keep the extracted source in a writable folder, do not run inside the ZIP, and retry. If it still fails, copy the complete terminal error into a GitHub issue. |
+| GUI opens on a different local port and the autosave looks empty | Browser storage is separated by origin. Stop the program occupying port 3000 and relaunch, or open the old port and export **Editable project JSON** before moving to the new address. |
+| PowerShell says `npm.ps1 cannot be loaded` | This affects manual developer commands, not the double-click launcher. Use `npm.cmd`, or Command Prompt. Do not weaken the machine's execution policy merely to start Atlas. |
 | Generate is disabled | The five start categories may not total Players, or every compatible plane for a requested category may block generated starts. Read the persistent generation-plan summary, correct the counts, or permit starts on a suitable plane. |
 | Compatibility blocker / playable export unavailable | Open Validate and resolve every red Error. Warnings and fairness alone do not block export. |
 | Scale-aware spacing below preferred | The hard three-step floor was retained but the larger preferred target did not fit. Increase provinces/player, simplify start categories, change wrapping, or generate again. |
@@ -927,6 +903,14 @@ Pantokrator Atlas aims to be honest about what a standalone map can do:
 - **Custom catalogs:** metadata for the editor, not installed game content.
 - **Steam Workshop:** package upload, banner, visibility, and publishing remain outside ordinary local installation.
 - **Raw directives:** powerful but not syntax-checked. A project can pass structured validation and still contain an invalid raw command.
+
+## License and bundled data
+
+Pantokrator Atlas application code and original project materials use the [0BSD license](../LICENSE), which permits use, copying, modification, and distribution without an attribution condition. The software is provided without warranty as stated in that license.
+
+JavaScript dependencies bundled into the hosted and prebuilt local application keep their respective license and notice terms, inventoried in [`THIRD_PARTY_LICENSES.txt`](../THIRD_PARTY_LICENSES.txt). The release checks regenerate that inventory from the locked dependency graph and reject drift.
+
+The generated selector catalog at `src/catalog/data/dom6-6.35.json` is a separately licensed component derived from the pinned Dom6 Inspector data revision. Its source attribution and scope are in [`src/catalog/data/NOTICE.md`](../src/catalog/data/NOTICE.md), and its GPL-3.0 license is included as [`src/catalog/data/LICENSE.dom6inspector.txt`](../src/catalog/data/LICENSE.dom6inspector.txt). Redistribution must preserve and follow those separate catalog terms; the root 0BSD license does not relicense the catalog.
 
 ## Official references
 

@@ -124,13 +124,69 @@ type DestructiveConfirmation =
   | { kind: "new-atlas" }
   | { kind: "generate"; impact: AtlasReplacementImpact }
   | { kind: "remove-plane"; planeId: string; impact: PlaneRemovalImpact };
+export type ActionErrorKind = "catalog-import" | "project-import" | "package-export" | "preview-export" | "device-save";
+export interface ActionErrorNotice {
+  kind: ActionErrorKind;
+  message: string;
+  sequence: number;
+  title: string;
+}
 const INSPECTOR_TABS: readonly InspectorTab[] = ["terrain", "gameplay", "sites", "advanced"];
 const LEFT_TABS: readonly LeftTab[] = ["generate", "planes", "scenario"];
+
+const ACTION_ERROR_TITLES: Record<ActionErrorKind, string> = {
+  "catalog-import": "Catalog could not be imported",
+  "project-import": "Project could not be opened",
+  "package-export": "Map package could not be exported",
+  "preview-export": "Preview could not be exported",
+  "device-save": "Project could not be saved",
+};
 
 const CATALOG_STORAGE_KEY = "pantokrator-atlas-user-catalog-v1";
 export const MAX_CUSTOM_CATALOG_IMPORT_BYTES = 8 * 1024 * 1024;
 
 type BrowserTextImport = Pick<File, "size" | "text">;
+
+export function createActionErrorNotice(
+  kind: ActionErrorKind,
+  sequence: number,
+  error: unknown,
+  fallbackMessage: string,
+): ActionErrorNotice {
+  const candidate = error instanceof Error
+    ? error.message
+    : typeof error === "string"
+      ? error
+      : typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
+        ? error.message
+        : "";
+  return {
+    kind,
+    message: candidate.trim() || fallbackMessage,
+    sequence,
+    title: ACTION_ERROR_TITLES[kind],
+  };
+}
+
+export function ActionErrorAlert({ error, onDismiss }: { error: ActionErrorNotice; onDismiss: () => void }) {
+  const titleId = `action-error-${error.sequence}-title`;
+  const messageId = `action-error-${error.sequence}-message`;
+  return <section
+    className="action-error-alert"
+    role="alert"
+    aria-live="assertive"
+    aria-atomic="true"
+    aria-labelledby={titleId}
+    aria-describedby={messageId}
+  >
+    <span className="action-error-icon" aria-hidden="true">!</span>
+    <div>
+      <strong id={titleId}>{error.title}</strong>
+      <p id={messageId}>{error.message}</p>
+    </div>
+    <button type="button" onClick={onDismiss} aria-label={`Dismiss: ${error.title}`}>Dismiss</button>
+  </section>;
+}
 
 /** Reject oversized browser imports before File.text() allocates another full copy. */
 export async function parseProjectImportFile(file: BrowserTextImport): Promise<MapProject> {
@@ -354,6 +410,7 @@ export function MapMakerApp() {
   const [generationBusy, setGenerationBusy] = useState(false);
   const [generationProgress, setGenerationProgress] = useState<GenerationWorkerProgress>();
   const [toast, setToast] = useState<string>();
+  const [actionError, setActionError] = useState<ActionErrorNotice>();
   const [zoom, setZoom] = useState(1);
   const [hydrated, setHydrated] = useState(false);
   const [autosaveState, setAutosaveState] = useState<AutosaveState>({ backend: "none", errors: [], migrated: false });
@@ -366,6 +423,7 @@ export function MapMakerApp() {
   const rangeEditStartRef = useRef<MapProject | undefined>(undefined);
   const autosaveRevisionRef = useRef<AutosaveRevision | null>(null);
   const autosaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const actionErrorSequenceRef = useRef(0);
 
   const activePlane = project.planes.find((plane) => plane.id === activePlaneId) ?? project.planes[0];
   const selected = activePlane?.provinces.find((province) => province.id === selectedId);
@@ -485,6 +543,15 @@ export function MapMakerApp() {
     const timeout = window.setTimeout(() => setToast(undefined), 3600);
     return () => window.clearTimeout(timeout);
   }, [toast]);
+
+  const showActionError = useCallback((kind: ActionErrorKind, error: unknown, fallbackMessage: string) => {
+    actionErrorSequenceRef.current += 1;
+    setActionError(createActionErrorNotice(kind, actionErrorSequenceRef.current, error, fallbackMessage));
+  }, []);
+
+  const clearActionError = useCallback((kind: ActionErrorKind) => {
+    setActionError((current) => current?.kind === kind ? undefined : current);
+  }, []);
 
   useEffect(() => () => {
     const task = generationTaskRef.current;
@@ -746,9 +813,10 @@ export function MapMakerApp() {
       setUserCatalog(merged);
       window.localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(merged));
       const count = imported.poptypes.length + imported.sites.length + imported.units.length + imported.nations.length + imported.forts.length + imported.planes.length + imported.siteTerrainTypes.length;
+      clearActionError("catalog-import");
       setToast(`Loaded ${count.toLocaleString()} verified catalog entries from ${imported.catalogVersion}.`);
     } catch (error) {
-      setToast(error instanceof Error ? error.message : "Catalog import failed.");
+      showActionError("catalog-import", error, "Catalog import failed.");
     }
   };
 
@@ -905,14 +973,16 @@ export function MapMakerApp() {
         if (result === "unsupported") {
           setToast("Direct folder access is unavailable here. Use the ready-to-install ZIP instead.");
         } else if (result === "installed") {
+          clearActionError("package-export");
           setToast("Installed into your selected Dominions 6 maps folder.");
         }
       } else {
         await downloadPackage(project, setExportProgress);
+        clearActionError("package-export");
         setToast("Ready-to-install map package downloaded.");
       }
     } catch (error) {
-      setToast(error instanceof Error ? error.message : "Export failed.");
+      showActionError("package-export", error, "Export failed.");
     } finally {
       setExportBusy(false);
     }
@@ -925,9 +995,10 @@ export function MapMakerApp() {
     try {
       const blob = await renderPlanePng(activePlane, preview, activePlaneMarkerAnnotations);
       downloadBrowserBlob(blob, `${sanitizeMapName(project.name)}-${sanitizeMapName(activePlane.name)}-${preview}.png`);
+      clearActionError("preview-export");
       setToast("High-resolution preview exported.");
     } catch (error) {
-      setToast(error instanceof Error ? error.message : "Preview export failed.");
+      showActionError("preview-export", error, "Preview export failed.");
     } finally {
       setExportBusy(false);
     }
@@ -944,9 +1015,10 @@ export function MapMakerApp() {
       setSelectedId(undefined);
       setLinkSource(undefined);
       setGateSource(undefined);
+      clearActionError("project-import");
       setToast(`Opened ${next.name}.`);
     } catch (error) {
-      setToast(error instanceof Error ? error.message : "Project import failed.");
+      showActionError("project-import", error, "Project import failed.");
     }
   };
 
@@ -956,7 +1028,7 @@ export function MapMakerApp() {
       await autosaveQueueRef.current.catch(() => undefined);
       const conflictRevisions = autosaveState.conflict?.backendRevisions;
       if (replaceNewer && !conflictRevisions) {
-        setToast("This conflict cannot be replaced safely because the reviewed device revisions are unavailable. Load a saved copy or download this project before retrying.");
+        showActionError("device-save", undefined, "This conflict cannot be replaced safely because the reviewed device revisions are unavailable. Load a saved copy or download this project before retrying.");
         return;
       }
       const state = await saveProjectAutosave(project, undefined, replaceNewer
@@ -970,9 +1042,15 @@ export function MapMakerApp() {
         return;
       }
       autosaveRevisionRef.current = state.revision ?? autosaveRevisionRef.current;
-      setToast(state.backend === "none" ? "Autosave is unavailable; download Editable project JSON." : "Project saved on this device.");
+      if (state.backend === "none") {
+        const persistenceDetail = state.errors[0]?.message;
+        showActionError("device-save", undefined, `${persistenceDetail ? `${persistenceDetail} ` : ""}Download Editable project JSON to keep these changes.`);
+      } else {
+        clearActionError("device-save");
+        setToast("Project saved on this device.");
+      }
     } catch (error) {
-      setToast(error instanceof Error ? error.message : "The project could not be saved.");
+      showActionError("device-save", error, "The project could not be saved.");
     } finally {
       setAutosaveSaving(false);
     }
@@ -1497,6 +1575,7 @@ export function MapMakerApp() {
       <input ref={importRef} className="sr-only" type="file" tabIndex={-1} aria-hidden="true" accept=".json,.atlas.json,application/json" onChange={importProject} />
       <input ref={catalogImportRef} className="sr-only" type="file" tabIndex={-1} aria-hidden="true" accept=".json,application/json" onChange={importCatalog} />
       <button className="import-fab" type="button" onClick={() => importRef.current?.click()} title="Open an Atlas project">Open project</button>
+      {actionError && <ActionErrorAlert key={actionError.sequence} error={actionError} onDismiss={() => setActionError(undefined)} />}
       {toast && <div className="toast" role="status">{toast}</div>}
     </main>
   );

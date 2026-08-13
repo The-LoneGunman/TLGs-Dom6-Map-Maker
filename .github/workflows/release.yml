@@ -1,0 +1,117 @@
+name: Publish release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Use supported Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Audit shipped dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Verify tag matches package version
+        run: node -e 'const expected = `v${require("./package.json").version}`; if (process.env.GITHUB_REF_NAME !== expected) { console.error(`Release tag ${process.env.GITHUB_REF_NAME} must equal ${expected}.`); process.exit(1); }'
+      - name: Verify release candidate
+        run: |
+          node scripts/start-atlas.mjs --self-test
+          npm run licenses:check
+          npm run typecheck
+          npm test
+          npm run lint
+      - name: Assemble tested Windows bundle
+        run: |
+          release_root="$RUNNER_TEMP/pantokrator-release"
+          rm -rf "$release_root"
+          mkdir -p "$release_root/Pantokrator-Atlas"
+          git archive "$GITHUB_SHA" | tar -x -C "$release_root/Pantokrator-Atlas"
+          cp -R dist "$release_root/Pantokrator-Atlas/dist"
+          printf '%s\n' "$GITHUB_SHA" > "$release_root/Pantokrator-Atlas/dist/.pantokrator-release-ready"
+          test -f "$release_root/Pantokrator-Atlas/LICENSE"
+          test -f "$release_root/Pantokrator-Atlas/THIRD_PARTY_LICENSES.txt"
+          test -f "$release_root/Pantokrator-Atlas/src/catalog/data/NOTICE.md"
+          test -f "$release_root/Pantokrator-Atlas/src/catalog/data/LICENSE.dom6inspector.txt"
+          test ! -d "$release_root/Pantokrator-Atlas/node_modules"
+          (cd "$release_root" && zip -q -r "$GITHUB_WORKSPACE/Pantokrator-Atlas-Windows.zip" Pantokrator-Atlas)
+          sha256sum Pantokrator-Atlas-Windows.zip > Pantokrator-Atlas-Windows.zip.sha256
+      - name: Smoke-test packaged release without npm install
+        run: |
+          cd "$RUNNER_TEMP/pantokrator-release/Pantokrator-Atlas"
+          node scripts/start-atlas.mjs --prepare-only
+          node scripts/start-atlas.mjs --smoke-test --no-browser
+          node scripts/test-local-server.mjs
+      - name: Upload exact Windows candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pantokrator-atlas-windows-candidate
+          path: |
+            Pantokrator-Atlas-Windows.zip
+            Pantokrator-Atlas-Windows.zip.sha256
+          if-no-files-found: error
+          retention-days: 1
+
+  windows-gate:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download exact Windows candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: pantokrator-atlas-windows-candidate
+          path: candidate
+      - name: Use supported Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.13.0
+      - name: Extract and smoke-test the exact downloadable ZIP
+        shell: powershell
+        run: |
+          Expand-Archive -LiteralPath candidate/Pantokrator-Atlas-Windows.zip -DestinationPath candidate/extracted
+          Set-Location candidate/extracted/Pantokrator-Atlas
+          if (Test-Path node_modules) { throw "Release ZIP unexpectedly contains node_modules." }
+          cmd /d /c call "Start Pantokrator Atlas.cmd" --self-test
+          if ($LASTEXITCODE -ne 0) { throw "Launcher self-test failed with exit $LASTEXITCODE." }
+          cmd /d /c call "Start Pantokrator Atlas.cmd" --prepare-only
+          if ($LASTEXITCODE -ne 0) { throw "Launcher preparation failed with exit $LASTEXITCODE." }
+          cmd /d /c call "Start Pantokrator Atlas.cmd" --smoke-test --no-browser
+          if ($LASTEXITCODE -ne 0) { throw "Launcher smoke failed with exit $LASTEXITCODE." }
+          node scripts/test-local-server.mjs
+
+  publish:
+    needs: windows-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download verified Windows candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: pantokrator-atlas-windows-candidate
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          Pantokrator-Atlas-Windows.zip
+          Pantokrator-Atlas-Windows.zip.sha256
+          --verify-tag
+          --generate-notes
+          --title "Pantokrator Atlas $GITHUB_REF_NAME"

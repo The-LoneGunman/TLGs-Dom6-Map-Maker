@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "Pantokrator Atlas — Dominions 6 Map Forge",
+  "short_name": "Pantokrator Atlas",
+  "description": "Create, validate, and export deterministic multiplayer maps for Dominions 6.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#090d0e",
+  "theme_color": "#0f1516",
+  "categories": ["games", "utilities"],
+  "icons": [
+    {
+      "src": "/app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
