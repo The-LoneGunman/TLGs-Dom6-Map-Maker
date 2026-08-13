@@ -28,7 +28,7 @@ This guide covers the recommended workflow, every major option in the interface,
 
 ### 1. Choose the hosted or local GUI
 
-The hosted GUI is the recommended no-install route when its public link is listed in the README or current GitHub release. Open it in a current Chromium-based browser such as Edge or Chrome. Atlas is local-first: its autosave, imported catalogs, and generated downloads remain in that browser profile or on your device; they are not cloud-synchronized.
+The recommended no-install route is [Pantokrator Atlas's hosted GUI](https://pantokrator-atlas.mbatlle7.chatgpt.site). Open it in a current Chromium-based browser such as Edge or Chrome. Atlas is local-first: its autosave, imported catalogs, and generated downloads remain in that browser profile or on your device; they are not cloud-synchronized.
 
 Use the local Windows route if you want a copy on your computer, are testing unreleased source, or cannot use the hosted deployment. The official repository and releases are at [The-LoneGunman/TLGs-Dom6-Map-Maker](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker).
 

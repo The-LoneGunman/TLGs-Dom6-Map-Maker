@@ -8,7 +8,7 @@ Release readiness is tracked in the [2026-08-11 audit and remediation record](do
 
 ## Run Pantokrator Atlas
 
-The hosted GUI is the simplest route when a public deployment link is listed with the current release: open it in a current Chromium-based browser such as Edge or Chrome. The application remains local-first; projects and generated packages stay on your device unless you deliberately move them.
+[Open Pantokrator Atlas in your browser](https://pantokrator-atlas.mbatlle7.chatgpt.site) for the simplest no-install route. Use a current Chromium-based browser such as Edge or Chrome. The application remains local-first; projects and generated packages stay on your device unless you deliberately move them.
 
 For a local Windows copy, install [Node.js 22.13.0 or newer](https://nodejs.org/en/download), download and extract `Pantokrator-Atlas-Windows.zip` from the [latest GitHub release](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/latest), then double-click **Start Pantokrator Atlas.cmd**. The release already contains the tested production build: no npm command, dependency download, or internet connection is needed to run it. The launcher selects a free loopback-only port and opens the GUI.
 
