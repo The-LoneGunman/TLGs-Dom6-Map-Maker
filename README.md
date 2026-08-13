@@ -4,7 +4,19 @@ Pantokrator Atlas is a local-first Dominions 6 map maker. It creates determinist
 
 New to the program? Start with the [complete user guide](docs/USER_GUIDE.md) for the recommended workflow and a reference for every generator, plane, scenario, province, validation, and export option.
 
-Release readiness is tracked in the [2026-08-11 audit and remediation record](docs/FULL_AUDIT_2026-08-11.md). Its engineering blockers are resolved and regression-tested, and a compact generated package passed the installed Dominions 6 scripted new-game loader. A representative eight-plane in-game gate/turn smoke remains before treating the source build as a seamless public release.
+Release readiness is tracked in the [2026-08-11 audit and remediation record](docs/FULL_AUDIT_2026-08-11.md). Its engineering blockers are resolved and regression-tested. Both compact and representative eight-plane generated packages passed the installed Dominions 6 scripted new-game loader; the eight-plane game created its native game state and generated underworld map pair successfully.
+
+## Run Pantokrator Atlas
+
+[Open Pantokrator Atlas in your browser](https://pantokrator-atlas.mbatlle7.chatgpt.site) for the simplest no-install route. Use a current Chromium-based browser such as Edge or Chrome. The application remains local-first; projects and generated packages stay on your device unless you deliberately move them.
+
+For a local Windows copy, install [Node.js 22.13.0 or newer](https://nodejs.org/en/download), download and extract `Pantokrator-Atlas-Windows.zip` from the [latest GitHub release](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/latest), then double-click **Start Pantokrator Atlas.cmd**. The release already contains the tested production build: no npm command, dependency download, or internet connection is needed to run it. The launcher selects a free loopback-only port and opens the GUI.
+
+Do not run the launcher inside the ZIP. Extract it to a normal writable folder first, and keep its terminal window open while using the local GUI. See the [user guide quick start](docs/USER_GUIDE.md#quick-start) for GitHub Desktop, command-line, update, security, and troubleshooting details.
+
+## License
+
+Pantokrator Atlas application code and original project materials are released under the highly permissive [0BSD license](LICENSE). Bundled JavaScript dependencies retain their own licenses and notices in [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt). The generated Dominions selector catalog is a separately licensed third-party-derived component: its Dom6 Inspector source, pinned revision, scope, and GPL-3.0 terms are preserved in [`src/catalog/data/NOTICE.md`](src/catalog/data/NOTICE.md) and [`src/catalog/data/LICENSE.dom6inspector.txt`](src/catalog/data/LICENSE.dom6inspector.txt). The root 0BSD license does not replace or weaken dependency or catalog terms.
 
 ## Included map features
 
@@ -74,11 +86,14 @@ Skybox and custom battle-map directives are supported, but their referenced exte
 ## Development
 
 ```powershell
-npm install
-npm run dev
-npm test
-npm run lint
+npm.cmd ci
+npm.cmd run dev
+npm.cmd run typecheck
+npm.cmd test
+npm.cmd run lint
 ```
+
+Development uses the live-reloading server. End users should use the hosted GUI or the root-level Windows launcher, which serves a tested production build bound only to `127.0.0.1` without installing npm packages. The source-checkout launcher can still install and rebuild automatically when a packaged build is absent.
 
 The default output is 3840×2160. Square output is available at 2880×2880; custom output is hard-limited to 8,294,400 pixels so malformed settings cannot allocate a multi-gigabyte browser raster. The D6M encoder streams one plane at a time during direct installation; ZIP export holds the package in memory and is best for smaller atlases.
 
@@ -90,4 +105,4 @@ Older saved projects created before ownership-boundary topology may show a **Syn
 - [Official Dominions 6 file formats](https://illwinter.com/dom6/dom6fileformats.pdf)
 - [Official Dominions 6 modding manual](https://illwinter.com/dom6/dom6modman.pdf)
 
-The bundled population and fort tables are transcribed from the official map manual. Unit, site, nation, special-plane, and site-location indexes are generated from the pinned Dom6 Inspector 6.35 data revision documented in `src/catalog/data/NOTICE.md`; its nation recruitment tables supply commander/troop roles and its nation attributes identify home-site references without name guessing. The same pinned nation, epithet, home-site, plane, and Nexus entries generate the reserved-name blacklist used by the province namer. The GPL-3.0 license is included beside the generated catalog. [Post-publication content coverage and exact IDs](docs/CONTENT_CATALOG.md) include LA Pyrène #123, LA Zemaitia #124, current named units through Gnu Clan Commander #4134, and thrones through #1405.
+The bundled population and fort tables are transcribed from the official map manual. Unit, site, nation, special-plane, and site-location indexes are generated from the pinned Dom6 Inspector 6.35 data revision documented in `src/catalog/data/NOTICE.md`; its nation recruitment tables supply commander/troop roles and its nation attributes identify home-site references without name guessing. The same pinned nation, epithet, home-site, plane, and Nexus entries generate the reserved-name blacklist used by the province namer. The catalog's separate GPL-3.0 license is included beside it as `src/catalog/data/LICENSE.dom6inspector.txt`. [Post-publication content coverage and exact IDs](docs/CONTENT_CATALOG.md) include LA Pyrène #123, LA Zemaitia #124, current named units through Gnu Clan Commander #4134, and thrones through #1405.

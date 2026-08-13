@@ -88,11 +88,11 @@ These are authoring targets, not permission to bypass each record's manifest lim
 
 | Asset | Typical sources | Transparent padding | Edge bleed | Notes |
 | --- | --- | ---: | ---: | --- |
-| Texture tile | 256, 512, 1024 px square | 0 | 4â€“8 px repeat-safe content | Pixel-identical opposite seams |
-| Compact decal | 256 and 512 px short edge | 8â€“12% of short edge | 4 px | Visible bounds centered around anchor |
-| Broad landmark | 512 and 1024 px short edge | 8â€“12% | 4â€“8 px | Use only in broad/compact shapes with large inradius |
-| Corridor decal | 512Ã—128 and 1024Ã—256 families | 6â€“10% | 4 px | Dedicated long composition; no compact-image squashing |
-| Line brush | 512Ã—64 and 1024Ã—128 strips | Cap-dependent | 4â€“8 px | Long axis seamless; caps and joins separate where needed |
+| Texture tile | 256, 512, 1024 px square | 0 | 4–8 px repeat-safe content | Pixel-identical opposite seams |
+| Compact decal | 256 and 512 px short edge | 8–12% of short edge | 4 px | Visible bounds centered around anchor |
+| Broad landmark | 512 and 1024 px short edge | 8–12% | 4–8 px | Use only in broad/compact shapes with large inradius |
+| Corridor decal | 512×128 and 1024×256 families | 6–10% | 4 px | Dedicated long composition; no compact-image squashing |
+| Line brush | 512×64 and 1024×128 strips | Cap-dependent | 4–8 px | Long axis seamless; caps and joins separate where needed |
 | Backdrop | 2048 and 4096 px square | 0 | 0 | Important content inside central 50%; cover-crop safe |
 
 The current `earth.png`, `foliage.png`, `stone.png`, and `water.png` source materials are 1024-pixel square, opaque, mathematically periodic tiles. Their manifest compatibility maps them to terrain families, while grayscale luminance lets the renderer apply realm-, terrain-, and condition-specific color without baking a contradictory palette into the source. Because they repeat and are clipped to canonical ownership, they are safe for every province aspect ratio and area; they never rely on a province-shaped plate.

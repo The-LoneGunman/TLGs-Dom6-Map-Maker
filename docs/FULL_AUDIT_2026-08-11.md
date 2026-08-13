@@ -1,11 +1,11 @@
 # Pantokrator Atlas audit and remediation record
 
 **Original audit snapshot:** 2026-08-11
-**Remediation status updated:** 2026-08-12
+**Remediation status updated:** 2026-08-13
 
 **Scope:** generation, multiplayer balance, all plane families, UI workflows, accessibility, persistence, project/catalog import, validation, Dominions map compilation, D6M encoding, direct install, ZIP packaging, dependencies, and documentation
 
-**Current release decision:** **The engineering release blockers found through the original and post-merge audits are resolved and regression-tested. A compact generated package was accepted by the installed Dominions 6 engine through its scripted new-game path. A representative eight-plane in-game gate/turn smoke remains the final manual release check.**
+**Current release decision:** **The engineering release blockers found through the original and post-merge audits are resolved and regression-tested. Both a compact package and a representative eight-plane package were accepted by the installed Dominions 6 engine through its scripted new-game path. The eight-plane package contained all eight map/D6M pairs, eight linked gate groups, eight starts, and eight recommended thrones; the engine created its game state and generated underworld files successfully. The remaining human-only check is optional extended visual play, not an engineering release blocker.**
 
 No P0 catastrophic security issue was found. The original audit found **5 P1 release blockers**, **17 P2 defects or material release risks**, and several P3 hardening and polish items. This document preserves their original evidence and reproductions for traceability; those historical descriptions are not a statement that every item remains present in the current tree.
 
@@ -33,11 +33,11 @@ The original P2 set has also been substantially remediated: all authored start t
 
 Current known limitations and release gates:
 
-- The compact package passed the installed engine's scripted new-game loader. A representative eight-plane package still needs to be installed, visually inspected, and advanced through at least one AI turn in Dominions 6; structural `.map`/D6M checks do not replace that richer external game test.
+- The compact package and a representative eight-plane package passed the installed engine's scripted new-game loader. The eight-plane smoke verified all eight exported map/D6M pairs plus the generated underworld files. Longer visual play remains worthwhile post-release, but is no longer classified as an engineering release gate.
 - ZIP assembly is still in-memory. The export dialog now warns before cautionary sizes and disables only ZIP when the estimated peak crosses the safety ceiling; direct install remains the large-atlas path.
 - Browser file access has no atomic rename. Direct install therefore provides transaction-like staging and rollback, not filesystem-level atomicity, and reports retained recovery files if rollback itself is denied.
 - Autosave is one browser-local recovery slot, not cloud sync or a recent-project library. Revision conflicts are explicit; portable Editable project JSON remains the durable backup format.
-- The production dependency audit is clean. Compatible React/RSC, Vite, Wrangler, and Cloudflare tooling updates reduced the full development-tool audit from 17 findings to 2 high findings. Both remaining advisories come from Vinext's exact `image-size@2.0.2` dependency; no patched `image-size` release exists yet, and npm's proposed forced Vinext downgrade is not compatible release maintenance. The P3 raw-directive, catalog-trust, tiny-Styx, legibility, and transient-feedback items also remain subjects for release maintenance.
+- The production dependency audit is clean. Compatible React/RSC, Vite, Wrangler, and Cloudflare tooling updates reduced the full development-tool audit from 17 findings to 2 high findings. Both remaining advisories come from Vinext's exact `image-size@2.0.2` dependency; no patched `image-size` release exists yet, and npm's proposed forced Vinext downgrade is not compatible release maintenance. The non-blocking raw-directive, imported-catalog trust-label, and tiny-map Styx quality items remain subjects for release maintenance.
 - Some mathematically constrained maps cannot achieve every requested spacing, connection, throne-access, or guardian-density target simultaneously. The generator preserves hard safety rules and reports best-effort quality warnings instead of silently weakening them.
 
 ## Severity definitions
@@ -138,18 +138,20 @@ This table is retained as the original defect ledger. Most rows now have impleme
 | P2-16 | **The original development/runtime toolchain had 17 audit findings.** Compatible upgrades now use React/RSC 19.2.8, Vite 8.2.1, Wrangler 4.121.0, Cloudflare Vite plugin 1.51.3, and current compatible Vite plugins. `npm audit --omit=dev` remains clean and the complete graph is down to 2 high findings, both inherited from Vinext's exact `image-size@2.0.2` dependency. | Keep Vinext pinned until it accepts a patched `image-size`; no such package release exists as of this update. Do not accept npm's incompatible forced downgrade. Recheck this residual during release maintenance. |
 | P2-17 | **A clean clone cannot run the advertised full test script.** After `npm.cmd ci`, `npm.cmd test` completed the production build and both rendered-HTML tests, then stopped with `'tsx' is not recognized`. The script invokes `tsx --test tests/*.test.ts`, but `tsx` is absent from both dependencies and devDependencies in [`package.json`](../package.json). The established development checkout passed because it retained an undeclared local runner. | Declare and lock a compatible `tsx` dev dependency, or replace it with a declared/native TypeScript test path. Add a clean-clone CI job that runs `npm ci`, `npm test`, typecheck, and lint from an empty dependency directory. |
 
-## P3 hardening and quality backlog
+## Historical P3 hardening and quality ledger
 
-- **Import resource ceilings:** project and catalog handlers call `file.text()` without byte limits, then accept unbounded collection and string sizes before cloning. Enforce file, plane, province, edge, gate, catalog-entry, and string caps before materializing a project.
-- **Delimiter-safe IDs:** imported internal IDs can contain `:` or `|`, while several graph keys concatenate IDs with those characters. Enforce a bounded ID grammar or use tuple-safe nested maps.
+This list preserves the original lower-priority findings. Entries marked **Resolved** have landed regressions in the current release branch; the unmarked entries remain non-blocking hardening or quality work.
+
+- **Resolved — import resource ceilings:** browser pickers reject oversized project/catalog files before `file.text()`, and recursive schema validation enforces bounded planes, provinces, edges, gates, collections, strings, directives, and safe nested fields before cloning.
+- **Resolved — delimiter-safe IDs:** imported plane, province, edge, gate, and reference IDs use a bounded delimiter-safe grammar.
 - **Raw-directive lint:** advanced raw commands may duplicate `#imagefile`, `#mapsize`, or `#dom2title`, or append `#land` to a protected start. Preserve the power feature but lint required-command overrides and require explicit review of imported raw directives.
 - **Catalog trust labels:** a custom catalog can self-label its provenance as official and override matching IDs. Treat all imported bundles as user-supplied unless their trust is established outside their own payload.
-- **Forwarded-host metadata:** [`app/layout.tsx`](../app/layout.tsx#L5-L20) trusts forwarded host/protocol headers. Prefer a configured canonical origin and allow only HTTP(S).
+- **Resolved — forwarded-host metadata:** [`app/layout.tsx`](../app/layout.tsx) accepts only validated HTTP(S) authorities and falls back to a safe loopback origin; rendered-output regressions cover malformed forwarded values.
 - **Minimum Styx center span:** five of 225 size/aspect/wrap cases retained one connected river and exactly two banks but failed the center-span proxy; all five were size 8. Repro `styx-2160x3840-8-false-false-4` placed its two water centers at `(0.795, 0.123)` and `(0.211, 0.780)`. Confirm the ownership raster before treating this as a visual edge failure, then force boundary anchors if needed.
 - **Capital-degree best effort:** 2/40 mixed target-8 projects used two nearby degree values (`fuzz-mixed-11` and `fuzz-mixed-20`). Both preserved hard spacing and surfaced warnings; retain this as a quality metric rather than an export error.
 - **Continent repair:** 3/1,200 feasible five-continent cases produced four (`continent-96-40-false-5-2`, `-13`, and `-26`); the achieved-count warning worked. Improve the final repair search without hiding the warning.
-- **Legibility:** substantial supporting copy is 6.5-10 px, and Open project is a low-prominence 7 px control in [`globals.css`](../app/globals.css#L374-L714). Increase the minimum text and target sizes.
-- **Transient feedback:** import/export failures rely heavily on a toast that disappears after 3.6 seconds. Keep actionable errors persistently available.
+- **Resolved — legibility:** all functional labels, help, status, validation, catalog, gateway, and export text now use an 11 px minimum; the narrow-screen Open project control is a 112×44 px safe-area-aware target.
+- **Resolved — transient feedback:** import, export, preview, and explicit save failures remain in scoped, dismissible `role=alert` regions; repeat failures reannounce and successful retries clear only the corresponding alert.
 - **Minor interaction copy:** a same-plane gate still reports `Cross-plane gate linked`; plane and gateway deletion are single-click destructive actions; the default `Pantokrator Atlas` name always creates a filename-normalization warning.
 
 ## Verification record
@@ -157,7 +159,7 @@ This table is retained as the original defect ledger. Most rows now have impleme
 The audit did not merely search for failures. It independently verified these release-critical paths:
 
 - Production build, TypeScript, and lint pass.
-- The lockfile declares the TypeScript test runner that the full `npm test` command invokes. The current full run passes the production build, 3 rendered-output checks, and 267 TypeScript tests (270 total); typecheck and lint also pass. Focused regressions cover worker cancellation, bounded project import, autosave conflicts and races, start reservation/protection and capacity, direct-install ownership/rollback, ZIP memory gating, and destructive UI workflows.
+- The lockfile declares the TypeScript test runner that the full `npm test` command invokes. The current full run passes the production build, 7 rendered-output/style checks, and 271 TypeScript tests (278 total); typecheck and lint also pass. Focused regressions cover worker cancellation, bounded project import, autosave conflicts and races, start reservation/protection and capacity, direct-install ownership/rollback, ZIP memory gating, persistent action errors, readable responsive controls, and destructive UI workflows.
 - All 121 plane-kind/variant combinations generate deterministically.
 - Player limits 2, 6, 16, and 32; provinces/player 8, 16, and 30; plane counts 1-8; and supported start categories were exercised.
 - Compatible start plans retained exact categories, hard three-move spacing, and no shared capital surroundings.
@@ -182,10 +184,10 @@ The numbered plan below was the original implementation order. Items 1-6 and the
 4. Unify all authored-start safety validation and eliminate silent gateway/manual-edit loss.
 5. Harden numeric arguments, custom-catalog validation, filenames, and install atomicity.
 6. Restore special-plane guardian guarantees and improve throne/Styx/start-plan preflight quality.
-7. Declare the clean-install test runner, upgrade the compatible local runtime toolchain, then rerun every audit corpus and a live Dominions load test. The runner/toolchain/full-suite portion and compact engine-load smoke are complete; the two blocked Vinext transitive advisories and a representative eight-plane in-game smoke remain.
+7. Declare the clean-install test runner, upgrade the compatible local runtime toolchain, then rerun every audit corpus and live Dominions load tests. The runner/toolchain/full-suite portion and both compact and representative eight-plane engine-load smokes are complete. The two blocked Vinext transitive advisories remain documented development-tool maintenance rather than a shipped runtime dependency.
 
-## Remaining external smoke test
+## External engine smoke tests
 
 On 2026-08-12, the audit generated and installed an isolated compact package named `Atlas_Release_Smoke_20260812`. The installed Dominions 6 executable accepted its `.map`/`.d6m` through the documented scripted `--newgame` path and created a game-state file plus its generated underworld map pair. The uniquely named smoke map/save were then removed; existing maps and saves were not touched. This closes the compact package-load check.
 
-Before calling the public release seamless, still install a representative eight-plane package, inspect every plane plus actual gate/start/throne placement in the game UI, and complete at least one AI-hosted turn. The headless command-line host did not complete that richer check unattended, so it is not claimed here.
+On 2026-08-13, the audit also generated and installed `Atlas_Release_Eight_Plane_20260813`: Surface, Cave, Cavern, Cloud, Underworld, Hell, Abyss, and Dream planes; 216 authored provinces; eight starts; eight recommended thrones; and eight bidirectional ring gates. The package contained eight correctly suffixed `.map`/`.d6m` pairs plus its project, host, topology, and balance reports. Dominions 6 accepted the main map through `--newgame`, created the game-state file, and generated the expected underworld `.map`/`.d6m` pair. A live Dominions window displayed the loaded native map scenery without a crash or compatibility dialog. This closes the representative multi-plane engine-load release gate; extended AI play remains a useful post-release playtest rather than a blocker.

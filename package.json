@@ -2,6 +2,7 @@
   "name": "pantokrator-atlas",
   "version": "0.1.0",
   "private": true,
+  "license": "0BSD",
   "engines": {
     "node": ">=22.13.0"
   },
@@ -10,7 +11,10 @@
     "build": "vinext build",
     "start": "vinext start",
     "test": "npm run build && node --test tests/*.test.mjs && tsx --test tests/*.test.ts",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "typecheck": "tsc --noEmit",
+    "licenses:generate": "node scripts/generate-third-party-licenses.mjs",
+    "licenses:check": "node scripts/generate-third-party-licenses.mjs --check"
   },
   "dependencies": {
     "react": "19.2.8",
