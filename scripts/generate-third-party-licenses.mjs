@@ -108,7 +108,7 @@ async function render() {
     lines.push(...group.packages.sort(compareText).map((value) => `  ${value}`));
     lines.push("", group.text, "");
   }
-  return `${lines.join("\n")}\n`;
+  return `${lines.join("\n").trimEnd()}\n`;
 }
 
 const expected = await render();
