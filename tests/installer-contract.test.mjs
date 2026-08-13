@@ -58,6 +58,14 @@ test("Inno Setup contract is per-user, uninstallable, and creates useful shortcu
   assert.match(script, /Flags: postinstall nowait skipifsilent shellexec/);
 });
 
+test("release verifies the Inno Setup asset against its exact tagged attestation", async () => {
+  const workflow = await readFile(path.join(repositoryRoot, ".github", "workflows", "release.yml"), "utf8");
+  assert.match(
+    workflow,
+    /gh release verify-asset is-6_7_3 innosetup-6\.7\.3\.exe --repo jrsoftware\/issrc/,
+  );
+});
+
 test("installer payload contains only runtime, documentation, and required licenses", async () => {
   const fixture = await createFixture();
   try {
