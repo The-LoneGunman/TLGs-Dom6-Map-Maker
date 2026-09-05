@@ -71,7 +71,10 @@ import {
   estimatedPackageBytes,
   installPackage,
   MAX_PROJECT_IMPORT_BYTES,
+  MAX_IMPORTED_STRING_LENGTH,
+  MAX_IMPORTED_DIRECTIVE_LENGTH,
   parseProject,
+  serializeProject,
   zipPackageSafety,
   type ExportProgress,
 } from "./export";
@@ -83,6 +86,7 @@ import {
 } from "./generationWorker";
 import { MapCanvas, canRenderPlanePreview, renderPlanePng, type ProvinceMarkerAnnotations } from "./MapCanvas";
 import { CatalogCombobox } from "./catalog/CatalogCombobox";
+import { BoundedNumberInput, ItemListInput } from "./EditorInputs";
 import {
   BUILTIN_DOM6_CATALOG,
   commanderUnitEntries,
@@ -124,7 +128,7 @@ type DestructiveConfirmation =
   | { kind: "new-atlas" }
   | { kind: "generate"; impact: AtlasReplacementImpact }
   | { kind: "remove-plane"; planeId: string; impact: PlaneRemovalImpact };
-export type ActionErrorKind = "catalog-import" | "project-import" | "package-export" | "preview-export" | "device-save";
+export type ActionErrorKind = "catalog-import" | "project-import" | "project-edit" | "package-export" | "preview-export" | "device-save";
 export interface ActionErrorNotice {
   kind: ActionErrorKind;
   message: string;
@@ -137,6 +141,7 @@ const LEFT_TABS: readonly LeftTab[] = ["generate", "planes", "scenario"];
 const ACTION_ERROR_TITLES: Record<ActionErrorKind, string> = {
   "catalog-import": "Catalog could not be imported",
   "project-import": "Project could not be opened",
+  "project-edit": "This edit exceeds the project limits",
   "package-export": "Map package could not be exported",
   "preview-export": "Preview could not be exported",
   "device-save": "Project could not be saved",
@@ -425,6 +430,15 @@ export function MapMakerApp() {
   const autosaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const actionErrorSequenceRef = useRef(0);
 
+  const showActionError = useCallback((kind: ActionErrorKind, error: unknown, fallbackMessage: string) => {
+    actionErrorSequenceRef.current += 1;
+    setActionError(createActionErrorNotice(kind, actionErrorSequenceRef.current, error, fallbackMessage));
+  }, []);
+
+  const clearActionError = useCallback((kind: ActionErrorKind) => {
+    setActionError((current) => current?.kind === kind ? undefined : current);
+  }, []);
+
   const activePlane = project.planes.find((plane) => plane.id === activePlaneId) ?? project.planes[0];
   const selected = activePlane?.provinces.find((province) => province.id === selectedId);
   const catalog = useMemo(() => mergeCatalogBundles(BUILTIN_DOM6_CATALOG, ...(userCatalog ? [userCatalog] : [])), [userCatalog]);
@@ -526,32 +540,24 @@ export function MapMakerApp() {
           setToast("Autosave paused because another tab saved a newer copy. Choose which copy to keep.");
         } else {
           autosaveRevisionRef.current = state.revision ?? autosaveRevisionRef.current;
-          if (state.backend === "none") setToast("Autosave is unavailable. Download the project to keep these changes.");
+          if (state.backend === "none") showActionError("device-save", state.errors[0]?.message, "Autosave is unavailable. The previous saved copy is unchanged.");
+          else clearActionError("device-save");
         }
-      }).catch(() => {
+      }).catch((error) => {
         setAutosaveState({ backend: "none", errors: [], migrated: false });
-        setToast("Autosave is unavailable. Download the project to keep these changes.");
+        showActionError("device-save", error, "Autosave is unavailable. The previous saved copy is unchanged.");
       }).finally(() => {
         if (currentProjectRef.current === project) setAutosaveSaving(false);
       });
     }, 200);
     return () => window.clearTimeout(timeout);
-  }, [autosaveState.conflict, hydrated, project]);
+  }, [autosaveState.conflict, clearActionError, hydrated, project, showActionError]);
 
   useEffect(() => {
     if (!toast) return;
     const timeout = window.setTimeout(() => setToast(undefined), 3600);
     return () => window.clearTimeout(timeout);
   }, [toast]);
-
-  const showActionError = useCallback((kind: ActionErrorKind, error: unknown, fallbackMessage: string) => {
-    actionErrorSequenceRef.current += 1;
-    setActionError(createActionErrorNotice(kind, actionErrorSequenceRef.current, error, fallbackMessage));
-  }, []);
-
-  const clearActionError = useCallback((kind: ActionErrorKind) => {
-    setActionError((current) => current?.kind === kind ? undefined : current);
-  }, []);
 
   useEffect(() => () => {
     const task = generationTaskRef.current;
@@ -560,6 +566,11 @@ export function MapMakerApp() {
   }, []);
 
   const commit = useCallback((next: MapProject, remember = true) => {
+    try { serializeProject(next); } catch (error) {
+      showActionError("project-edit", error, "The previous project is unchanged.");
+      return false;
+    }
+    clearActionError("project-edit");
     const previous = currentProjectRef.current;
     if (remember) {
       setUndoStack((stack) => appendHistorySnapshot(stack, previous));
@@ -569,18 +580,18 @@ export function MapMakerApp() {
     currentProjectRef.current = next;
     setAutosaveSaving(true);
     setProject(next);
-  }, []);
+    return true;
+  }, [clearActionError, showActionError]);
 
   const mutate = useCallback((recipe: (draft: MapProject) => void, remember = true) => {
     const draft = cloneProject(currentProjectRef.current);
     recipe(draft);
     draft.updatedAt = new Date().toISOString();
-    commit(draft, remember);
+    return commit(draft, remember);
   }, [commit]);
 
   const beginRangeEdit = useCallback(() => {
     if (!rangeEditStartRef.current) rangeEditStartRef.current = currentProjectRef.current;
-    setRedoStack([]);
   }, []);
 
   const finishRangeEdit = useCallback(() => {
@@ -644,7 +655,7 @@ export function MapMakerApp() {
         setToast("Generation finished, but the project changed while it was running, so the result was safely discarded. Generate again to use the latest settings.");
         return;
       }
-      commit(next);
+      if (!commit(next)) return;
       setActivePlaneId(next.planes[0]?.id ?? "");
       setSelectedId(undefined);
       setLinkSource(undefined);
@@ -795,7 +806,7 @@ export function MapMakerApp() {
       name: uniquePlaneName(project.planes, "The Underworld"),
     });
     next.settings.planeConnections = resolvePlaneConnectionRules(next);
-    commit(next);
+    if (!commit(next)) return;
     setActivePlaneId(next.planes.at(-1)?.id ?? activePlaneId);
     setSelectedId(undefined);
     setLeftTab("planes");
@@ -1010,7 +1021,7 @@ export function MapMakerApp() {
     if (!file) return;
     try {
       const next = await parseProjectImportFile(file);
-      commit(next);
+      if (!commit(next)) return;
       setActivePlaneId(next.planes[0]?.id ?? "");
       setSelectedId(undefined);
       setLinkSource(undefined);
@@ -1027,6 +1038,7 @@ export function MapMakerApp() {
     try {
       await autosaveQueueRef.current.catch(() => undefined);
       const conflictRevisions = autosaveState.conflict?.backendRevisions;
+      if (replaceNewer && autosaveState.recoveryCopies?.length) downloadAutosaveRecovery();
       if (replaceNewer && !conflictRevisions) {
         showActionError("device-save", undefined, "This conflict cannot be replaced safely because the reviewed device revisions are unavailable. Load a saved copy or download this project before retrying.");
         return;
@@ -1054,6 +1066,10 @@ export function MapMakerApp() {
     } finally {
       setAutosaveSaving(false);
     }
+  };
+
+  const downloadAutosaveRecovery = () => {
+    downloadBrowserBlob(new Blob([JSON.stringify(autosaveState.recoveryCopies ?? [], null, 2)], { type: "application/json" }), "Pantokrator-Atlas-autosave-recovery.json");
   };
 
   const reloadAutosaveAfterConflict = async () => {
@@ -1092,6 +1108,7 @@ export function MapMakerApp() {
           <label htmlFor="project-name">Project</label>
           <input
             id="project-name"
+            maxLength={MAX_IMPORTED_STRING_LENGTH}
             value={project.name}
             onChange={(event) => mutate((draft) => { draft.name = event.target.value; })}
             aria-label="Project name"
@@ -1114,10 +1131,14 @@ export function MapMakerApp() {
       </header>
 
       {autosaveState.conflict && <section className="autosave-conflict" role="alert" aria-live="assertive">
-        <div>{autosaveState.conflict.reason === "divergent-copies"
+        <div>{autosaveState.conflict.reason === "unreadable-copy"
+          ? <><strong>A saved project could not be opened.</strong><span>The original saved data is preserved and automatic saving is paused. Download it for recovery. Keeping this copy also downloads a backup before replacing the saved data.</span></>
+          : autosaveState.conflict.reason === "divergent-copies"
           ? <><strong>Two preserved device copies differ.</strong><span>IndexedDB and local storage contain different valid atlases. Automatic saving is paused; inspect the other copy, then explicitly keep the version you want.</span></>
           : <><strong>A newer device autosave exists.</strong><span>Another Atlas tab changed the shared copy. Automatic saving is paused so neither version is silently overwritten.</span></>}</div>
-        <button className="button quiet" type="button" onClick={() => { void reloadAutosaveAfterConflict(); }}>{autosaveState.conflict.reason === "divergent-copies" ? "Inspect other copy" : "Load newer copy"}</button>
+        {autosaveState.conflict.reason === "unreadable-copy"
+          ? <button className="button quiet" type="button" onClick={downloadAutosaveRecovery}>Download recovery data</button>
+          : <button className="button quiet" type="button" onClick={() => { void reloadAutosaveAfterConflict(); }}>{autosaveState.conflict.reason === "divergent-copies" ? "Inspect other copy" : "Load newer copy"}</button>}
         <button className="button primary" type="button" onClick={() => { void saveAutosaveNow(true); }}>Keep this copy</button>
       </section>}
 
@@ -1144,7 +1165,7 @@ export function MapMakerApp() {
               <p className="microcopy">Restores the visible generator controls. Current planes, provinces, scenario setup, gate plans, and manual map edits stay in place; Undo restores the prior values.</p>
               <Field label="Seed">
                 <div className="input-with-button">
-                  <input value={project.seed} onChange={(event) => mutate((draft) => { draft.seed = event.target.value; })} />
+                  <input maxLength={MAX_IMPORTED_STRING_LENGTH} value={project.seed} onChange={(event) => mutate((draft) => { draft.seed = event.target.value; })} />
                   <button type="button" onClick={() => mutate((draft) => { draft.seed = randomSeed(); })} aria-label="Randomize seed">✣</button>
                 </div>
               </Field>
@@ -1322,7 +1343,7 @@ export function MapMakerApp() {
                 onClick={stagePlane}
               >+ Add plane to plan</button>
               <Divider />
-              <Field label="Plane name"><input value={activePlane.name} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.name = event.target.value; })} /></Field>
+              <Field label="Plane name"><input maxLength={MAX_IMPORTED_STRING_LENGTH} value={activePlane.name} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.name = event.target.value; })} /></Field>
               <Field label="Plane archetype"><select value={activePlane.kind} onChange={(event) => mutate((draft) => {
                 const plane = draft.planes.find((item) => item.id === activePlane.id)!;
                 const planeIndex = draft.planes.findIndex((item) => item.id === plane.id);
@@ -1415,7 +1436,7 @@ export function MapMakerApp() {
           {leftTab === "scenario" && (
             <div id="setup-active-panel" className="panel-scroll setup-stack" role="tabpanel" aria-labelledby="setup-tab-scenario">
               <SectionHeading kicker="HOST & SCENARIO" title="Game setup" />
-              <Field label="Description"><textarea rows={3} value={project.description} onChange={(event) => mutate((draft) => { draft.description = event.target.value; })} /></Field>
+              <Field label="Description"><textarea maxLength={MAX_IMPORTED_STRING_LENGTH} rows={3} value={project.description} onChange={(event) => mutate((draft) => { draft.description = event.target.value; })} /></Field>
               <NumberField label="Minimum Dominions version (#domversion)" value={project.targetVersion} min={600} max={999} onChange={(value) => mutate((draft) => { draft.targetVersion = value; })} />
               <p className="field-note">Use 635 or newer when relying on IDs from the bundled Dominions 6.35 catalog.</p>
               <div className="field-grid two">
@@ -1431,7 +1452,7 @@ export function MapMakerApp() {
               <Toggle label="Hide deep-plane choice" checked={project.noDeepChoice} onChange={(value) => mutate((draft) => { draft.noDeepChoice = value; })} />
               <Toggle label="Disable homeland names" checked={project.noHomelandNames} onChange={(value) => mutate((draft) => { draft.noHomelandNames = value; })} />
               <Toggle label="Disable name filter" checked={project.noNameFilter} onChange={(value) => mutate((draft) => { draft.noNameFilter = value; })} />
-              <Field label="Map-level directives"><textarea className="code-input" rows={7} placeholder="#god 5 120\n#dominionstr 5 7" value={project.rawDirectives} onChange={(event) => mutate((draft) => { draft.rawDirectives = event.target.value; })} /></Field>
+              <Field label="Map-level directives"><textarea maxLength={MAX_IMPORTED_DIRECTIVE_LENGTH} className="code-input" rows={7} placeholder="#god 5 120\n#dominionstr 5 7" value={project.rawDirectives} onChange={(event) => mutate((draft) => { draft.rawDirectives = event.target.value; })} /></Field>
               <p className="microcopy">Raw directives preserve advanced Dominions 6 scenario commands that do not need a dedicated control.</p>
               <Divider />
               <CatalogManager catalog={catalog} hasUserCatalog={!!userCatalog} onImport={() => catalogImportRef.current?.click()} onReset={resetCatalog} onTemplate={downloadCatalogTemplate} />
@@ -1498,7 +1519,7 @@ export function MapMakerApp() {
               <div className="province-header">
                 <div>
                   <p className="eyebrow">PROVINCE {selected.index}</p>
-                  <input value={selected.name} onChange={(event) => updateSelected((province) => { province.name = event.target.value; province.nameSource = "authored"; })} aria-label="Province name" />
+                  <input maxLength={MAX_IMPORTED_STRING_LENGTH} value={selected.name} onChange={(event) => updateSelected((province) => { province.name = event.target.value; province.nameSource = "authored"; })} aria-label="Province name" />
                 </div>
                 <span className="terrain-mask" title="Dominions terrain mask">{terrainMask(selected).toString()}</span>
               </div>
@@ -1729,7 +1750,7 @@ export function SitesDefenseInspector({ catalog, plane, province, protectedStart
         <div className="defense-card" key={`${defense.commander}-${defenseIndex}`}>
           <div className="card-heading"><strong>Guardian group {defenseIndex + 1}</strong><button type="button" aria-label={`Remove guardian group ${defenseIndex + 1}`} onClick={() => update((item) => { item.defenders.splice(defenseIndex, 1); })}>Remove</button></div>
           <CatalogCombobox label="Commander" value={defense.commander} entries={includeSelectedEntry(commanderChoices, catalog.units, defense.commander)} placeholder={`Search ${commanderChoices.length.toLocaleString()} ${showAllGuardianUnits ? "gameplay units" : "known commanders"} by name or ID`} onCommit={(value) => update((item) => { item.defenders[defenseIndex]!.commander = value; })} />
-          <Field label="Commander display name"><input value={defense.commanderName ?? ""} onChange={(event) => update((item) => { item.defenders[defenseIndex]!.commanderName = event.target.value || undefined; })} /></Field>
+          <Field label="Commander display name"><input maxLength={MAX_IMPORTED_STRING_LENGTH} value={defense.commanderName ?? ""} onChange={(event) => update((item) => { item.defenders[defenseIndex]!.commanderName = event.target.value || undefined; })} /></Field>
           {defense.squads.map((squad, squadIndex) => (
             <div className="squad-row" key={squad.id}>
               <input type="number" min={1} max={1000} value={squad.count} aria-label={`Guardian group ${defenseIndex + 1}, squad ${squadIndex + 1} count`} onChange={(event) => update((item) => { item.defenders[defenseIndex]!.squads[squadIndex]!.count = boundedInteger(event.target.value, 1, 1, 1000); })} />
@@ -1745,7 +1766,7 @@ export function SitesDefenseInspector({ catalog, plane, province, protectedStart
                 <OptionalNumberField label="Experience" value={defense.experience} min={0} max={900} onChange={(value) => update((item) => { item.defenders[defenseIndex]!.experience = value; })} />
                 <OptionalNumberField label="Random items" value={defense.randomEquipment} min={0} max={4} onChange={(value) => update((item) => { item.defenders[defenseIndex]!.randomEquipment = value; })} />
               </div>
-              <Field label="Specific items (one per line)"><textarea rows={3} value={(defense.items ?? []).join("\n")} onChange={(event) => update((item) => { item.defenders[defenseIndex]!.items = lines(event.target.value); })} /></Field>
+              <Field label="Specific items (one per line)"><ItemListInput value={defense.items} onChange={(value) => update((item) => { item.defenders[defenseIndex]!.items = value; })} /></Field>
               <Toggle label="Clear commander's innate magic first" checked={defense.clearMagic ?? false} onChange={(value) => update((item) => { item.defenders[defenseIndex]!.clearMagic = value || undefined; })} />
               <div className="bodyguard-fields">
                 <CatalogCombobox label="Bodyguard unit" value={defense.bodyguard} entries={includeSelectedEntry(troopChoices, catalog.units, defense.bodyguard)} placeholder={`Search ${troopChoices.length.toLocaleString()} ${showAllGuardianUnits ? "gameplay units" : "known troops"} by name or ID`} onCommit={(value) => update((item) => {
@@ -1781,15 +1802,15 @@ function AdvancedInspector({ project, planeId, province, update, mutateProject }
       })}</div>
       <Divider />
       <SectionHeading kicker="BATTLE SCENE" title="Province battlefield" />
-      <Field label="Skybox"><input value={province.battle.skybox ?? ""} onChange={(event) => update((item) => { item.battle.skybox = event.target.value || undefined; })} /></Field>
-      <Field label="Battle map"><input value={province.battle.battleMap ?? ""} onChange={(event) => update((item) => { item.battle.battleMap = event.target.value || undefined; })} /></Field>
+      <Field label="Skybox"><input maxLength={MAX_IMPORTED_STRING_LENGTH} value={province.battle.skybox ?? ""} onChange={(event) => update((item) => { item.battle.skybox = event.target.value || undefined; })} /></Field>
+      <Field label="Battle map"><input maxLength={MAX_IMPORTED_STRING_LENGTH} value={province.battle.battleMap ?? ""} onChange={(event) => update((item) => { item.battle.battleMap = event.target.value || undefined; })} /></Field>
       <div className="field-grid three">
         <Field label="Ground RGB"><input placeholder="0.4 0.4 0.3" value={province.battle.groundColor ?? ""} onChange={(event) => update((item) => { item.battle.groundColor = event.target.value || undefined; })} /></Field>
         <Field label="Rock RGB"><input placeholder="0.3 0.3 0.3" value={province.battle.rockColor ?? ""} onChange={(event) => update((item) => { item.battle.rockColor = event.target.value || undefined; })} /></Field>
         <Field label="Fog RGB"><input placeholder="0.6 0.6 0.7" value={province.battle.fogColor ?? ""} onChange={(event) => update((item) => { item.battle.fogColor = event.target.value || undefined; })} /></Field>
       </div>
-      <Field label="Province directives"><textarea className="code-input" rows={7} placeholder="#clearmagic\n#mag_fire 2" value={province.rawDirectives} onChange={(event) => update((item) => { item.rawDirectives = event.target.value; })} /></Field>
-      <Field label="Plane directives"><textarea className="code-input" rows={5} placeholder="#maptextcol …" value={plane.rawDirectives} onChange={(event) => mutateProject((draft) => { draft.planes.find((item) => item.id === planeId)!.rawDirectives = event.target.value; })} /></Field>
+      <Field label="Province directives"><textarea maxLength={MAX_IMPORTED_DIRECTIVE_LENGTH} className="code-input" rows={7} placeholder="#clearmagic\n#mag_fire 2" value={province.rawDirectives} onChange={(event) => update((item) => { item.rawDirectives = event.target.value; })} /></Field>
+      <Field label="Plane directives"><textarea maxLength={MAX_IMPORTED_DIRECTIVE_LENGTH} className="code-input" rows={5} placeholder="#maptextcol …" value={plane.rawDirectives} onChange={(event) => mutateProject((draft) => { draft.planes.find((item) => item.id === planeId)!.rawDirectives = event.target.value; })} /></Field>
       <details className="coverage-list"><summary>Dominions feature coverage ({ADVANCED_COMMANDS.length} command families)</summary><div>{ADVANCED_COMMANDS.map((item) => <span key={item.command}><code>{item.command}</code><small>{item.description}</small></span>)}</div></details>
     </div>
   );
@@ -1999,7 +2020,7 @@ export function ExportDialog({ project, activePlane, issues, progress, busy, onC
 function SectionHeading({ kicker, title }: { kicker: string; title: string }) { return <div className="section-heading"><p className="eyebrow">{kicker}</p><h2>{title}</h2></div>; }
 function Divider() { return <div className="divider" />; }
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="field"><span>{label}</span>{children}</label>; }
-function NumberField({ label, value, min, max, describedBy, onChange }: { label: string; value: number; min: number; max: number; describedBy?: string; onChange: (value: number) => void }) { return <Field label={label}><input type="number" value={value} min={min} max={max} aria-describedby={describedBy} onChange={(event) => onChange(boundedInteger(event.target.value, min, min, max))} /></Field>; }
+function NumberField({ label, value, min, max, describedBy, onChange }: { label: string; value: number; min: number; max: number; describedBy?: string; onChange: (value: number) => void }) { return <Field label={label}><BoundedNumberInput value={value} min={min} max={max} describedBy={describedBy} onChange={onChange} /></Field>; }
 function OptionalNumberField({ label, value, min, max, disabled = false, onChange }: { label: string; value?: number; min: number; max?: number; disabled?: boolean; onChange: (value?: number) => void }) { return <Field label={label}><input type="number" value={value ?? ""} min={min} max={max} disabled={disabled} placeholder="Auto" onChange={(event) => {
   if (!event.target.value.trim()) onChange(undefined);
   else onChange(boundedInteger(event.target.value, min, min, max ?? Number.MAX_SAFE_INTEGER));
@@ -2400,7 +2421,6 @@ function boundedInteger(value: string, fallback: number, minimum: number, maximu
 function optionalNumber(value: string): number | undefined { if (!value.trim()) return undefined; const parsed = Number(value); return Number.isFinite(parsed) ? parsed : undefined; }
 function optionalBooleanValue(value: boolean | undefined): "inherit" | "on" | "off" { return value === undefined ? "inherit" : value ? "on" : "off"; }
 function parseOptionalBoolean(value: string): boolean | undefined { return value === "on" ? true : value === "off" ? false : undefined; }
-function lines(value: string): string[] { return value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean); }
 function randomSeed(): string { return `realm-${crypto.getRandomValues(new Uint32Array(1))[0]!.toString(36)}`; }
 function formatBytes(bytes: number): string { if (bytes < 1_000_000) return `${Math.ceil(bytes / 1000)} KB`; return `${(bytes / 1_000_000).toFixed(bytes > 100_000_000 ? 0 : 1)} MB`; }
 function scoreClass(score: number): string { return score >= 85 ? "excellent" : score >= 70 ? "fair" : "poor"; }

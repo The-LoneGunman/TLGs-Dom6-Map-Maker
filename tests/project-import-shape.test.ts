@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseProject } from "../src/export";
+import { parseProject, serializeProject } from "../src/export";
+import { validateProject } from "../src/dom6";
 import { addPlane, createDefaultProject } from "../src/generator";
 
 interface MutableProvince extends Record<string, unknown> {
@@ -48,6 +49,19 @@ test("project import preserves a complete schema-v1 project and optional-field m
   assert.equal(migrated.terrain, "plains");
   assert.equal(migrated.freshwater, true);
   assert.equal(migrated.startType, "land");
+});
+
+test("unfinished guardian groups and squads remain saveable drafts while playable export is blocked", () => {
+  const project = createDefaultProject("guardian-draft-roundtrip");
+  const province = project.planes[0]!.provinces.find((entry) => !entry.start)!;
+  province.defenders = [{ commander: "", squads: [{ id: "draft-squad", unit: "", count: 10 }] }];
+  const restored = parseProject(serializeProject(project));
+  const defense = restored.planes[0]!.provinces.find((entry) => entry.id === province.id)!.defenders[0]!;
+  assert.equal(defense.commander, "");
+  assert.equal(defense.squads[0]!.unit, "");
+  const errors = validateProject(restored).filter((issue) => issue.severity === "error");
+  assert.ok(errors.some((issue) => issue.message.includes("without a commander")));
+  assert.ok(errors.some((issue) => issue.message.includes("incomplete defender squad")));
 });
 
 test("project import rejects a missing atlas but round-trips intentionally staged empty planes", () => {

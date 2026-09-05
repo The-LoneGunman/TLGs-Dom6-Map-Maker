@@ -212,7 +212,7 @@ export async function installPackage(project: MapProject, onProgress?: ProgressC
 
 export function downloadProject(project: MapProject) {
   const name = `${sanitizeMapName(project.name)}.atlas.json`;
-  downloadBlob(new Blob([JSON.stringify(project, null, 2)], { type: "application/json" }), name);
+  downloadBlob(new Blob([serializeProject(project, true)], { type: "application/json" }), name);
 }
 
 /** Parser-side ceiling. The file picker should also reject larger files before calling File.text(). */
@@ -244,6 +244,23 @@ export function parseProject(text: string): MapProject {
   if (root.schemaVersion !== 1) throw new Error(`Unsupported project schema ${String(root.schemaVersion)}.`);
   assertProjectShape(root);
   return cloneProject(root as unknown as MapProject);
+}
+
+/** Save only project states the importer can restore, without parsing/cloning a second atlas. */
+export function serializeProject(project: MapProject, pretty = false): string {
+  const root = recordAt(project, "project");
+  if (root.schemaVersion !== 1) throw new Error(`Unsupported project schema ${String(root.schemaVersion)}.`);
+  assertProjectShape(root);
+  const compact = JSON.stringify(project);
+  assertProjectTextSize(compact);
+  if (!pretty) return compact;
+  const formatted = JSON.stringify(project, null, 2);
+  try {
+    assertProjectTextSize(formatted);
+    return formatted;
+  } catch {
+    return compact;
+  }
 }
 
 const PLANE_KINDS = new Set([
@@ -499,7 +516,7 @@ function assertProvince(province: Record<string, unknown>, path: string): void {
 
 function assertDefense(defense: Record<string, unknown>, path: string): void {
   assertKnownFields(defense, path, DEFENSE_FIELDS);
-  nonemptyStringAt(defense.commander, `${path}.commander`);
+  stringAt(defense.commander, `${path}.commander`);
   optionalBooleanAt(defense.clearMagic, `${path}.clearMagic`);
   optionalStringAt(defense.commanderName, `${path}.commanderName`);
   optionalStringAt(defense.bodyguard, `${path}.bodyguard`);
@@ -509,7 +526,7 @@ function assertDefense(defense: Record<string, unknown>, path: string): void {
     const squad = recordAt(value, squadPath);
     assertKnownFields(squad, squadPath, DEFENSE_SQUAD_FIELDS);
     idAt(squad.id, `${squadPath}.id`);
-    nonemptyStringAt(squad.unit, `${squadPath}.unit`);
+    stringAt(squad.unit, `${squadPath}.unit`);
     numberAt(squad.count, `${squadPath}.count`);
   });
   optionalNumberAt(defense.experience, `${path}.experience`);
@@ -570,11 +587,6 @@ function stringAt(value: unknown, path: string): asserts value is string {
   if (value.length > MAX_IMPORTED_STRING_LENGTH) {
     throw new Error(`${path} must contain at most ${MAX_IMPORTED_STRING_LENGTH} characters.`);
   }
-}
-
-function nonemptyStringAt(value: unknown, path: string): asserts value is string {
-  stringAt(value, path);
-  if (!value.trim()) throw new Error(`${path} must not be empty.`);
 }
 
 function idAt(value: unknown, path: string): asserts value is string {
@@ -896,7 +908,7 @@ function supportFiles(project: MapProject): PackageFile[] {
   ].join("\r\n");
   return [
     { name: "INSTALL.txt", data: encoder.encode(install) },
-    { name: "atlas_project.json", data: encoder.encode(JSON.stringify(project, null, 2)) },
+    { name: "atlas_project.json", data: encoder.encode(serializeProject(project, true)) },
     { name: "balance_report.txt", data: encoder.encode(report) },
     { name: "host_settings.txt", data: encoder.encode(host) },
     { name: "host_topology.txt", data: encoder.encode(buildHostTopologyReport(project)) },

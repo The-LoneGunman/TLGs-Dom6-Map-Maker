@@ -280,6 +280,8 @@ These affect only the active plane.
 
 A fully wrapped Underworld is allowed, but validation warns that one river band cannot truly divide a torus.
 
+Generation uses chamber-and-corridor ownership for the Underworld so the Styx crossings agree with the playable map. Imported solid Underworlds are converted only when you generate, with a notice explaining the change.
+
 ### Configure plane archetypes & selected links
 
 Switches to Planes without changing the map. Use it to finish plane planning before Generate.
@@ -721,6 +723,8 @@ Atlas autosaves shortly after project changes. Wait for the saved status or choo
 - **Autosave unavailable:** no browser copy could be written; download project JSON immediately.
 
 Autosave belongs to the current browser and site address. It is not cloud synchronization, clearing browser data removes it, and it stores one current project rather than a project library. If another tab or storage copy conflicts, autosave pauses and asks whether to inspect/load the newer copy or keep the current one. **New atlas** replaces the autosave after confirmation; Undo history does not survive a reload. Keep portable project JSON backups.
+
+If saved data cannot be opened, automatic saving pauses and **Download recovery data** preserves the original bytes. **Keep this copy** downloads that recovery backup before replacing them. Edits exceeding project limits are rejected with a persistent message; the previous project stays intact. Unfinished guardian groups can still be saved and reopened, but must be completed before playable export.
 
 ### Undo and Redo
 

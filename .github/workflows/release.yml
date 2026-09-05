@@ -25,8 +25,8 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci
-      - name: Audit shipped dependencies
-        run: npm audit --omit=dev --audit-level=high
+      - name: Audit locked dependencies
+        run: npm audit --audit-level=high
       - name: Verify tag matches package version
         run: node -e 'const expected = `v${require("./package.json").version}`; if (process.env.GITHUB_REF_NAME !== expected) { console.error(`Release tag ${process.env.GITHUB_REF_NAME} must equal ${expected}.`); process.exit(1); }'
       - name: Verify release candidate

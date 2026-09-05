@@ -3,6 +3,8 @@
 **Original audit snapshot:** 2026-08-11
 **Remediation status updated:** 2026-08-13
 
+This is a historical record. See the [2026-09-05 follow-up](BUGFIX_AUDIT_2026-09-05.md) for newer findings, repairs, and the now-clean dependency audit.
+
 **Scope:** generation, multiplayer balance, all plane families, UI workflows, accessibility, persistence, project/catalog import, validation, Dominions map compilation, D6M encoding, direct install, ZIP packaging, dependencies, and documentation
 
 **Current release decision:** **The engineering release blockers found through the original and post-merge audits are resolved and regression-tested. Both a compact package and a representative eight-plane package were accepted by the installed Dominions 6 engine through its scripted new-game path. The eight-plane package contained all eight map/D6M pairs, eight linked gate groups, eight starts, and eight recommended thrones; the engine created its game state and generated underworld files successfully. The remaining human-only check is optional extended visual play, not an engineering release blocker.**

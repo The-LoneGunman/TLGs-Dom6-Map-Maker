@@ -22,6 +22,7 @@ import {
 import {
   ISLAND_CHAIN_MIN_WATER_PERCENT,
   adjacencyFor,
+  classifyCurrentStart,
   globalMovementAdjacency,
   provinceGlobalNumber,
   scaledStartSeparationTarget,
@@ -1348,24 +1349,7 @@ function blocksReliableStartMovement(edge: Edge): boolean {
 }
 
 function classifyStart(plane: Plane, province: Province): StartType {
-  if (isWaterProvince(province)) return "water";
-  if (isCaveProvince(province) || ["cave", "cavern", "underworld", "hell", "abyss"].includes(plane.kind)) return "cave";
-  if (province.startType && province.startType !== "water" && province.startType !== "cave") return province.startType;
-  if (!isSurfaceLikeStartPlane(plane)) return "other";
-  const provinceById = new Map(plane.provinces.map((item) => [item.id, item]));
-  const coastal = plane.edges.some((edge) => {
-    if (edge.a !== province.id && edge.b !== province.id) return false;
-    const other = provinceById.get(edge.a === province.id ? edge.b : edge.a);
-    return !!other && isWaterProvince(other);
-  });
-  return coastal ? "coastal" : "land";
-}
-
-/** Keep manual-start validation aligned with generator core-plane semantics. */
-function isSurfaceLikeStartPlane(plane: Plane): boolean {
-  if (plane.kind === "surface") return true;
-  if (plane.kind !== "custom" || resolvePlaneOwnershipMode(plane) !== "solid") return false;
-  return !["fungal", "crystal", "volcanic", "storm", "infernal", "void"].includes(plane.variant ?? "temperate");
+  return classifyCurrentStart(plane, province);
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {
