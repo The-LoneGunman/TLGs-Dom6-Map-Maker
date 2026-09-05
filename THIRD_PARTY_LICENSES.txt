@@ -14,7 +14,7 @@ LICENSE. The generated Dom6 Inspector catalog has separate GPL-3.0 terms in
 src/catalog/data/NOTICE.md and src/catalog/data/LICENSE.dom6inspector.txt.
 Neither the root license nor this inventory relicenses third-party components.
 
-LOCKED PACKAGE INVENTORY (589 package instances)
+LOCKED PACKAGE INVENTORY (588 package instances)
 ------------------------------------------------------------
 @alloc/quick-lru@5.2.0 | MIT | node_modules/@alloc/quick-lru
 @babel/code-frame@7.29.7 | MIT | node_modules/@babel/code-frame
@@ -257,19 +257,19 @@ axobject-query@4.1.0 | Apache-2.0 | node_modules/axobject-query
 balanced-match@1.0.2 | MIT | node_modules/balanced-match
 balanced-match@4.0.4 | MIT | node_modules/@typescript-eslint/typescript-estree/node_modules/balanced-match
 base64-js@0.0.8 | MIT | node_modules/base64-js
-baseline-browser-mapping@2.10.30 | Apache-2.0 | node_modules/baseline-browser-mapping
+baseline-browser-mapping@2.11.21 | Apache-2.0 | node_modules/baseline-browser-mapping
 blake3-wasm@2.1.5 | MIT | node_modules/blake3-wasm
 brace-expansion@1.1.18 | MIT | node_modules/brace-expansion
 brace-expansion@5.0.9 | MIT | node_modules/@typescript-eslint/typescript-estree/node_modules/brace-expansion
 braces@3.0.3 | MIT | node_modules/braces
-browserslist@4.28.2 | MIT | node_modules/browserslist
+browserslist@4.28.9 | MIT | node_modules/browserslist
 buffer-from@1.1.2 | MIT | node_modules/buffer-from
 call-bind-apply-helpers@1.0.2 | MIT | node_modules/call-bind-apply-helpers
 call-bind@1.0.9 | MIT | node_modules/call-bind
 call-bound@1.0.4 | MIT | node_modules/call-bound
 callsites@3.1.0 | MIT | node_modules/callsites
 camelize@1.0.1 | MIT | node_modules/camelize
-caniuse-lite@1.0.30001793 | CC-BY-4.0 | node_modules/caniuse-lite
+caniuse-lite@1.0.30001810 | CC-BY-4.0 | node_modules/caniuse-lite
 chalk@4.1.2 | MIT | node_modules/chalk
 chrome-trace-event@1.0.4 | MIT | node_modules/chrome-trace-event
 color-convert@2.0.1 | MIT | node_modules/color-convert
@@ -296,7 +296,7 @@ define-properties@1.2.1 | MIT | node_modules/define-properties
 detect-libc@2.1.2 | Apache-2.0 | node_modules/detect-libc
 doctrine@2.1.0 | Apache-2.0 | node_modules/doctrine
 dunder-proto@1.0.1 | MIT | node_modules/dunder-proto
-electron-to-chromium@1.5.358 | ISC | node_modules/electron-to-chromium
+electron-to-chromium@1.5.422 | ISC | node_modules/electron-to-chromium
 emoji-regex-xs@2.0.1 | MIT | node_modules/emoji-regex-xs
 emoji-regex@9.2.2 | MIT | node_modules/emoji-regex
 enhanced-resolve@5.21.3 | MIT | node_modules/enhanced-resolve
@@ -338,10 +338,10 @@ fast-glob@3.3.1 | MIT | node_modules/fast-glob
 fast-glob@3.3.3 | MIT | node_modules/vite-plugin-dynamic-import/node_modules/fast-glob
 fast-json-stable-stringify@2.1.0 | MIT | node_modules/fast-json-stable-stringify
 fast-levenshtein@2.0.6 | MIT | node_modules/fast-levenshtein
-fast-uri@3.1.5 | BSD-3-Clause | node_modules/fast-uri
+fast-uri@3.1.7 | BSD-3-Clause | node_modules/fast-uri
 fastq@1.20.1 | ISC | node_modules/fastq
 fdir@6.5.0 | MIT | node_modules/tinyglobby/node_modules/fdir
-fflate@0.7.4 | MIT | node_modules/fflate
+fflate@0.7.5 | MIT | node_modules/fflate
 file-entry-cache@8.0.0 | MIT | node_modules/file-entry-cache
 fill-range@7.1.1 | MIT | node_modules/fill-range
 find-up@5.0.0 | MIT | node_modules/find-up
@@ -378,7 +378,6 @@ hermes-parser@0.25.1 | MIT | node_modules/hermes-parser
 hex-rgb@4.3.0 | MIT | node_modules/hex-rgb
 ignore@5.3.2 | MIT | node_modules/ignore
 ignore@7.0.5 | MIT | node_modules/@typescript-eslint/eslint-plugin/node_modules/ignore
-image-size@2.0.2 | MIT | node_modules/image-size
 import-fresh@3.3.1 | MIT | node_modules/import-fresh
 imurmurhash@0.1.4 | MIT | node_modules/imurmurhash
 internal-slot@1.1.0 | MIT | node_modules/internal-slot
@@ -473,7 +472,7 @@ nanoid@3.3.18 | MIT | node_modules/nanoid
 natural-compare@1.4.0 | MIT | node_modules/natural-compare
 neo-async@2.6.2 | MIT | node_modules/neo-async
 node-exports-info@1.6.0 | MIT | node_modules/node-exports-info
-node-releases@2.0.44 | MIT | node_modules/node-releases
+node-releases@2.0.54 | MIT | node_modules/node-releases
 object-assign@4.1.1 | MIT | node_modules/object-assign
 object-inspect@1.13.4 | MIT | node_modules/object-inspect
 object-keys@1.1.1 | MIT | node_modules/object-keys
@@ -578,9 +577,9 @@ undici@7.29.0 | MIT | node_modules/undici
 unenv@2.0.0-rc.24 | MIT | node_modules/unenv
 unicode-trie@2.0.0 | MIT | node_modules/unicode-trie
 unpic@4.2.2 | MIT | node_modules/unpic
-update-browserslist-db@1.2.3 | MIT | node_modules/update-browserslist-db
+update-browserslist-db@1.3.2 | MIT | node_modules/update-browserslist-db
 uri-js@4.4.1 | BSD-2-Clause | node_modules/uri-js
-vinext@1.0.0-beta.2 | MIT | node_modules/vinext
+vinext@1.0.0-beta.8 | MIT | node_modules/vinext
 vite-plugin-commonjs@0.10.4 | MIT | node_modules/vite-plugin-commonjs
 vite-plugin-dynamic-import@1.6.0 | MIT | node_modules/vite-plugin-dynamic-import
 vite@8.2.1 | MIT | node_modules/vite
@@ -606,7 +605,7 @@ youch@4.1.0-beta.10 | MIT | node_modules/youch
 zod-validation-error@4.0.2 | MIT | node_modules/zod-validation-error
 zod@4.4.3 | MIT | node_modules/zod
 
-DEDUPLICATED LICENSE AND NOTICE TEXTS (215)
+DEDUPLICATED LICENSE AND NOTICE TEXTS (214)
 ------------------------------------------------------------
 
 --- SHA-256 006a2e42087fe23821b76fdea304cc8ec0ea8f8851256fe12d3b7f8f766e4003 ---
@@ -1172,6 +1171,32 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
+--- SHA-256 1017334f27eb733285b56c0ddc7769dd22db678d49d792ac174ea54ccdb0e303 ---
+Packages:
+  update-browserslist-db@1.3.2 (LICENSE)
+
+The MIT License (MIT)
+
+Copyright 2022 Andrey Sitnik <andrey@sitnik.es> and other contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
 --- SHA-256 10820ed2e9b86f28dd90b93bbc36f56a1dfe24a2efd3ad02519aecb3a069e1a6 ---
 Packages:
   vite-plugin-commonjs@0.10.4 (LICENSE)
@@ -1535,7 +1560,7 @@ Packages:
   @humanwhocodes/module-importer@1.0.1 (LICENSE)
   @humanwhocodes/retry@0.4.3 (LICENSE)
   @xtuc/long@4.2.2 (LICENSE)
-  baseline-browser-mapping@2.10.30 (LICENSE.txt)
+  baseline-browser-mapping@2.11.21 (LICENSE.txt)
   doctrine@2.1.0 (LICENSE.closure-compiler)
 
 Apache License
@@ -1827,7 +1852,7 @@ THE SOFTWARE.
 
 --- SHA-256 2bccca04141ded409b82d07b1783909d66d53d2530ae60f9c39806695da173bc ---
 Packages:
-  browserslist@4.28.2 (LICENSE)
+  browserslist@4.28.9 (LICENSE)
 
 The MIT License (MIT)
 
@@ -3030,32 +3055,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
---- SHA-256 5615587b2b53bb0e3dd020941023fe2479aabd226759f368cde59cd29e7f8821 ---
-Packages:
-  update-browserslist-db@1.2.3 (LICENSE)
-
-The MIT License (MIT)
-
-Copyright 2022 Andrey Sitnik <andrey@sitnik.ru> and other contributors
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of
-this software and associated documentation files (the "Software"), to deal in
-the Software without restriction, including without limitation the rights to
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software is furnished to do so,
-subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
-FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
-COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-
 --- SHA-256 5640e5cbe2e9f57f6ccfdd8dbfbeadb875495bdbcb69d2666ce3177ccd0942e4 ---
 Packages:
   object-keys@1.1.1 (LICENSE)
@@ -3674,7 +3673,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 --- SHA-256 62249119bb7df6e54300f37a37145c26a6d4420410aac8881a119c5b427cf751 ---
 Packages:
-  fflate@0.7.4 (LICENSE)
+  fflate@0.7.5 (LICENSE)
 
 MIT License
 
@@ -3724,21 +3723,6 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-
---- SHA-256 69fc4e74bce4a2823204da73e625b4eeed4812b2386f21164e8ddb0497619759 ---
-Packages:
-  image-size@2.0.2 (LICENSE)
-
-The MIT License (MIT)
-
-Copyright © 2013-Present Aditya Yadav, http://netroy.in
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 --- SHA-256 6a972b33787e14304b4cfca68387f8644d11788a5d551731196b8e64dd9f0431 ---
@@ -5867,7 +5851,7 @@ The licenses of externally maintained libraries from which parts of the Software
 
 --- SHA-256 94e2d6f90264f1e3efc695ab64d36f17c7616a7bae97ab0c51e7f895b842db4d ---
 Packages:
-  electron-to-chromium@1.5.358 (LICENSE)
+  electron-to-chromium@1.5.422 (LICENSE)
 
 Copyright 2018 Kilian Valkhof
 
@@ -5924,7 +5908,7 @@ SUCH DAMAGE.
 
 --- SHA-256 95df2e9564862e51d69683a899b6dcc8218d577057bdf67322880769ff85f29e ---
 Packages:
-  caniuse-lite@1.0.30001793 (LICENSE)
+  caniuse-lite@1.0.30001810 (LICENSE)
 
 Attribution 4.0 International
 
@@ -6326,7 +6310,7 @@ Creative Commons may be contacted at creativecommons.org.
 --- SHA-256 95ea06f15c499f96b86b736aec93fde834c5323954803699b99cd52386a76ef4 ---
 Packages:
   @vinext/types@1.0.0-beta.2 (LICENSE)
-  vinext@1.0.0-beta.2 (LICENSE)
+  vinext@1.0.0-beta.8 (LICENSE)
 
 MIT License
 
@@ -7080,7 +7064,7 @@ SOFTWARE.
 
 --- SHA-256 b010b0dfdfdb23d7396e03b82cd4621fc9bb8f95d6b0aea70b9c24e12074c786 ---
 Packages:
-  fast-uri@3.1.5 (LICENSE)
+  fast-uri@3.1.7 (LICENSE)
 
 Copyright (c) 2011-2021, Gary Court until https://github.com/garycourt/uri-js/commit/a1acf730b4bba3f1097c9f52e7d9d3aba8cdcaae
 Copyright (c) 2021-present The Fastify team <https://github.com/fastify/fastify#team>
@@ -7116,7 +7100,7 @@ The complete list of contributors can be found at:
 
 --- SHA-256 b02a61dfa2f1ba35282a1887223a7b17985efe798df3e70ce874ef2e9f8949b2 ---
 Packages:
-  node-releases@2.0.44 (LICENSE)
+  node-releases@2.0.54 (LICENSE)
 
 The MIT License
 

@@ -222,7 +222,7 @@ async function runSelfTest() {
   const dependencyNotices = await readFile(path.join(projectRoot, "THIRD_PARTY_LICENSES.txt"), "utf8");
   assert.match(dependencyNotices, /PANTOKRATOR ATLAS THIRD-PARTY SOFTWARE NOTICES/);
   assert.match(dependencyNotices, /react@19\.2\.8 \| MIT/);
-  assert.match(dependencyNotices, /vinext@1\.0\.0-beta\.2 \| MIT/);
+  assert.ok(dependencyNotices.includes(`vinext@${packageData.devDependencies.vinext} | MIT`));
   const catalogNotice = await readFile(path.join(projectRoot, "src", "catalog", "data", "NOTICE.md"), "utf8");
   assert.match(catalogNotice, /GNU General Public License v3\.0/);
   assert.match(catalogNotice, /LICENSE\.dom6inspector\.txt/);

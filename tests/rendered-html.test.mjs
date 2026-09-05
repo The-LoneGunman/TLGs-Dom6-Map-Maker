@@ -85,7 +85,7 @@ test("production generation worker stays on the browser origin", () => {
     .join("\n");
 
   assert.doesNotMatch(source, /file:\/\/\/[^"'`]*generationWorker/i, "the client worker constructor must not retain a build-machine file URL");
-  const workerReference = source.match(/\/_next\/static\/(generation\.worker-[A-Za-z0-9_-]+\.js)/);
+  const workerReference = source.match(/\/_next\/static\/((?:workers\/)?generation\.worker-[A-Za-z0-9_-]+\.js)/);
   assert.ok(workerReference, "the app chunk should reference a same-origin generated worker asset");
   assert.ok(existsSync(new URL(workerReference[1], staticDirectory)), "the referenced worker asset should be emitted");
 });

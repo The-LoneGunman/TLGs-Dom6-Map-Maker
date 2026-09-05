@@ -30,8 +30,8 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci
-      - name: Audit shipped dependencies
-        run: npm audit --omit=dev --audit-level=high
+      - name: Audit locked dependencies
+        run: npm audit --audit-level=high
       - name: Verify launcher internals
         run: node scripts/start-atlas.mjs --self-test
       - name: Verify third-party notices
@@ -60,7 +60,10 @@ jobs:
       - name: Exercise the double-click launcher path
         shell: cmd
         run: |
-          "Start Pantokrator Atlas.cmd" --self-test
-          "Start Pantokrator Atlas.cmd" --prepare-only
-          "Start Pantokrator Atlas.cmd" --smoke-test --no-browser
+          call "Start Pantokrator Atlas.cmd" --self-test
+          if errorlevel 1 exit /b %errorlevel%
+          call "Start Pantokrator Atlas.cmd" --prepare-only
+          if errorlevel 1 exit /b %errorlevel%
+          call "Start Pantokrator Atlas.cmd" --smoke-test --no-browser
+          if errorlevel 1 exit /b %errorlevel%
           node scripts/test-local-server.mjs

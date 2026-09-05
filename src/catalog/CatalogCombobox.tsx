@@ -56,7 +56,7 @@ export function CatalogCombobox({
       setActiveIndex(0);
       return;
     }
-    onCommit(normalized);
+    if (normalized !== current) onCommit(normalized);
     setQuery(normalized);
     setError(undefined);
     setOpen(false);
@@ -70,6 +70,7 @@ export function CatalogCombobox({
         <input
           id={inputId}
           type="search"
+          maxLength={4096}
           value={query}
           placeholder={placeholder}
           role="combobox"

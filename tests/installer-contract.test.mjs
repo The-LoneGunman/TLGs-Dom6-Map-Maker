@@ -107,3 +107,24 @@ test("payload staging refuses a build without a release marker", async () => {
     await rm(fixture.root, { recursive: true, force: true });
   }
 });
+
+test("staging refuses existing input/output directories without deleting their files", async () => {
+  const fixture = await createFixture();
+  try {
+    await writeFixture(fixture.project, "src/keep.txt", "source sentinel");
+    await writeFixture(fixture.output, "keep.txt", "previous payload sentinel");
+    const targets = [fixture.project, fixture.nodeRoot, path.join(fixture.project, "src"), path.join(fixture.project, "dist"), fixture.output];
+    if (process.platform === "win32") targets.push(fixture.project.toUpperCase());
+    for (const outputDirectory of targets) {
+      await assert.rejects(stageWindowsInstaller({
+        projectRoot: fixture.project, nodeRoot: fixture.nodeRoot, outputDirectory, nodeVersion: "v22.23.2",
+      }), /unsafe|already exists/);
+      assert.equal(await readFile(path.join(fixture.project, "src", "keep.txt"), "utf8"), "source sentinel");
+      assert.equal(await readFile(path.join(fixture.project, "dist", "server", "index.js"), "utf8"), "dist/server/index.js");
+      assert.equal(await readFile(path.join(fixture.nodeRoot, "node.exe"), "utf8"), "portable node");
+      assert.equal(await readFile(path.join(fixture.output, "keep.txt"), "utf8"), "previous payload sentinel");
+    }
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});

@@ -1,5 +1,5 @@
 import type { MapProject } from "./domain";
-import { parseProject } from "./export";
+import { parseProject, serializeProject } from "./export";
 
 export const LEGACY_PROJECT_AUTOSAVE_KEY = "pantokrator-atlas-project-v1";
 
@@ -26,6 +26,8 @@ export interface AutosaveState {
   revision?: AutosaveRevision | null;
   /** Present when an optimistic save was refused because durable state changed. */
   conflict?: AutosaveConflict;
+  /** Original unreadable records retained for explicit user recovery. */
+  recoveryCopies?: { backend: Exclude<AutosaveBackend, "none">; text: string }[];
 }
 
 export interface AutosaveConflict {
@@ -34,7 +36,7 @@ export interface AutosaveConflict {
   currentRevision: AutosaveRevision | null | undefined;
   backend: AutosaveBackend;
   /** Distinguishes an ordinary stale-tab save from two durable copies that need an explicit choice. */
-  reason?: "revision-changed" | "divergent-copies" | "conditional-write-unavailable";
+  reason?: "revision-changed" | "divergent-copies" | "conditional-write-unavailable" | "unreadable-copy";
   /** Present when both persistence backends contain different valid projects. */
   alternateBackend?: Exclude<AutosaveBackend, "none">;
   /** Backend-specific tokens used to resolve a conflict without an unconditional overwrite. */
@@ -140,6 +142,28 @@ export async function loadProjectAutosave(
     }
   } else {
     errors.push(unavailableIssue("localstorage", "localStorage is unavailable in this browser context."));
+  }
+
+  const recoveryCopies: NonNullable<AutosaveState["recoveryCopies"]> = [];
+  if (indexedDbRaw !== null && !indexedDbProject) recoveryCopies.push({ backend: "indexeddb", text: indexedDbRaw });
+  if (localStorageRaw !== null && !localStorageProject) recoveryCopies.push({ backend: "localstorage", text: localStorageRaw });
+  if (recoveryCopies.length) {
+    const backend = indexedDbProject ? "indexeddb" : localStorageProject ? "localstorage" : recoveryCopies[0]!.backend;
+    const project = indexedDbProject ?? localStorageProject;
+    const revision = project ? revisionForStoredValue(backend === "indexeddb" ? indexedDbRaw : localStorageRaw) : null;
+    return {
+      project, backend, errors, migrated: false, revision, recoveryCopies,
+      conflict: {
+        expectedRevision: revision,
+        currentRevision: revisionForStoredValue(backend === "indexeddb" ? indexedDbRaw : localStorageRaw),
+        backend,
+        reason: "unreadable-copy",
+        backendRevisions: {
+          ...(indexedDbAvailable ? { indexeddb: revisionForStoredValue(indexedDbRaw) } : {}),
+          ...(localStorageAvailable ? { localstorage: revisionForStoredValue(localStorageRaw) } : {}),
+        },
+      },
+    };
   }
 
   if (
@@ -286,7 +310,7 @@ export async function saveProjectAutosave(
   const errors: AutosaveIssue[] = [];
   let serialized: string;
   try {
-    serialized = JSON.stringify(project);
+    serialized = serializeProject(project);
   } catch (error) {
     errors.push(issue("indexeddb", "serialize", error));
     return { backend: "none", errors, migrated: false };
@@ -306,7 +330,7 @@ export async function saveProjectAutosave(
     if (
       !snapshot.readSafe
       || backendMismatch
-      || (!resolvingConflict && (snapshot.divergentCopies || snapshot.revision !== expectedRevision))
+      || (!resolvingConflict && (snapshot.divergentCopies || snapshot.errors.some((error) => error.operation === "parse") || snapshot.revision !== expectedRevision))
     ) {
       return conflictState(expectedRevision ?? snapshot.revision, snapshot, errors);
     }
@@ -598,6 +622,7 @@ interface AutosaveSnapshot {
   errors: AutosaveIssue[];
   readSafe: boolean;
   divergentCopies: boolean;
+  recoveryCopies: NonNullable<AutosaveState["recoveryCopies"]>;
 }
 
 interface AutosaveCandidate {
@@ -624,6 +649,10 @@ async function inspectAutosave(drivers: AutosaveDrivers): Promise<AutosaveSnapsh
         raw,
         revision: revisionForStoredValue(raw),
       };
+      if (raw !== null) {
+        try { candidate.project = parseProject(raw); }
+        catch (error) { errors.push(issue(backend, "parse", error)); }
+      }
       return candidate;
     } catch (error) {
       readSafe = false;
@@ -636,17 +665,6 @@ async function inspectAutosave(drivers: AutosaveDrivers): Promise<AutosaveSnapsh
     read("indexeddb", drivers.indexeddb),
     read("localstorage", drivers.localstorage),
   ]);
-  // Parsing a full atlas is only needed when two different valid-looking
-  // backends compete. The normal IndexedDB-only save path stays lightweight.
-  if (indexeddb.raw !== null && localstorage.raw !== null && indexeddb.raw !== localstorage.raw) {
-    for (const candidate of [indexeddb, localstorage]) {
-      try {
-        candidate.project = parseProject(candidate.raw!);
-      } catch (error) {
-        errors.push(issue(candidate.backend, "parse", error));
-      }
-    }
-  }
   let selected: AutosaveCandidate | undefined;
   if (indexeddb.raw !== null && (localstorage.raw === null || indexeddb.raw === localstorage.raw)) {
     selected = indexeddb;
@@ -674,6 +692,8 @@ async function inspectAutosave(drivers: AutosaveDrivers): Promise<AutosaveSnapsh
     errors,
     readSafe,
     divergentCopies: Boolean(indexeddb.project && localstorage.project && indexeddb.raw !== localstorage.raw),
+    recoveryCopies: [indexeddb, localstorage].flatMap((candidate) =>
+      candidate.raw !== null && !candidate.project ? [{ backend: candidate.backend, text: candidate.raw }] : []),
   };
 }
 
@@ -712,12 +732,13 @@ function loadedConflict(
     errors: [...errors, ...snapshot.errors],
     migrated: false,
     revision,
+    recoveryCopies: snapshot.recoveryCopies,
     conflict: {
       expectedRevision: revision,
       currentRevision: snapshot.readSafe ? snapshot.revision : undefined,
       backend: snapshot.backend,
       alternateBackend: snapshot.backend === "none" ? undefined : snapshot.backend,
-      reason: snapshot.divergentCopies ? "divergent-copies" : "revision-changed",
+      reason: snapshot.recoveryCopies.length ? "unreadable-copy" : snapshot.divergentCopies ? "divergent-copies" : "revision-changed",
       backendRevisions: snapshot.backendRevisions,
     },
   };
@@ -733,11 +754,12 @@ function conflictState(
     errors,
     migrated: false,
     revision: snapshot.readSafe ? snapshot.revision : undefined,
+    recoveryCopies: snapshot.recoveryCopies,
     conflict: {
       expectedRevision,
       currentRevision: snapshot.readSafe ? snapshot.revision : undefined,
       backend: snapshot.backend,
-      reason: snapshot.divergentCopies ? "divergent-copies" : "revision-changed",
+      reason: snapshot.recoveryCopies.length ? "unreadable-copy" : snapshot.divergentCopies ? "divergent-copies" : "revision-changed",
       backendRevisions: snapshot.backendRevisions,
     },
   };

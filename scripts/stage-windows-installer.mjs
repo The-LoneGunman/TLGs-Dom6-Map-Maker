@@ -1,4 +1,4 @@
-import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -50,8 +50,15 @@ export async function stageWindowsInstaller({ projectRoot, nodeRoot, outputDirec
   await requirePath(path.join(project, "src", "catalog", "data", "LICENSE.dom6inspector.txt"), "catalog license");
   await requirePath(path.join(project, "installer", "INSTALLER_NOTICES.txt"), "installer notices");
 
-  await rm(output, { recursive: true, force: true });
-  await mkdir(output, { recursive: true });
+  // Never clear an existing directory: a mistyped output must not erase source,
+  // a previous build, the Node distribution, or unrelated user files.
+  await mkdir(path.dirname(output), { recursive: true });
+  try {
+    await mkdir(output);
+  } catch (error) {
+    if (error.code === "EEXIST") throw new Error(`Installer output already exists; choose a new directory: ${output}`);
+    throw error;
+  }
 
   for (const relativePath of applicationFiles) {
     const source = path.join(project, relativePath);

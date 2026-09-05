@@ -10,6 +10,7 @@ import {
   type AutosaveLockManager,
 } from "../src/autosave";
 import { createDefaultProject } from "../src/generator";
+import { MAX_IMPORTED_STRING_LENGTH, parseProject, serializeProject } from "../src/export";
 
 class MemoryDriver implements AutosaveDriver {
   value: string | null;
@@ -230,8 +231,11 @@ test("restore catches read and parse errors and still tries the other backend", 
   const state = await loadProjectAutosave(drivers(indexeddb, localstorage));
 
   assert.equal(state.project?.seed, expected.seed);
-  assert.equal(state.backend, "indexeddb");
-  assert.equal(state.migrated, true);
+  assert.equal(state.backend, "localstorage");
+  assert.equal(state.migrated, false);
+  assert.equal(state.conflict?.reason, "unreadable-copy");
+  assert.equal(indexeddb.value, "{broken");
+  assert.equal(localstorage.value, JSON.stringify(expected));
   assert.ok(state.errors.some((entry) => entry.backend === "indexeddb" && entry.operation === "parse"));
 
   indexeddb.value = null;
@@ -242,6 +246,44 @@ test("restore catches read and parse errors and still tries the other backend", 
   assert.equal(failed.backend, "none");
   assert.equal(failed.project, undefined);
   assert.deepEqual(failed.errors.map((entry) => entry.operation), ["read", "read"]);
+});
+
+test("an editor value beyond import limits cannot overwrite a recoverable autosave", async () => {
+  const project = createDefaultProject("autosave-roundtrip-limits");
+  const original = serializeProject(project);
+  const indexeddb = new MemoryDriver(original);
+  const localstorage = new MemoryDriver(original);
+  project.description = "x".repeat(MAX_IMPORTED_STRING_LENGTH + 1);
+  const saved = await saveProjectAutosave(project, drivers(indexeddb, localstorage), { expectedRevision: autosaveRevision(original) });
+  assert.equal(saved.backend, "none");
+  assert.match(saved.errors[0]!.message, /description.*4096/);
+  assert.equal(indexeddb.value, original);
+  assert.equal(localstorage.value, original);
+  assert.equal((await loadProjectAutosave(drivers(indexeddb, localstorage))).project?.description, parseProject(original).description);
+});
+
+test("unreadable saved data requires explicit recovery before it can be replaced", async () => {
+  const indexeddb = new MemoryDriver("{saved-but-incomplete");
+  const localstorage = new MemoryDriver();
+  const loaded = await loadProjectAutosave(drivers(indexeddb, localstorage));
+  assert.equal(loaded.project, undefined);
+  assert.equal(loaded.conflict?.reason, "unreadable-copy");
+  assert.deepEqual(loaded.recoveryCopies, [{ backend: "indexeddb", text: "{saved-but-incomplete" }]);
+  const fresh = createDefaultProject("autosave-recovery-explicit");
+  const automatic = await saveProjectAutosave(fresh, drivers(indexeddb, localstorage), { expectedRevision: loaded.revision! });
+  assert.ok(automatic.conflict);
+  assert.equal(automatic.conflict.reason, "unreadable-copy");
+  assert.deepEqual(automatic.recoveryCopies, loaded.recoveryCopies);
+  assert.equal(indexeddb.value, "{saved-but-incomplete");
+  const retried = await saveProjectAutosave(fresh, drivers(indexeddb, localstorage), { expectedRevision: automatic.revision! });
+  assert.equal(retried.conflict?.reason, "unreadable-copy");
+  assert.deepEqual(retried.recoveryCopies, loaded.recoveryCopies);
+  assert.equal(indexeddb.value, "{saved-but-incomplete");
+  const explicit = await saveProjectAutosave(fresh, drivers(indexeddb, localstorage), {
+    expectedBackendRevisions: loaded.conflict!.backendRevisions,
+  });
+  assert.equal(explicit.backend, "indexeddb");
+  assert.equal(parseProject(indexeddb.value!).seed, fresh.seed);
 });
 
 test("load and guarded save return revision tokens and advance them after a successful write", async () => {

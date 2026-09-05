@@ -464,6 +464,10 @@ export function generateProject(project: MapProject): MapProject {
     const normalized = cloneProject({ ...next, planes: [plane] } as MapProject).planes[0]!;
     normalized.kind = normalizePlaneKind(normalized.kind);
     normalized.variant = normalized.variant ?? ARCHETYPE_PROFILES[normalized.kind].defaultVariant;
+    if (normalized.kind === "underworld" && normalized.ownershipMode === "solid") {
+      normalized.ownershipMode = "sparse";
+      next.generationWarnings!.push(`${normalized.name} now uses chamber-and-corridor ownership so its River Styx and authored crossings match the exported map.`);
+    }
     normalized.autoSize = normalized.autoSize ?? index === 0;
     normalized.provinceTarget = clamp(Math.round(normalized.provinceTarget), 8, 800);
     return normalized;
@@ -496,13 +500,26 @@ export function generateProject(project: MapProject): MapProject {
   const coreTotal = [...coreTargets.values()].reduce((sum, value) => sum + clamp(value, 8, 800), 0)
     || next.settings.players * next.settings.provincesPerPlayer;
 
+  // Freeze the entire plan before changing any targets. Old generated province
+  // arrays and earlier callbacks must not affect another bonus realm's size.
+  const bonusPlanningPlanes = next.planes.map((plane, index) => ({
+    ...plane,
+    provinces: [],
+    provinceTarget: plane.autoSize
+      ? isCorePlaneForSizing(plane)
+        ? coreTargets.get(index) ?? plane.provinceTarget
+        : Math.max(18, Math.round(coreTotal * next.settings.specialPlaneSizePercent! / 100))
+      : plane.provinceTarget,
+  }));
+  const bonusStartTargets = generatedStartPlaneTargets({ planes: bonusPlanningPlanes }, requestedStarts);
+
   next.planes = next.planes.map((normalized, index) => {
     if (normalized.autoSize) {
       if (isCorePlaneForSizing(normalized)) {
         normalized.provinceTarget = coreTargets.get(index) ?? normalized.provinceTarget;
       } else {
-        const allocatedStarts = plannedGeneratedStartsOnPlane(next, requestedStarts, "cave", index)
-          + plannedGeneratedStartsOnPlane(next, requestedStarts, "other", index);
+        const allocatedStarts = (bonusStartTargets.get("cave")?.get(normalized.id) ?? 0)
+          + (bonusStartTargets.get("other")?.get(normalized.id) ?? 0);
         // Higher requested capital degree expands the protected two-ring. Scale
         // capacity with it, then reserve four additional neutral provinces per
         // start so hard special realms retain themed guardians.
@@ -3751,10 +3768,16 @@ function matchesStartType(ref: ProvinceRef, type: StartType, adjacency: Map<stri
 }
 
 function classifyStartType(ref: ProvinceRef, adjacency: Map<string, string[]>): StartType {
-  for (const type of ["water", "coastal", "cave", "other", "land"] as StartType[]) {
-    if (matchesStartType(ref, type, adjacency)) return type;
-  }
-  return "other";
+  return classifyCurrentStart(ref.plane, ref.province, adjacency);
+}
+
+/** Derived from the present map, including edits made after generation. */
+export function classifyCurrentStart(plane: Plane, province: Province, adjacency = adjacencyFor(plane, { traversableOnly: true })): StartType {
+  if (isWaterProvince(province)) return "water";
+  if (isCaveProvince(province) || ARCHETYPE_PROFILES[plane.kind].caveFamily) return "cave";
+  if (!isSurfaceCorePlaneForSizing(plane)) return "other";
+  const neighbours = new Set(adjacency.get(province.id) ?? []);
+  return plane.provinces.some((item) => neighbours.has(item.id) && isWaterProvince(item)) ? "coastal" : "land";
 }
 
 function isEligibleStartProvince(province: Province): boolean {
@@ -4717,9 +4740,7 @@ export function calculateFairness(project: MapProject): FairnessMetrics {
   const actual: StartDistribution = { land: 0, coastal: 0, water: 0, cave: 0, other: 0 };
   for (const start of generatedStarts) {
     const local = localAdjacency.get(start.plane.id)!;
-    const type = start.province.startType && matchesStartType(start, start.province.startType, local)
-      ? start.province.startType
-      : classifyStartType(start, local);
+    const type = classifyStartType(start, local);
     actual[type] += 1;
   }
   const allocationError = START_TYPES.reduce((sum, type) => sum + Math.abs(requested[type] - actual[type]), 0);
