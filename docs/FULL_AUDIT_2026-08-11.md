@@ -3,17 +3,17 @@
 **Original audit snapshot:** 2026-08-11
 **Remediation status updated:** 2026-08-13
 
-This is a historical record. See the [2026-09-05 follow-up](BUGFIX_AUDIT_2026-09-05.md) for newer findings, repairs, and the now-clean dependency audit.
+This is a historical record, not the current issue tracker. See the [2026-09-05 follow-up](BUGFIX_AUDIT_2026-09-05.md) for later repairs and its dated clean dependency-audit result, and the [user guide](USER_GUIDE.md) for current behavior. Source links and line references below describe historical snapshots and may no longer align with the present tree. Test counts and engine-load observations are not new v0.1.4 verification.
 
 **Scope:** generation, multiplayer balance, all plane families, UI workflows, accessibility, persistence, project/catalog import, validation, Dominions map compilation, D6M encoding, direct install, ZIP packaging, dependencies, and documentation
 
-**Current release decision:** **The engineering release blockers found through the original and post-merge audits are resolved and regression-tested. Both a compact package and a representative eight-plane package were accepted by the installed Dominions 6 engine through its scripted new-game path. The eight-plane package contained all eight map/D6M pairs, eight linked gate groups, eight starts, and eight recommended thrones; the engine created its game state and generated underworld files successfully. The remaining human-only check is optional extended visual play, not an engineering release blocker.**
+**Release decision recorded on 2026-08-13:** **The engineering release blockers found through the original and post-merge audits were resolved and regression-tested. Both a compact package and a representative eight-plane package were accepted by the installed Dominions 6 engine through its scripted new-game path. The eight-plane package contained all eight map/D6M pairs, eight linked gate groups, eight starts, and eight recommended thrones; the engine created its game state and generated underworld files successfully. Extended visual play was classified as an optional follow-up, not an engineering release blocker.**
 
 No P0 catastrophic security issue was found. The original audit found **5 P1 release blockers**, **17 P2 defects or material release risks**, and several P3 hardening and polish items. This document preserves their original evidence and reproductions for traceability; those historical descriptions are not a statement that every item remains present in the current tree.
 
-## Current status
+## Remediation status as of 2026-08-13
 
-| Original finding | Current disposition |
+| Original finding | August disposition |
 |---|---|
 | P1-1 staged-plane restore | **Resolved.** Schema-v1 import round-trips intentionally empty planned planes while validation keeps them out of playable export until generation. |
 | P1-2 province-array/D6M mismatch | **Resolved.** Import rejects arrays that are not stored in local province-number order, and D6M encoding rechecks this invariant. |
@@ -33,13 +33,13 @@ A fresh parallel generation, persistence/export, and live-browser audit found an
 
 The original P2 set has also been substantially remediated: all authored start types now share capital cleanup/validation, staging preserves gateways, destructive replacement is confirmed with backup access, New atlas exists, slider history is coalesced, imported command values and custom catalogs use the active validation data, impossible start plans are preflighted, special-plane guardian capacity produces persistent warnings, temperature flags are exclusive, reserved Windows basenames are rewritten, the test runner is declared, and direct install uses staging, backups, rollback, binary-first publication, and cleanup-last ordering.
 
-Current known limitations and release gates:
+Limitations recorded in August:
 
 - The compact package and a representative eight-plane package passed the installed engine's scripted new-game loader. The eight-plane smoke verified all eight exported map/D6M pairs plus the generated underworld files. Longer visual play remains worthwhile post-release, but is no longer classified as an engineering release gate.
 - ZIP assembly is still in-memory. The export dialog now warns before cautionary sizes and disables only ZIP when the estimated peak crosses the safety ceiling; direct install remains the large-atlas path.
 - Browser file access has no atomic rename. Direct install therefore provides transaction-like staging and rollback, not filesystem-level atomicity, and reports retained recovery files if rollback itself is denied.
 - Autosave is one browser-local recovery slot, not cloud sync or a recent-project library. Revision conflicts are explicit; portable Editable project JSON remains the durable backup format.
-- The production dependency audit is clean. Compatible React/RSC, Vite, Wrangler, and Cloudflare tooling updates reduced the full development-tool audit from 17 findings to 2 high findings. Both remaining advisories come from Vinext's exact `image-size@2.0.2` dependency; no patched `image-size` release exists yet, and npm's proposed forced Vinext downgrade is not compatible release maintenance. The non-blocking raw-directive, imported-catalog trust-label, and tiny-map Styx quality items remain subjects for release maintenance.
+- The August production dependency audit was clean. Compatible React/RSC, Vite, Wrangler, and Cloudflare tooling updates reduced the full development-tool audit from 17 findings to 2 high findings inherited from Vinext's exact `image-size@2.0.2` dependency. No patched `image-size` release was available at that review date; npm's proposed forced Vinext downgrade was rejected. The [September follow-up](BUGFIX_AUDIT_2026-09-05.md) records closure of the affected chain. Raw-directive, imported-catalog trust-label, and tiny-map Styx items were recorded as non-blocking maintenance at the August review.
 - Some mathematically constrained maps cannot achieve every requested spacing, connection, throne-access, or guardian-density target simultaneously. The generator preserves hard safety rules and reports best-effort quality warnings instead of silently weakening them.
 
 ## Severity definitions
@@ -51,7 +51,7 @@ Current known limitations and release gates:
 
 ## Historical P1 findings (resolved)
 
-The evidence and requested remedies below describe the pre-remediation snapshot. The current disposition is recorded above and enforced by focused regressions.
+The evidence and requested remedies below describe the pre-remediation snapshot. Their August remediation status is recorded above.
 
 ### P1-1: A staged plane makes the saved project unrestorable — resolved
 
@@ -118,7 +118,7 @@ The maximum project eventually had zero validation errors, zero duplicate names,
 
 ## Historical important findings (P2)
 
-This table is retained as the original defect ledger. Most rows now have implemented fixes or bounded mitigations summarized in **Current status**; P2-9 remains a constrained-map quality case and P2-16 remains release-maintenance work.
+This table retains the original defect ledger, not the current issue tracker. Most rows had implemented fixes or bounded mitigations by the August remediation status above. P2-9 was retained as a constrained-map quality case; P2-16's dependency findings were subsequently closed in the [September follow-up](BUGFIX_AUDIT_2026-09-05.md).
 
 | ID | Finding and evidence | Required remediation |
 |---|---|---|
@@ -137,12 +137,12 @@ This table is retained as the original defect ledger. Most rows now have impleme
 | P2-13 | **Direct install is non-atomic.** [`installPackage`](../src/export.ts#L84-L116) deletes obsolete planes, overwrites map/support files, and only then finishes D6M rendering/writing. A quota, permission, or encode failure can leave a previously working map partially updated. | Render/stage everything first, write D6Ms before their `.map` references, commit atomically where possible, preserve backups, and delete stale files last. Inject failures at each stage in tests. |
 | P2-14 | **Windows-reserved names remain valid-looking export stems.** `CON`, `PRN`, `AUX`, and `NUL` survive [`sanitizeMapName`](../src/domain.ts#L425-L432), so direct install or ZIP extraction can fail. | Detect reserved device basenames case-insensitively and prefix/suffix them; display the normalized result before export. |
 | P2-15 | **Custom-catalog storage recovery can throw a second time.** The load catch and Reset call `localStorage.removeItem` without guarding the same denied-storage condition around [`MapMakerApp.tsx`](../src/MapMakerApp.tsx#L338-L350) and [`MapMakerApp.tsx`](../src/MapMakerApp.tsx#L503-L506). | Use a guarded storage adapter for get/set/remove and keep session-only custom data usable when persistence is unavailable. |
-| P2-16 | **The original development/runtime toolchain had 17 audit findings.** Compatible upgrades now use React/RSC 19.2.8, Vite 8.2.1, Wrangler 4.121.0, Cloudflare Vite plugin 1.51.3, and current compatible Vite plugins. `npm audit --omit=dev` remains clean and the complete graph is down to 2 high findings, both inherited from Vinext's exact `image-size@2.0.2` dependency. | Keep Vinext pinned until it accepts a patched `image-size`; no such package release exists as of this update. Do not accept npm's incompatible forced downgrade. Recheck this residual during release maintenance. |
+| P2-16 | **The original development/runtime toolchain had 17 audit findings.** August upgrades used React/RSC 19.2.8, Vite 8.2.1, Wrangler 4.121.0, Cloudflare Vite plugin 1.51.3, and compatible Vite plugins. The production audit was clean; the complete graph had 2 high findings inherited from Vinext's exact `image-size@2.0.2` dependency. | The August decision was to avoid npm's incompatible forced downgrade and track the dependency. The [September follow-up](BUGFIX_AUDIT_2026-09-05.md) records the later compatible framework update that removed the affected chain. |
 | P2-17 | **A clean clone cannot run the advertised full test script.** After `npm.cmd ci`, `npm.cmd test` completed the production build and both rendered-HTML tests, then stopped with `'tsx' is not recognized`. The script invokes `tsx --test tests/*.test.ts`, but `tsx` is absent from both dependencies and devDependencies in [`package.json`](../package.json). The established development checkout passed because it retained an undeclared local runner. | Declare and lock a compatible `tsx` dev dependency, or replace it with a declared/native TypeScript test path. Add a clean-clone CI job that runs `npm ci`, `npm test`, typecheck, and lint from an empty dependency directory. |
 
 ## Historical P3 hardening and quality ledger
 
-This list preserves the original lower-priority findings. Entries marked **Resolved** have landed regressions in the current release branch; the unmarked entries remain non-blocking hardening or quality work.
+This list preserves the August lower-priority findings and remediation labels. Unmarked entries describe that snapshot, not confirmed open issues in the current release. In particular, the historical interaction-copy bullet below predates the same-plane gate feedback and plane-removal confirmation now described in the user guide; it should not be read as a current UI inventory.
 
 - **Resolved — import resource ceilings:** browser pickers reject oversized project/catalog files before `file.text()`, and recursive schema validation enforces bounded planes, provinces, edges, gates, collections, strings, directives, and safe nested fields before cloning.
 - **Resolved — delimiter-safe IDs:** imported plane, province, edge, gate, and reference IDs use a bounded delimiter-safe grammar.
@@ -158,10 +158,10 @@ This list preserves the original lower-priority findings. Entries marked **Resol
 
 ## Verification record
 
-The audit did not merely search for failures. It independently verified these release-critical paths:
+The August audit recorded these release-critical checks:
 
 - Production build, TypeScript, and lint pass.
-- The lockfile declares the TypeScript test runner that the full `npm test` command invokes. The current full run passes the production build, 7 rendered-output/style checks, and 271 TypeScript tests (278 total); typecheck and lint also pass. Focused regressions cover worker cancellation, bounded project import, autosave conflicts and races, start reservation/protection and capacity, direct-install ownership/rollback, ZIP memory gating, persistent action errors, readable responsive controls, and destructive UI workflows.
+- The lockfile declared the TypeScript test runner that the full `npm test` command invoked. The August remediation run passed the production build, 7 rendered-output/style checks, and 271 TypeScript tests (278 total); typecheck and lint also passed. Focused regressions covered worker cancellation, bounded project import, autosave conflicts and races, start reservation/protection and capacity, direct-install ownership/rollback, ZIP memory gating, persistent action errors, readable responsive controls, and destructive UI workflows.
 - All 121 plane-kind/variant combinations generate deterministically.
 - Player limits 2, 6, 16, and 32; provinces/player 8, 16, and 30; plane counts 1-8; and supported start categories were exercised.
 - Compatible start plans retained exact categories, hard three-move spacing, and no shared capital surroundings.
@@ -178,7 +178,7 @@ The audit did not merely search for failures. It independently verified these re
 
 ## Historical remediation order
 
-The numbered plan below was the original implementation order. Items 1-6 and the declared-runner portion of item 7 are complete; dependency maintenance and the external smoke test remain.
+The numbered plan below records the original remediation order. By 2026-08-13, the runner/toolchain/full-suite work and both compact and representative eight-plane engine-load smokes were complete. The dependency findings recorded here were subsequently closed in the September follow-up.
 
 1. Fix project round-trip and autosave integrity (P1-1, P1-3, P1-4).
 2. Fix province-order canonicalization before any further export claims (P1-2).
@@ -186,7 +186,7 @@ The numbered plan below was the original implementation order. Items 1-6 and the
 4. Unify all authored-start safety validation and eliminate silent gateway/manual-edit loss.
 5. Harden numeric arguments, custom-catalog validation, filenames, and install atomicity.
 6. Restore special-plane guardian guarantees and improve throne/Styx/start-plan preflight quality.
-7. Declare the clean-install test runner, upgrade the compatible local runtime toolchain, then rerun every audit corpus and live Dominions load tests. The runner/toolchain/full-suite portion and both compact and representative eight-plane engine-load smokes are complete. The two blocked Vinext transitive advisories remain documented development-tool maintenance rather than a shipped runtime dependency.
+7. Declare the clean-install test runner, upgrade the compatible local runtime toolchain, then rerun every audit corpus and live Dominions load tests. The runner/toolchain/full-suite portion and both engine-load smokes were complete by August 13. Two Vinext transitive advisories were still recorded then as development-tool maintenance; see the September closure above.
 
 ## External engine smoke tests
 

@@ -12,7 +12,7 @@ plane lookup values.
 - Revision: `cfac4311bc0b58053b8dead7bffbc036ba9bd5dc`
 - Revision date: 2026-05-26
 - Upstream description: “Update to 6.35”
-- License: GNU General Public License v3.0; see `LICENSE.dom6inspector.txt`
+- License: GNU General Public License v3.0; see [LICENSE.dom6inspector.txt](LICENSE.dom6inspector.txt)
 - Used for: units; commander/troop roles from nation and magic-site recruitment slots; magic sites and nation home-site references; nations; special plane IDs; site-location lookup values; and the generated province-name reservation set (playable nation names/epithets, nation home-site names, official plane names, and Nexus)
 - Source paths: `gamedata/BaseU.csv`, `gamedata/MagicSites.csv`,
   `gamedata/nations.csv`, `gamedata/other_planes.csv`, and
@@ -41,9 +41,9 @@ official content updates were checked against the pinned 6.35 data:
 - [Dominions 6.35](https://steamcommunity.com/games/2511500/announcements/detail/679624547358474861): Gnu, Gnu Clan Cavalry, Gnu Clan Commander, and the Throne of Violence.
 
 The resulting built-in catalog includes LA Pyrène as nation `#123`, Zemaitia
-as nation `#124`, current named units through Gnu Clan Commander `#4134`, and
+as nation `#124`, units in the pinned 6.35 export through Gnu Clan Commander `#4134`, and
 throne sites through the Throne of Violence `#1405`. See
-`docs/CONTENT_CATALOG.md` and `tests/catalog.test.ts` for the exact verified
+[catalog coverage](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/CONTENT_CATALOG.md) and [catalog tests](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/tests/catalog.test.ts) for the exact verified
 name/ID coverage. Patch announcements establish which content was added;
 numeric game IDs come from the pinned Dom6 Inspector 6.35 export.
 

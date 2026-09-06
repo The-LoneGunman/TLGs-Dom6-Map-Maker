@@ -1,8 +1,20 @@
 # Adaptive illustrated asset specification
 
-This contract lets Pantokrator Atlas add reusable artwork without assuming that a randomly generated province is square, large, or even compact. Artwork is selected only when its declared realm, terrain, geometry, adjacency, and resolution constraints all pass. A failed match is normal: the renderer follows the asset's deterministic fallback chain and never distorts an image to make it fit.
+This document separates the shipped artwork from the authoring contract for future asset packs. Reusable art must accommodate randomly generated provinces without assuming they are square, large, or compact.
 
-The machine-readable TypeScript contract and validator live in `src/artAssetManifest.ts`. The first production inventory is `public/map-art/manifest.json`, with periodic grayscale materials below `public/map-art/materials/`. These rules also apply to generated assets before they are accepted into that inventory.
+## Current implementation (v0.1.4)
+
+The editor and high-resolution PNG preview use four bundled grayscale materials, seven realm backdrops, and procedural terrain marks. The renderer selects and combines materials from the effective terrain flags in code, repeats them in map-relative coordinates, and clips them to canonical province ownership. Missing images leave the underlying terrain or realm color intact. Optional procedural marks use safe interior footprints and can be reduced or omitted on constrained shapes.
+
+The `earth.png`, `foliage.png`, `stone.png`, and `water.png` materials are opaque, periodic 1024 x 1024 tiles in `public/map-art/materials/`. They repeat rather than stretching to match a province. See [artwork provenance](ASSET_PROVENANCE.md) for the inventory and source history.
+
+The TypeScript contract and validator live in [`src/artAssetManifest.ts`](../src/artAssetManifest.ts); [`public/map-art/manifest.json`](../public/map-art/manifest.json) describes the four shipped materials. Tests validate this inventory, but the runtime does not consume it as a general asset-pack engine. Multi-resolution selection, bitmap decals, line brushes, adjacency/family avoidance, and ordered asset fallback chains are **future implementation requirements**, not shipped features.
+
+Artwork appears automatically in the editor and PNG previews; there is no separate illustrated-pack export mode. Native `.map`/`.d6m` packages contain gameplay geometry and terrain data, not these raster illustrations. Dominions renders its own native scenery.
+
+## Future pack requirements
+
+The remaining sections define the intended authoring and rendering contract, not completed runtime behavior or a committed release roadmap. A future pack engine must select artwork only when its declared realm, terrain, geometry, adjacency, and resolution constraints pass. A failed match must use a compatible fallback instead of distorting an image to fit.
 
 ## Asset classes
 
@@ -17,23 +29,23 @@ Complete painted province plates are deliberately excluded from the universal pa
 
 ## Geometry normalization
 
-Eligibility uses normalized geometry so the same manifest works at every output resolution:
+Manifest eligibility must use normalized geometry so the same pack can work at every output resolution:
 
 - **Area ratio** is polygon area divided by the median province area on its plane.
 - **Aspect ratio** is the major bounding-box dimension divided by the minor dimension, so it is always at least 1.
 - **Equivalent radius** is `sqrt(area / pi)`.
 - **Interior radius** is the distance from the selected interior pole to the nearest canonical border.
-- **Compactness** is interior radius divided by equivalent radius.
+- **Manifest inradius ratio** (`minInscribedToEquivalentRadius`) is interior radius divided by equivalent radius. This differs from the current procedural renderer's `compactness` metric, `4*pi*area/perimeter²`.
 - **Shape class** is a deterministic bucket (`tiny`, `compact`, `broad`, `elongated`, `corridor`, or `coastal`). The class is descriptive; all numeric envelope checks still apply.
 
-A decal is eligible only when the target bounds remain inside the polygon after `safeInsetRatio` is applied. Uniform downscaling may be tried down to `render.scale.min`; below that, the next fallback is used. `maxCoverageRatio` prevents a technically fitting decal from visually overwhelming a small province. Long ornaments use dedicated `elongated` or `corridor` records rather than squashing compact art.
+A future decal renderer must accept a decal only when the target bounds remain inside the polygon after `safeInsetRatio` is applied. Uniform downscaling may be tried down to `render.scale.min`; below that, use the next fallback. `maxCoverageRatio` must prevent a technically fitting decal from visually overwhelming a small province. Long ornaments need dedicated `elongated` or `corridor` records rather than squashed compact art.
 
 For wrapped planes, candidate positions are evaluated in canonical coordinates and repeated only in the visible seam copies. The selection hash uses the canonical province and edge IDs, so opposite edges cannot choose different variants.
 
 ## Resolution and sampling
 
 - Author at two or more source resolutions when an asset can appear from 4K exports down to the editor viewport. Resolution variants must have the same aspect ratio within 1%.
-- The renderer chooses the smallest source that meets the target pixel size, subject to the manifest's hard `renderedPixels` limits.
+- A pack renderer must choose the smallest source that meets the target pixel size, subject to the manifest's hard `renderedPixels` limits.
 - Upscaling is capped at 1.5x by validation; production packs should normally use 1.25x or less. If no source qualifies, use a fallback.
 - Downsampling should use browser high-quality interpolation. Pixel-art assets, if ever introduced, require a separate asset class rather than silently changing sampling.
 - Text, province numbers, starts, thrones, gates, sites, and selection markers remain renderer-native overlays and are never baked into art.
@@ -50,7 +62,7 @@ All files are authored in sRGB. Pantokrator Atlas does not use chroma keys or co
 
 ## Placement and adjacency rules
 
-Every placement is checked against actual generated map semantics, not inferred from pixel color:
+Every semantic asset placement must be checked against generated map data, not inferred from pixel color. These requirements concern future bitmap decorations; the shipped procedural cave mark indicates Cave terrain, not a gateway:
 
 - Ports require a land/coastal province with a real water neighbor. Reefs and kelp require aquatic terrain.
 - Bridges require a `bridge` edge; river art requires a `river` edge. Mountain ridges require a mountain-border, impassable, mountain-pass, or explicitly tagged mountain feature.
@@ -60,7 +72,7 @@ Every placement is checked against actual generated map semantics, not inferred 
 - `minSeparationRatio`, family avoidance, and graph-hop separation keep identical landmarks from forming visible rows or repeating in every neighboring province.
 - Neighbor constraints prevent contradictory transitions, such as shoreline foam away from water or a lush tree cluster in infernal waste.
 
-Texture transitions use clipping and an inset blend band, not two stretched edge sprites. Where no compatible transition exists, the ordinary province border hides the seam.
+Future texture transitions should use clipping and an inset blend band, not two stretched edge sprites. Where no compatible transition exists, retain the ordinary province border.
 
 ## Deterministic variety
 
@@ -68,19 +80,19 @@ Asset selection must be independent of array order. Candidates are sorted by sta
 
 `project seed | manifest selectionSalt | plane ID | province/edge ID | layer | family`
 
-The same hash selects resolution-independent rotation, mirroring, offset, and variant. Failed candidates are tried in a stable order. No asset call consumes the generator's global gameplay random stream, so adding artwork cannot change starts, terrain, thrones, gates, or guardians.
+The same hash must select resolution-independent rotation, mirroring, offset, and variant. Failed candidates must be tried in a stable order. Asset calls must not consume the generator's global gameplay random stream or change starts, terrain, thrones, gates, or guardians.
 
 Mirroring and rotation are opt-in per asset. Text, asymmetric heraldry, directional shadows, waterfalls, and similar features normally disable mirroring. Path brushes follow path direction but use canonical edge endpoint ordering so regeneration cannot reverse them unexpectedly.
 
 ## Fallback sequence
 
-The renderer follows this non-destructive order:
+A future pack renderer must follow this non-destructive order:
 
 1. Select an exact-compatible family member whose shape and source resolution both pass.
 2. Try the record's ordered fallback IDs; each fallback must independently pass compatibility and geometry.
 3. Use the declared raster-free terminal fallback: existing procedural marks/edge, terrain gradient, realm color, or omission.
 
-Fallback graphs are validated for missing IDs, self-references, and cycles. A missing or undecodable file follows exactly the same path. Asset failures therefore cannot leave a blank province, corrupt owner colors, change connectivity, or block map export.
+The manifest validator checks fallback graphs for missing IDs, self-references, and cycles. Runtime handling of missing or undecodable files must follow the same chain. A pack implementation must demonstrate that asset failures do not leave blank provinces, corrupt ownership, change connectivity, or block map export.
 
 ## Recommended source envelopes
 
@@ -95,9 +107,9 @@ These are authoring targets, not permission to bypass each record's manifest lim
 | Line brush | 512×64 and 1024×128 strips | Cap-dependent | 4–8 px | Long axis seamless; caps and joins separate where needed |
 | Backdrop | 2048 and 4096 px square | 0 | 0 | Important content inside central 50%; cover-crop safe |
 
-The current `earth.png`, `foliage.png`, `stone.png`, and `water.png` source materials are 1024-pixel square, opaque, mathematically periodic tiles. Their manifest compatibility maps them to terrain families, while grayscale luminance lets the renderer apply realm-, terrain-, and condition-specific color without baking a contradictory palette into the source. Because they repeat and are clipped to canonical ownership, they are safe for every province aspect ratio and area; they never rely on a province-shaped plate.
+## Acceptance requirements for future packs
 
-## Acceptance checks for every shipped pack
+This is an acceptance checklist for new pack implementations, not a record that every listed visual test has been performed:
 
 1. Validate the manifest before allocating images.
 2. Render each asset at its minimum, preferred, and maximum scale in every allowed shape class.
@@ -108,4 +120,4 @@ The current `earth.png`, `foliage.png`, `stone.png`, and `water.png` source mate
 7. Compare repeated generations byte-for-byte at the placement-plan level, and verify that enabling art does not alter map/project data.
 8. Inspect alpha edges over light snow, dark void, water, and high-contrast neighboring terrain for halos or one-pixel seams.
 
-The illustrated mode can remain a one-click export option: the application ships the validated pack, selects compatible assets automatically, and packages every generated file. Users never need to download, resize, place, or repair artwork.
+A shipped pack should remain automatic: users should not need to download, resize, place, or repair its artwork. Any future playable illustrated-map export would need its own format support and documentation; the current native D6M export does not embed the preview artwork.

@@ -1,6 +1,6 @@
 # September 2026 bugfix review
 
-Reviewed against public release v0.1.2. Three independent sub-agents audited generation/fairness, persistence/export/install, and editor interactions; the primary agent implemented and tested the repairs.
+Historical review performed on 2026-09-05 against public release v0.1.2. Three independent sub-agents audited generation/fairness, persistence/export/install, and editor interactions; the primary agent implemented and tested the repairs. This record predates v0.1.4's combined-terrain artwork/export changes; the results below apply to the repairs reviewed here. See the [user guide](USER_GUIDE.md) for current behavior.
 
 ## Confirmed issues repaired
 
@@ -29,4 +29,4 @@ Reviewed against public release v0.1.2. Three independent sub-agents audited gen
 
 These are bounded source, component-event, generation, file-driver, and HTTP checks. This review did not repeat a live Dominions play session or an assistive-technology/touch-device test. Earlier engine-load evidence remains in the [August record](FULL_AUDIT_2026-08-11.md); it is not new playtest evidence for this patch.
 
-The dependency change removes `image-size` from the framework dependency graph. Its upstream [ICNS advisory](https://github.com/advisories/GHSA-w3rx-r6r6-pgpr) still lists no patched package, so removal—not an override or forced downgrade—closes this application's affected chain.
+The dependency change removed `image-size` from the framework dependency graph. Its upstream [ICNS advisory](https://github.com/advisories/GHSA-w3rx-r6r6-pgpr) listed no patched package at the review date; removing the dependency closed this application's affected chain without an override or forced downgrade.

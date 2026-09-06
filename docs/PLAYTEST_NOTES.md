@@ -1,6 +1,6 @@
-# Pantokrator Atlas playtest and release notes
+# Historical August 2026 playtest notes
 
-This checklist records requirements and findings from the final manual audit, option-matrix run, and interactive browser playtest. A checked item has an implementation and regression coverage; unchecked items remain in the active release pass.
+This checklist preserves the August 2026 audit and browser-playtest evidence, with checklist updates through 2026-08-12. Checked items describe the implementation and coverage recorded then. Test counts, timings, and manual observations below are historical results, not new v0.1.4 verification. See the [current user guide](USER_GUIDE.md) and [September follow-up](BUGFIX_AUDIT_2026-09-05.md) for later behavior and checks.
 
 ## Plane identity and presentation
 
@@ -57,9 +57,9 @@ This checklist records requirements and findings from the final manual audit, op
 - [x] Start, throne, gate, site, defender, PD, terrain, owner, and catalog validation.
 - [x] Reserved nation/owner IDs and blocked/impassable movement semantics.
 
-## Final evidence
+## Recorded August evidence
 
-- Production build, lint, TypeScript, and 270 automated checks pass (3 rendered-output checks plus 267 TypeScript tests).
+- Production build, lint, TypeScript, and 270 automated checks passed (3 rendered-output checks plus 267 TypeScript tests).
 - A deterministic 34-case settings fuzz matrix passed for 2–32 players, 1–3 planes, 8–30 provinces per player, start-degree targets 1–8, water 0–60%, and every resolution/wrap mode exercised by the suite. All requested start categories, graphs, compiled maps, and validation contracts were clean.
 - All 121 plane-kind × terrain-variant combinations generated deterministically. The export audit covered 8,712 provinces and 1,784 guardian groups with no invalid catalog IDs, off-theme poptypes, independent `#defence`, or guardian incursions into start two-rings.
 - The final Abyss audit covered all 11 variants and 83 guardian groups: every commander was Demon General #1314 or Demon Priest #1609, with only Lesser Horror #307, Horror #308, Demon Knight #489, and Disease Demon #1662 squads.
@@ -73,8 +73,8 @@ This checklist records requirements and findings from the final manual audit, op
 
 ## Inspiration-derived follow-ups
 
-These are useful future options rather than release blockers:
+Subsequent implementation includes None/Soft/Hard economy correction and configurable ocean layouts with continent-count targets. The remaining ideas below are possible follow-ups, not release blockers or a committed roadmap:
 
 - Nation/age-aware capital-circle weighting and valuable-province balance modes, inspired by [Cartographic Revision](https://corbeau.itch.io/cartographic-revision).
-- Per-stage rerolls, regional inspection lenses, disciples/team presets, and explicit soft/hard population-balance modes, inspired by [DreamAtlas](https://tlaloca.itch.io/dreamatlas).
-- Water-body clustering controls, reusable layout presets, alternate labeled-preview styles, and deeper manual layout editing, inspired by [MapNuke 2](https://nuke-haus.itch.io/mapnuke-2).
+- Per-stage rerolls, regional inspection lenses, and disciples/team presets, inspired by [DreamAtlas](https://tlaloca.itch.io/dreamatlas).
+- Reusable layout presets, alternate labeled-preview styles, and deeper manual layout editing, inspired by [MapNuke 2](https://nuke-haus.itch.io/mapnuke-2).

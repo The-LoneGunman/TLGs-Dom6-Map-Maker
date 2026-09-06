@@ -2,7 +2,7 @@
 
 Pantokrator Atlas is a local-first map maker for Dominions 6. It generates deterministic, multiplayer-oriented atlases with one to eight planes and exports native `.map` and `.d6m` files that Dominions can load directly.
 
-This guide covers the recommended workflow, every major option in the interface, manual editing, validation, installation, and common problems.
+This guide describes v0.1.4: the recommended workflow, every major option in the interface, manual editing, validation, installation, and common problems. For development from a GitHub checkout, see [Develop from source](../README.md#develop-from-source).
 
 ## Contents
 
@@ -40,19 +40,26 @@ Use the local Windows release if you want an offline copy. Source, releases, and
 3. Open **Pantokrator Atlas** from the Start Menu.
 4. Keep the launcher terminal open while using Atlas. Press **Ctrl+C** there, or close it, when finished.
 
-The installer includes the tested application and a private Node.js runtime. It does not modify the system Node.js installation, run npm, or download dependencies. The launcher runs only on your computer and opens Atlas when ready. If port 3000 is occupied, it prints and opens another local address.
+The installer includes the tested application and a private Node.js runtime. It does not modify the system Node.js installation, run npm, or download dependencies. The launcher runs only on your computer and opens Atlas when ready at `http://127.0.0.1:<port>/`, choosing a free port from 3000 through 3099.
 
-The setup is not currently code-signed, so Windows may show an unknown-publisher warning. Download it only from the project's GitHub release page. Each installer has a matching `.sha256` file for integrity verification.
+The setup is not currently code-signed, so Windows may show an unknown-publisher warning. Download it only from the project's GitHub release page. To check integrity, download its matching `Pantokrator-Atlas-Setup-x64.exe.sha256`, open PowerShell in that download folder, and run:
 
-For a portable copy instead, download `Pantokrator-Atlas-Windows.zip`, install [Node.js 22.13.0 or newer](https://nodejs.org/en/download), extract the archive to a writable folder, and run **Start Pantokrator Atlas.cmd** there. Never run the launcher inside the ZIP or from the Steam game directory.
+```powershell
+Get-FileHash -Algorithm SHA256 -LiteralPath "Pantokrator-Atlas-Setup-x64.exe"
+Get-Content -LiteralPath "Pantokrator-Atlas-Setup-x64.exe.sha256"
+```
 
-Hosted and local copies use separate browser storage. Use **Editable project JSON** to move projects between them.
+The hash values must match, ignoring letter case. Do not run the installer if they differ. This checks the downloaded bytes; it does not replace publisher signing.
+
+For a portable copy instead, download `Pantokrator-Atlas-Windows.zip`, install [Node.js 22.13.0 or newer](https://nodejs.org/en/download), extract the archive to a writable folder, and run **Start Pantokrator Atlas.cmd** there. Never run the launcher inside the ZIP or from the Steam game directory. GitHub's **Source code** archives are not this prepared portable release.
+
+Storage follows the browser profile and exact origin, not the application folder. Installer and portable copies share autosave when opened at the same address; different ports, `localhost`, `127.0.0.1`, and the hosted site use separate storage. Use **Editable project JSON** to move projects between them.
 
 ### Updating a local copy
 
 Before updating, open **Install / export -> Editable project JSON** and save important work. Atlas projects belong in browser storage and project JSON backups, not as edits inside the application source folder.
 
-Download and run the newer setup; it upgrades the existing per-user installation. For a portable copy, extract the new release to a new folder instead of merging it over the old one.
+After backing up, close Atlas's launcher terminal before updating. Download and run the newer setup; it upgrades the existing per-user installation. For a portable copy, extract the new release to a new folder instead of merging it over the old one, then launch that copy.
 
 Uninstall through **Windows Settings -> Apps -> Installed apps -> Pantokrator Atlas**. Uninstall removes application files and shortcuts but does not delete browser-held autosave data. Export important projects as editable JSON before uninstalling or changing local addresses.
 
@@ -86,7 +93,7 @@ Adding a plane to the generation plan preserves every existing actual gateway; t
 
 ## Screen layout
 
-The application has four main areas:
+The main areas and controls are:
 
 - **Header:** project name, autosave state, New atlas, Save now, Undo, Redo, Validate, and Install / export.
 - **Setup panel:** Generate, Planes, and Scenario tabs.
@@ -96,7 +103,7 @@ The application has four main areas:
 
 Selecting a plane in the Planes list or the strip below the map makes it active. Selecting a province opens it in the inspector.
 
-The map marker legend distinguishes all authored gameplay markers instead of collapsing them into a generic symbol: **S/#/N** means generic/team/nation-specific start, **♜/♛/×** means preferred/fixed/avoided throne, **✦/M** means a placed site/many-sites terrain, **G** means guardian groups, and **◎** means a gateway endpoint. A province can show several badges at once. The selected-province screen-reader status announces the same marker meanings and relevant group, nation, site, guardian, and gate numbers.
+The map marker legend distinguishes all authored gameplay markers instead of collapsing them into a generic symbol: **S/#/N** means generic/team/nation-specific start, **♜/♛/×** means preferred/fixed/avoided throne, **✦/M** means a placed site/many-sites terrain, **G** means guardian groups, and **◎** means a gateway endpoint. A province can show several badges at once. The selected-province screen-reader status announces its combined terrain, the same marker meanings, and relevant group, nation, site, guardian, and gate numbers.
 
 The **Project** name in the header becomes the map title and the basis for the exported folder and filenames. Export shows the safe normalized file stem before writing anything; changing the displayed project name does not rename an already installed folder on disk.
 
@@ -155,13 +162,13 @@ Each category accepts 0-32. The five values must total Players exactly, or Gener
 
 - **Land:** dry, non-cave overland land with no adjacent water.
 - **Coastal:** overland land adjacent to water.
-- **Water:** aquatic provinces, preferring overland water when available.
-- **Cave:** dry cave-family terrain. Cave and Great Cavern are preferred; Underworld, Infernal, or Abyss can supply compatible slots when necessary.
+- **Water:** aquatic provinces on eligible Surface or surface-like solid Custom planes.
+- **Cave:** dry Cave/Great Cavern starts. If no Cave/Great Cavern plane permits generated starts, eligible Underworld, Infernal, or Abyss planes supply the slots.
 - **Other:** dry special-realm terrain outside the overland and cave families, such as Cloud, Air, Dream, or Elemental.
 
 **Put remainder on land** appears when too few starts are allocated and fills the unassigned slots with Land starts.
 
-Make sure the required plane families exist and permit generated starts. For example, Cave starts need an eligible cave-family plane (preferring Cave/Cavern) and Other starts need an eligible bonus realm. A plane whose **Block generated starts on this plane** option is checked is not eligible for any automatically allocated start category. An impossible category displays a persistent **Generation plan cannot place all starts** summary and disables Generate until you permit starts on a compatible plane, add one, or change the allocation; the same condition remains an export-validation error for imported projects.
+Make sure the required plane families exist and permit generated starts. For example, Cave starts need an eligible cave-family plane (preferring Cave/Cavern) and Other starts need an eligible bonus realm. A plane whose **Block generated starts on this plane** option is checked is not eligible for any automatically allocated start category. An impossible category displays a persistent **Generation plan cannot place all starts** summary and disables Generate until you permit starts on a compatible plane, add one, or change the allocation. Existing and imported atlases remain subject to start-count, category, and safety validation; blocking future generation does not itself invalidate existing starts.
 
 ### Deterministic cave-start nations
 
@@ -171,7 +178,7 @@ This is an ordered list of playable nation IDs.
 - **Configured list:** after Generate, the program binds each nation in priority order to a distinct generated Cave start with `#specstart`.
 - The host must enable **special starting locations** for guaranteed `#specstart` placement.
 - Changing the list removes stale generated assignments. Generate again to create the new assignments.
-- If the list is longer than the Cave-start allocation, only the entries that fit can receive cave capitals and the UI warns.
+- If the list is longer than the Cave-start allocation, Generate is disabled. Increase Cave starts or remove lower-priority nations.
 - If Cave starts is zero, neither configured assignments nor native cave preference has a cave slot.
 - IDs 5 and above can be entered for mod nations, but the matching mod must be enabled in Dominions.
 
@@ -304,16 +311,17 @@ These warnings do not block export. Hard spacing failures remain red validation 
 
 ### Synchronize visible borders
 
-Repairs all planes when the saved Dominions neighbor graph differs from visible ownership boundaries. Use it for imported projects that show topology errors; it preserves valid authored border types.
+The button reads **Synchronize N project border issues**, or **Visible borders synchronized** when no repair is needed. It repairs all planes when the saved Dominions neighbor graph differs from visible ownership boundaries. Use it for imported projects that show topology errors; it preserves valid authored border types.
 
 ### Automatic plane sizing
 
-- Land, Coastal, and Water allocations divide the overland core budget among eligible auto-sized Surface-like planes. Cave allocations divide the underground core budget among auto-sized Cave and Great Cavern planes. Ordinary solid Custom planes can count as overland core.
+- Land, Coastal, and Water starts are allocated among eligible Surface-like planes; Cave starts use eligible Cave/Great Cavern planes, with the fallback described under [Start allocation](#start-allocation). Allocation is capacity-weighted, including manually sized planes. Each auto-sized core plane targets its allocated starts multiplied by Provinces / player, subject to size limits.
 - Each auto-sized bonus plane uses the selected percentage of the combined core total. Manual core sizes still contribute to that total.
+- If there are no core planes, bonus percentages use Players x Provinces / player as their reference instead.
 - Starts can enlarge an auto-sized plane so their spacing and neutral guardian buffers have room, up to the 800-province ceiling.
 - Auto-sized planes have an 18-province minimum. Manual targets use 8-800 provinces and are not changed by player count, provinces per player, or the bonus percentage.
 
-Cloud, Air, Underworld, Infernal, Abyss, Dream, Elemental, sparse Custom, and special-themed Custom realms are bonus planes.
+Core planes are Surface, Cave, Great Cavern, and solid Custom realms with Temperate, Wild, Frozen, Arid, or Oceanic variants. Cloud, Air, Underworld, Infernal, Abyss, Dream, and Elemental are bonus realms. All sparse Custom realms and Custom realms with Fungal, Crystal, Volcanic, Storm, Infernal, or Void variants are also bonus planes.
 
 ## Planes tab
 
@@ -343,7 +351,7 @@ The in-game plane name. Untouched generated names can update to a suitable uniqu
 | Elemental | Fire, Air, Water, and Earth extremes with themed elementals. |
 | Custom | Neutral solid overland profile for manual combinations; variants can supply special themes. |
 
-Surface and ordinary Custom default to full province ownership. Other archetypes use sparse chambers, junctions, routes, and native owner-zero negative space. Special bonus realms receive substantially stronger initial guardian groups than Surface/Cave/Cavern and use themed population types. Persistent post-capture PD still follows Dominions' nation/poptype rules.
+Surface and ordinary Custom default to full province ownership. Other archetypes use sparse chambers, junctions, routes, and native owner-zero negative space. Special bonus realms receive substantially stronger initial guardian groups than most Surface variants and Cave/Great Cavern, and use themed population types. See [Guardian groups](#guardian-groups) for Oceanic Surface and Custom-variant exceptions. Persistent post-capture PD still follows Dominions' nation/poptype rules.
 
 ### Terrain variant
 
@@ -476,7 +484,7 @@ Click the first province, switch planes if desired, then click the destination. 
 
 ### Start
 
-Toggles a generic player start. Enabling it clears No random start and changes throne treatment to Avoid.
+Toggles a generic player start. Enabling it clears that capital's guardian groups and fixed throne, clears No random start, and changes throne treatment to Avoid. Other authored economy, sites, and buildings remain. See [Starts](#starts) for nation-specific cleanup and nearby validation.
 
 ### Throne
 
@@ -525,7 +533,7 @@ Changing primary terrain does not normally recalculate manually edited populatio
 
 #### Biome
 
-Biome affects Atlas presentation, generated context, and contextual naming rather than adding a separate Dominions bit:
+Biome is saved descriptive metadata. Changing it alone does not change terrain flags, artwork, province names, or gameplay. Use Primary terrain and Additional terrain flags to change terrain. The available labels are:
 
 Heartland, Wildwood, Marshlands, Sunscorched, High country, Tundra, Archipelago, Deep ocean, Living caves, Crystal deeps, Ashen deeps, and Void reaches.
 
@@ -541,7 +549,7 @@ Heartland, Wildwood, Marshlands, Sunscorched, High country, Tundra, Archipelago,
 
 Sea, Highland, Swamp, Wasteland, Forest, Farm, Deep sea, Cave, Mountains, and Impassable cave wall can be combined additively.
 
-Changes repaint the map immediately and appear in **Export PNG**. Mixed terrain combines its colors, materials, and symbols: Farm adds field rows, Forest adds trees (kelp under water), and Cave adds a cave arch. Mountains, hills, marshes, waste, and water have their own marks. Details fit within the province and remain clipped on irregular, narrow, and wrapped shapes; zoom in on small provinces. Fresh water adds a water marker without turning land into a sea. Deep sea only has an effect when Sea is also present.
+Changes repaint the map immediately and appear in the [high-resolution PNG preview](#preview-png). Mixed terrain combines its colors, materials, and symbols: Farm adds field rows, Forest adds trees (kelp under water), and Cave adds a cave arch. Mountains, hills, marshes, waste, and water have their own marks. Details fit within the province and remain clipped on irregular, narrow, and wrapped shapes; zoom in on small provinces. Fresh water adds a water marker without turning land into a sea. Deep sea only has an effect when Sea is also present.
 
 Download or install the package again after editing; a new Dominions game uses the updated terrain mask and elevation. You do not need to regenerate the atlas or edit image files. The game draws its own native terrain artwork, so it will not be pixel-identical to Atlas's preview. The [official D6M specification](https://www.illwinter.com/dom6/dom6fileformats.pdf) separates geography in `.d6m` from terrain in `.map`; Atlas exports both from the current province flags. Existing games do not automatically adopt terrain edits.
 
@@ -564,9 +572,11 @@ Fire, Air, Water, Earth, Astral, Death, Nature, Glamour, Blood, and Holy add ran
 
 #### Starts
 
-- **Generic player start:** emits `#start`, clears No random start, and avoids thrones.
+- **Generic player start:** emits `#start`.
 - **Team-start group:** emits `#teamstart`; use a non-negative integer smaller than the number of teams selected by the host.
 - **Specific-start nation:** emits `#specstart` for a playable nation and the province's global cross-plane number. Assigning it clears independent guardians, placed sites, throne setup, ownership, economy/PD overrides, forts, labs, temples, battle overrides, raw province directives, and any team-start marker. It preserves terrain, geography, climate, province name, and an existing generic-start marker. Undo is available if you selected the wrong province.
+
+Enabling a generic start or assigning a team-start group clears that capital's guardian groups and fixed throne, clears No random start, and sets throne treatment to Avoid. Unlike nation-specific assignment, it preserves other authored economy, sites, and buildings. Nearby authored conflicts are reported by validation, not automatically erased.
 
 Generic, team, and nation-specific starts all count as start locations in safety validation and in the live fairness calculation. Starts must remain at least three global movement steps apart and may not have blocking or condition-dependent starting borders. Their provinces and directly connected neighbors are protected from generated guardians, special defender units, and thrones. After any manual start edit, spacing, two-ring expansion, nearby-throne access, local connection degree, and the overall score recalculate immediately across ordinary borders and cross-plane gates. The start-allocation score remains based on generated generic slots, so a nation or team annotation does not falsely change the requested land/coastal/water/cave counts.
 
@@ -622,7 +632,7 @@ Guardian groups are explicit initial independent defenders, not replenishing pos
 - Specific items use item names, not numeric IDs.
 - Guardians are disabled on generic, team, and nation-specific starts to protect the nation's starting army and pretender. Generation also leaves every directly connected province free of guardian and special-defender groups. Assigning a nation-specific start removes conflicting capital content already present, and validation blocks stale imported/manual capital content until that start is reassigned through the editor.
 
-Generated Surface/Cave/Cavern groups are ordinary independents. Cloud, Air, Underworld, Infernal, Abyss, Dream, Elemental, and similar bonus realms use stronger, themed commanders and multiple large squads to make expansion a deliberate challenge.
+Cave/Great Cavern and most Surface variants use ordinary independent strength. Cloud, Air, Underworld, Infernal, Abyss, Dream, and Elemental use stronger themed commanders and multiple large squads. The same stronger setup also applies to Oceanic Surface and all Custom variants except Temperate, Frozen, and Arid; guardian strength is not determined solely by whether a plane counts as bonus size.
 
 Persistent post-capture PD comes from a vanilla population type or nation. A wholly new replenishing PD roster requires a separate `.dm` mod.
 
@@ -671,10 +681,10 @@ Use the official map manual. Rare scenario commands such as `#god`, `#dominionst
 
 ## Catalog manager
 
-The bundled Dominions 6.35 catalog covers units, sites, population types, nations, and forts. See the [catalog coverage and provenance notes](CONTENT_CATALOG.md) for its pinned source and exact IDs. Pickers search names, aliases, tags, and numeric IDs.
+The bundled Dominions 6.35 catalog covers units, sites, population types, nations, and forts. See the [catalog coverage and provenance notes](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/CONTENT_CATALOG.md) for its pinned source and exact IDs. It does not automatically track later game updates. Pickers search names, aliases, tags, and numeric IDs.
 
 - **Sources & license:** shows data provenance.
-- **Import verified JSON:** merges a schema-valid catalog with bundled entries. Custom entries override matching IDs for lookup/display.
+- **Import verified JSON:** accepts up to 8 MiB of UTF-8 JSON and merges a schema-valid catalog with bundled entries. Custom entries override matching IDs for lookup/display. The label does not independently authenticate user-supplied data; use a source you trust.
 - **Download template:** downloads the required schema and provenance structure.
 - **Reset custom entries:** removes device-stored additions and returns to bundled-only lookup.
 
@@ -730,6 +740,8 @@ Autosave belongs to the current browser and site address. It is not cloud synchr
 
 If saved data cannot be opened, automatic saving pauses and **Download recovery data** preserves the original bytes. **Keep this copy** downloads that recovery backup before replacing them. Edits exceeding project limits are rejected with a persistent message; the previous project stays intact. Unfinished guardian groups can still be saved and reopened, but must be completed before playable export.
 
+`Pantokrator-Atlas-autosave-recovery.json` preserves unreadable saved text for recovery; it is not directly importable with **Open project**. Keep it separately from normal `.atlas.json` backups.
+
 ### Undo and Redo
 
 The header buttons keep up to 30 project snapshots. A new edit clears Redo. Undo/Redo restores project data but not view-only state such as zoom, pan, active tool, inspector tab, condition preview, or catalog filters. There is no global Ctrl/Cmd+Z shortcut; use the visible buttons.
@@ -738,7 +750,7 @@ The header buttons keep up to 30 project snapshots. A new edit clears Redo. Undo
 
 Choose **Install / export -> Editable project JSON** for a portable backup named `<map-name>.atlas.json`. Every playable package also includes `atlas_project.json`.
 
-Choose **Open project** and select either file to reopen it. The importer accepts Atlas schema-v1 JSON with at most 8 planes and 800 provinces per plane. It does not open ZIP, `.map`, `.d6m`, custom catalog JSON, or arbitrary JSON.
+Choose **Open project** and select either file to reopen it. The importer accepts up to 16 MiB of UTF-8 Atlas schema-v1 JSON with at most 8 planes and 800 provinces per plane. It does not open ZIP, `.map`, `.d6m`, custom catalog JSON, or arbitrary JSON.
 
 After choosing **Add plane to plan**, the new plane has no provinces until generation. That planned state round-trips through autosave and project JSON, but it remains a playable-export error until you configure the plan and Generate.
 
@@ -768,6 +780,8 @@ Choose **Install directly** and select the top-level Dominions user-data `maps` 
 
 In Dominions, use **Tools & Manuals -> Open User Data Directory** to find the correct location, then select its `maps` folder in the picker.
 
+An existing nonempty map folder must contain a valid `atlas_project.json` identifying that normalized map name. Otherwise Atlas refuses the reinstall without changing files. Choose a different project name, or back up and move the conflicting folder before trying again.
+
 Back up an existing same-named map folder before an important reinstall. Atlas stages the package and attempts to restore touched files if installation fails; follow any recovery message before hosting the map.
 
 ### Download ready ZIP
@@ -784,7 +798,7 @@ Downloads the portable source backup described above.
 
 ### Preview PNG
 
-Exports the active plane at its configured resolution using the currently selected Condition preview. The PNG includes adaptive terrain materials, shape-safe procedural detail, and sparse-plane backdrops. It is not the native playable D6M.
+Choose the **High-res … preview of …** button in **Install / export**. It exports the active plane at its configured resolution using the currently selected Condition preview. The PNG includes combined terrain materials and symbols, shape-safe procedural detail, and sparse-plane backdrops. It is not the native playable D6M.
 
 ### Filename normalization
 
@@ -817,8 +831,8 @@ Validation, replacement-confirmation, and export dialogs trap focus. Escape clos
 | Windows shows Unknown publisher | The setup is not currently code-signed. Confirm it came from this project's GitHub release and verify the matching `.sha256` file before proceeding. |
 | Portable copy says Node.js is required | Install Node.js 22.13.0 or newer from the official link opened by the launcher, then run it again. The installed edition bundles its own private runtime. |
 | Launcher startup fails | For the installer edition, reinstall the latest setup. For a portable copy, keep the extracted release in a writable folder and do not run inside the ZIP. If it still fails, include the complete terminal error in a [GitHub issue](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/issues). |
-| GUI opens on a different local port and the autosave looks empty | Browser storage is separated by origin. Stop the program occupying port 3000 and relaunch, or open the old port and export **Editable project JSON** before moving to the new address. |
-| Generate is disabled | The five start categories may not total Players, or every compatible plane for a requested category may block generated starts. Read the persistent generation-plan summary, correct the counts, or permit starts on a suitable plane. |
+| GUI opens on a different local port and the autosave looks empty | Use the same browser profile and exact Atlas address as before. If Atlas is still running there, reopen that instance and export **Editable project JSON** for import at the new address. An old port may now serve another application; do not stop unrelated programs to recover Atlas. If the previous Atlas address is unavailable, use a JSON backup. |
+| Generate is disabled | The five start categories must total Players, each category needs a compatible plane that permits generated starts, and configured cave nations cannot exceed Cave starts. Read the generation-plan summary and correct the allocation, nation list, or plane policy. |
 | Compatibility blocker / playable export unavailable | Open Validate and resolve every red Error. Warnings and fairness alone do not block export. |
 | Scale-aware spacing below preferred | The hard three-step floor was retained but the larger preferred target did not fit. Increase provinces/player, simplify start categories, change wrapping, or generate again. |
 | Start connection counts vary | Identical exits could not fit without breaking harder safety rules. Lower the connection target or enlarge the core realms. |
@@ -827,23 +841,25 @@ Validation, replacement-confirmation, and export dialogs trap focus. Escape clos
 | Requested continents, but topology sustains fewer | Increase water, change wrapping, lower the continent count, and Generate again. |
 | River Styx cannot divide a torus | Disable at least one Underworld wrap axis and Generate again. |
 | Cave-start nation lacks `#specstart` | Generate after changing the cave-nation list or Cave starts, and enable special starts when hosting. |
-| Visible border topology error | Use Synchronize visible borders, especially for older project JSON. |
+| Visible border topology error | Use **Synchronize N project border issues**, especially for older project JSON. |
 | Plane not linked to main plane | Add/regenerate a valid gateway path to plane 1. |
 | Dry/aquatic gateway mismatch | Move an endpoint so both sides have matching water status or regenerate. This blocks export. |
 | Guardian or throne at/adjacent to a start | Remove it or regenerate. Start capitals and their directly connected provinces are a protected one-ring zone. |
 | Gate is too close to a start | Generated gates prefer endpoints at least two moves away, but a constrained fallback can produce a warning. Move the endpoint, enlarge the plane, reduce the gate count, or regenerate. |
 | Direct folder access unavailable | Use Download ready ZIP. If ZIP is disabled by the memory ceiling, lower resolution/plane count or move the project to a supported browser for direct install. Editable project JSON remains available. |
+| Direct reinstall refuses an existing folder | A nonempty folder needs a valid `atlas_project.json` matching its normalized name. Atlas leaves it untouched. Use a different project name, or back up and move the conflicting folder before retrying. |
 | Map does not appear in Dominions | Confirm `user data/maps/<Map_Name>/<Map_Name>.map`; avoid the game installation or doubled folder nesting. |
 | Removed planes still appear | Delete/replace the old folder before extracting a new ZIP, or use direct reinstall. |
 | ZIP is slow or memory-heavy | Use direct install, lower resolution, or reduce plane sizes/count. |
 | Autosave unavailable / storage full | Download Editable project JSON immediately. |
 | Latest edit disappeared after reload | Reload may have occurred while **Saving changes** was visible. Use **Save now**, wait for the saved status, and keep project JSON backups. |
 | Planned plane is empty after reopen | Expected: a staged plane round-trips in autosave/JSON but remains a playable-export error until you configure it and Generate. |
-| JSON will not open | Use a schema-v1 Atlas `.atlas.json` or package `atlas_project.json`, not a ZIP/map/D6M/catalog file. |
+| JSON will not open | Use a schema-v1 Atlas `.atlas.json` or package `atlas_project.json` within the 16 MiB limit, not a ZIP/map/D6M/catalog or autosave-recovery file. |
 | Filename changed | Export normalized it. Use the folder/file stem shown in the package summary. |
 | Unknown catalog ID | Enable matching custom content. Catalog metadata does not install a mod. |
 | Skybox/battle-map asset warning | Copy referenced `.tga`, `.rgb`, or `.d3m` files beside the map files. |
 | Backdrop differs in Dominions | Expected: backdrops are editor/PNG-only; native D6M owner-zero space is game-rendered. |
+| Terrain looks unchanged after editing | Biome is metadata only; change Primary terrain or Additional terrain flags. For Dominions, export/install the package again and start a new game. Atlas's PNG artwork is not embedded in native D6M. |
 | Guardians cannot be added to a start | Intentional protection for the nation's starting army and pretender. |
 
 ## Dominions engine boundaries
@@ -864,10 +880,10 @@ Pantokrator Atlas aims to be honest about what a standalone map can do:
 
 Pantokrator Atlas application code and original project materials use the permissive [0BSD license](../LICENSE). Bundled dependencies retain the terms listed in [`THIRD_PARTY_LICENSES.txt`](../THIRD_PARTY_LICENSES.txt).
 
-The generated selector catalog is separately licensed from its pinned Dom6 Inspector source. See its [provenance notice](../src/catalog/data/NOTICE.md) and [GPL-3.0 license](../src/catalog/data/LICENSE.dom6inspector.txt). The root 0BSD license does not relicense that catalog.
+The generated selector catalog is separately licensed from its pinned Dom6 Inspector source. See its [provenance notice](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/src/catalog/data/NOTICE.md) and [GPL-3.0 license](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/src/catalog/data/LICENSE.dom6inspector.txt). The root 0BSD license does not relicense that catalog. Offline copies are in `licenses/dom6-catalog` in the installed Windows edition, or `src/catalog/data` in source checkouts and portable releases.
 
 ## Official references
 
-- [Dominions 6 Map Editing Manual, version 6.26](https://illwinter.com/dom6/dom6mapman.pdf)
+- [Dominions 6 Map Editing Manual](https://illwinter.com/dom6/dom6mapman.pdf)
 - [Dominions 6 File Formats](https://illwinter.com/dom6/dom6fileformats.pdf)
 - [Dominions 6 Modding Manual](https://illwinter.com/dom6/dom6modman.pdf)

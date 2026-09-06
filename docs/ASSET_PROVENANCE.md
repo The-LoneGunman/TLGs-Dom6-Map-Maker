@@ -1,4 +1,4 @@
-# Realm backdrop asset provenance
+# Artwork provenance
 
 The seven PNG realm backdrops in `public/plane-backgrounds/` are original project assets generated with OpenAI ImageGen from project-authored prompts on 2026-08-10. They are not Illwinter Game Design, Dominions 6, or extracted community-map assets, and they do not reproduce artwork shipped with Dominions.
 
@@ -34,11 +34,18 @@ community map.
 These are source materials rather than fixed province illustrations. The
 renderer clips and recolors them against canonical province ownership, keeps
 their scale relative to the complete map, and suppresses optional details that
-cannot fit safely inside a tiny island or narrow corridor. This prevents asset
-stretching and geometry-specific failures.
+cannot fit safely inside a tiny island or narrow corridor. This avoids stretching
+a province-shaped illustration and suppresses details that lack a safe footprint.
 
-## Where the backdrops appear
+Field rows, trees, kelp, cave arches, and other combined-terrain symbols are
+code-drawn procedural marks, not additional bitmap assets. The v0.1.4 terrain-flag
+update reuses the materials above rather than requiring a new image for every
+terrain combination.
 
-These images are presentation assets for the Pantokrator Atlas editor and its high-resolution PNG previews. They give sparse planes a themed backdrop behind areas that no province owns.
+## Where the artwork appears
 
-They are intentionally not embedded in native `.d6m` exports. Dominions 6's native D6M v3 format has no separate raster-underlay field behind owner-zero pixels: its single `#imagefile` is the D6M owner image itself. The game therefore uses its own presentation for those unowned areas when it loads the exported map.
+Both material textures and backdrops are presentation assets for the Atlas editor and its high-resolution PNG previews. Backdrops give sparse planes a theme behind areas that no province owns.
+
+Neither is embedded in native `.d6m` exports. Atlas's `#imagefile` references the native D6M geography recipe, not a raster illustration. D6M v3 has no separate raster-underlay field behind owner-zero pixels; Dominions uses its own scenery for the exported geography and terrain.
+
+These original project assets use the root [0BSD license](../LICENSE). This does not apply to the separately licensed Dominions selector catalog. See the [illustrated asset specification](ILLUSTRATED_ASSET_SPEC.md) for the shipped implementation and future pack requirements.

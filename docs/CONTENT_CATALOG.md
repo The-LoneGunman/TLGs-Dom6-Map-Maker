@@ -6,8 +6,12 @@ and fortification IDs, but it predates later nations, units, and thrones.
 
 The current selector data is generated from Dom6 Inspector revision
 `cfac4311bc0b58053b8dead7bffbc036ba9bd5dc` (2026-05-26), whose upstream commit
-is described as “Update to 6.35.” The current upstream `main` revision was
+is described as “Update to 6.35.” The then-current upstream `main` revision was
 checked against that pin on 2026-08-11 and was identical.
+
+The bundled catalog is pinned to 6.35; it does not automatically track later
+game or Inspector updates. Custom catalog imports add editor metadata only,
+not game content.
 
 ## Post-publication content and map-manual table gaps
 
@@ -130,8 +134,10 @@ nation recruitment tables with magic-site `hcom`/`hmon` and
 that a nation-table-only filter would omit.
 
 The compact catalog retains all 4,091 source unit records for exact numeric-ID
-lookup. Normal browsing shows 4,078 gameplay records and hides 13 records whose
-source names explicitly identify them as Test, Debug, XXX, or Unused data.
+lookup. Normal browsing hides 13 records whose source names explicitly identify
+them as Test, Debug, XXX, or Unused data, leaving 4,078 records after that
+name-based exclusion. This filter does not establish that every remaining unit
+is recruitable or suitable for a guardian army.
 Typing a verified raw numeric ID remains supported, and a hidden record already
 selected in a project remains visible.
 
@@ -141,4 +147,4 @@ Official patch announcements establish which named content was introduced in
 each game update. They do not publish every numeric internal ID. Numeric IDs,
 duplicate-form distinctions, recruitment-role tags, and complete selector
 coverage come from the pinned GPL-3.0 Dom6 Inspector data export documented in
-`src/catalog/data/NOTICE.md`.
+[`src/catalog/data/NOTICE.md`](../src/catalog/data/NOTICE.md).
