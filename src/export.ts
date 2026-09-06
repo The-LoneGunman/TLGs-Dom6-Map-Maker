@@ -306,7 +306,7 @@ const PROJECT_FIELDS = new Set([
 ]);
 const GENERATION_SETTING_FIELDS = new Set([
   "players", "provincesPerPlayer", "waterPercent", "oceanLayout", "continentCount", "specialPlaneSizePercent",
-  "provinceNameSeed", "biomeCohesion", "throneCount", "siteFrequency", "economyBalance", "overlandTopology",
+  "provinceNameSeed", "randomizeNamesOnLoad", "biomeCohesion", "throneCount", "siteFrequency", "economyBalance", "overlandTopology",
   "startDistribution", "startDegreeTarget", "caveStartNations", "gateLayout", "gateDirection", "gatePairsPerConnection",
   "planeConnections", "resolution",
 ]);
@@ -419,6 +419,7 @@ function assertGenerationSettings(settings: Record<string, unknown>): void {
   optionalNumberAt(settings.continentCount, "project.settings.continentCount");
   optionalNumberAt(settings.specialPlaneSizePercent, "project.settings.specialPlaneSizePercent");
   optionalNumberAt(settings.provinceNameSeed, "project.settings.provinceNameSeed");
+  optionalBooleanAt(settings.randomizeNamesOnLoad, "project.settings.randomizeNamesOnLoad");
   optionalEnumAt(settings.economyBalance, ECONOMY_BALANCE_MODES, "project.settings.economyBalance");
   optionalEnumAt(settings.overlandTopology, OVERLAND_TOPOLOGY_MODES, "project.settings.overlandTopology");
   if (settings.startDistribution !== undefined) {

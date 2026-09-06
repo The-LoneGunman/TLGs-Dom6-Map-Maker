@@ -105,7 +105,7 @@ Selecting a plane in the Planes list or the strip below the map makes it active.
 
 **Find a province** searches all planes by province name, plane name, or number. Numbers (with or without `#`) match either the global export number or the local province number. Add a plane-name word to narrow ambiguous local numbers. The first 30 matches are shown with both numbers. Selecting a result switches to **Select** and cancels any armed border/gateway endpoint; it does not edit the map.
 
-Control labels identify their scope: **Next generation**, **Current map**, **Map + next generation**, **Host / export**, **Preview only**, or **Saved note only**. Current-map changes are reflected in later exports; they do not alter a map already installed in Dominions. Biome and patch notes are descriptive, while primary terrain and terrain flags affect artwork and game rules.
+Control labels identify their scope: **Next generation**, **Current Map**, **Current Map + next generation**, **Host / export**, **Preview only**, **Saved note only**, or **On project open**. Current-map changes are reflected in later exports; they do not alter a map already installed in Dominions. Biome and patch notes are descriptive, while primary terrain and terrain flags affect artwork and game rules.
 
 The map marker legend distinguishes all authored gameplay markers instead of collapsing them into a generic symbol: **S/#/N** means generic/team/nation-specific start, **♜/♛/×** means preferred/fixed/avoided throne, **✦/M** means a placed site/many-sites terrain, **G** means guardian groups, and **◎** means a gateway endpoint. A province can show several badges at once. The selected-province screen-reader status announces its combined terrain, the same marker meanings, and relevant group, nation, site, guardian, and gate numbers.
 
@@ -127,7 +127,8 @@ The pending summary groups inputs changed since the last generation recorded by 
 
 | Option | Default |
 |---|---:|
-| Seed | `pantokrator-001` |
+| Seed | Fresh random `realm-…` seed |
+| Fresh generated names on open | Off |
 | Players | 6 |
 | Provinces / player | 16 |
 | Starts | 6 Land |
@@ -148,15 +149,15 @@ Device autosave may restore your previous atlas instead of showing a fresh proje
 
 ### New atlas
 
-Opens an explicit replacement confirmation for the current project. The dialog lists the current plane, province, and gateway totals and offers **Download backup** before continuing. Confirming creates the fresh-project defaults above, clears the selection and armed tools, and clears Undo/Redo history. The new project becomes the device autosave, so the downloaded editable JSON is the recovery path for the replaced atlas.
+Opens an explicit replacement confirmation for the current project. The dialog lists the current plane, province, and gateway totals and offers **Download backup** before continuing. Confirming creates the fresh-project defaults above with a new random seed, clears the selection and armed tools, and clears Undo/Redo history. The new project becomes the device autosave, so the downloaded editable JSON is the recovery path for the replaced atlas.
 
 ### Reset generator defaults
 
-Resets the Generate options, name-reroll counter, plane resolution, and active-plane wrapping without replacing the current atlas. It preserves planes, provinces, Scenario settings, gateways, manual edits, manual specific starts, and each plane's **Block generated starts** choice. Generated cave-nation assignments are removed until you generate again. The reset is Undoable and does not itself generate.
+Resets the Generate options, name-reroll counter, plane resolution, and active-plane wrapping without replacing the current atlas. It also turns off **Fresh generated names on open** and restores the fixed example seed `pantokrator-001`; use the seed-shuffle button for another world. It preserves planes, provinces, Scenario settings, gateways, manual edits, manual specific starts, and each plane's **Block generated starts** choice. Generated cave-nation assignments are removed until you generate again. The reset is Undoable and does not itself generate.
 
 ### Seed
 
-A free-text deterministic seed. The same effective settings and seed reproduce the same generated atlas. The icon beside the field creates a random realm-style seed. Press Generate after changing it.
+A free-text deterministic seed. A first visit without a saved atlas and each **New atlas** use a fresh random seed. Reopening an existing project preserves its seed. The same effective settings and seed reproduce the same generated atlas. The icon beside the field creates another random realm-style seed for the next **Generate**; it does not immediately rename or regenerate the current map. To change only names, use the name controls below.
 
 ### Players
 
@@ -262,7 +263,9 @@ This affects solid Surface and surface-like Custom planes. Cave-family and spars
 
 Generated names are unique across the atlas and avoid known nation, epithet, home/capital-site, and special-realm names.
 
-Names blend article-free forms such as **Silver Grove** with occasional **The**-prefixed forms. Roughly one in four candidates uses **The**, including longer compound names. Existing saved names do not change automatically: use **Reroll generated names (preserve manual)** to apply the new blend without regenerating the map.
+Names blend article-free forms such as **Silver Grove** with occasional **The**-prefixed forms. Roughly one in four candidates uses **The**, including longer compound names. Existing saved names stay unchanged by default: use **Reroll generated names (preserve manual)** to apply the new blend without regenerating the map.
+
+**Fresh generated names on open** is an optional setting saved with each project. Enable it to shuffle generated names whenever the project opens from JSON or is restored on page load. It does not rename anything immediately, change the world seed, or regenerate geography, guardians, or starts. Manual and legacy names are preserved, and conflict/recovery copies are always opened unchanged. After a page-load reroll, **Undo** restores the saved names. Turn this option off before sharing a multiplayer map whose province names should stay fixed; exported game maps never reroll names when loaded in Dominions.
 
 ### Each bonus plane size (% of core)
 

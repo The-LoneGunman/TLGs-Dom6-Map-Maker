@@ -65,6 +65,7 @@ import {
 import { ADVANCED_COMMANDS, terrainMask, validateProject } from "./dom6";
 import { auditPlaneTopology, canAuthorPlaneEdge, connectionKey } from "./geometry";
 import { regenerateAllProvinceNames, regenerateGeneratedProvinceNames } from "./naming";
+import { createFreshProject, prepareProjectForOpening, randomSeed } from "./projectSession";
 import {
   downloadPackage,
   downloadProject,
@@ -346,6 +347,7 @@ export function resetGeneratorDefaults(draft: MapProject, activePlaneId: string)
   draft.settings.continentCount = defaults.settings.continentCount;
   draft.settings.specialPlaneSizePercent = defaults.settings.specialPlaneSizePercent;
   draft.settings.provinceNameSeed = defaults.settings.provinceNameSeed;
+  draft.settings.randomizeNamesOnLoad = defaults.settings.randomizeNamesOnLoad;
   draft.settings.biomeCohesion = defaults.settings.biomeCohesion;
   draft.settings.economyBalance = defaults.settings.economyBalance;
   draft.settings.overlandTopology = defaults.settings.overlandTopology;
@@ -397,6 +399,7 @@ export function GenerationBalanceNotice({ issues, generationWarnings = [] }: { i
 }
 
 export function MapMakerApp() {
+  // Keep the server and first client render identical. Randomize after autosave resolves.
   const [project, setProject] = useState<MapProject>(() => recordGenerationInputs(createDefaultProject()));
   const [activePlaneId, setActivePlaneId] = useState("");
   const [selectedId, setSelectedId] = useState<string>();
@@ -503,14 +506,30 @@ export function MapMakerApp() {
         if (cancelled) return;
         autosaveRevisionRef.current = result.revision ?? null;
         setAutosaveState(result);
+        let next = result.project ?? createFreshProject();
         if (result.project) {
-          setProject(result.project);
-          setActivePlaneId(result.project.planes[0]?.id ?? "");
-        } else if (result.errors.length) {
+          try {
+            next = prepareProjectForOpening(result.project, Boolean(result.conflict));
+          } catch {
+            setToast("Your saved atlas was restored with its existing names; automatic name shuffling was unavailable.");
+          }
+        }
+        currentProjectRef.current = next;
+        setProject(next);
+        setActivePlaneId(next.planes[0]?.id ?? "");
+        if (result.project && next !== result.project) {
+          setUndoStack([result.project]);
+          setToast("Fresh generated names applied on open. Manual names and the map are unchanged; Undo restores the saved names.");
+        } else if (!result.project && result.errors.length) {
           setToast("The autosave could not be restored; a fresh atlas was opened.");
         }
       }).catch(() => {
-        if (!cancelled) setToast("The autosave could not be restored; a fresh atlas was opened.");
+        if (cancelled) return;
+        const next = createFreshProject();
+        currentProjectRef.current = next;
+        setProject(next);
+        setActivePlaneId(next.planes[0]?.id ?? "");
+        setToast("The autosave could not be restored; a fresh atlas was opened.");
       }).finally(() => {
         if (!cancelled) setHydrated(true);
       });
@@ -737,7 +756,7 @@ export function MapMakerApp() {
     const task = generationTaskRef.current;
     generationTaskRef.current = undefined;
     task?.cancel();
-    const next = recordGenerationInputs(createDefaultProject());
+    const next = createFreshProject();
     currentProjectRef.current = next;
     rangeEditStartRef.current = undefined;
     setProject(next);
@@ -759,7 +778,7 @@ export function MapMakerApp() {
     setReplaceAllNamesOpen(false);
     setGenerationBusy(false);
     setGenerationProgress(undefined);
-    setToast("Started a new atlas with generator defaults. The previous atlas is not in Undo; use its downloaded backup to restore it.");
+    setToast("Started a new atlas with a fresh random seed and generator defaults. The previous atlas is not in Undo; use its downloaded backup to restore it.");
   };
 
   const removePlane = (planeId: string) => {
@@ -1037,14 +1056,15 @@ export function MapMakerApp() {
     event.target.value = "";
     if (!file) return;
     try {
-      const next = await parseProjectImportFile(file);
+      const opened = await parseProjectImportFile(file);
+      const next = prepareProjectForOpening(opened);
       if (!commit(next)) return;
       setActivePlaneId(next.planes[0]?.id ?? "");
       setSelectedId(undefined);
       setLinkSource(undefined);
       setGateSource(undefined);
       clearActionError("project-import");
-      setToast(`Opened ${next.name}.`);
+      setToast(`Opened ${next.name}.${next !== opened ? " Fresh generated names applied; manual names and the map are unchanged." : ""}`);
     } catch (error) {
       showActionError("project-import", error, "Project import failed.");
     }
@@ -1099,6 +1119,8 @@ export function MapMakerApp() {
     }
     autosaveRevisionRef.current = result.revision ?? null;
     setAutosaveState(result);
+    // Conflict/recovery inspection must show the exact saved copy, even with name rerolls enabled.
+    currentProjectRef.current = result.project;
     setProject(result.project);
     setActivePlaneId(result.project.planes[0]?.id ?? "");
     setSelectedId(undefined);
@@ -1184,9 +1206,10 @@ export function MapMakerApp() {
               <Field scope="Next generation" label="Seed">
                 <div className="input-with-button">
                   <input maxLength={MAX_IMPORTED_STRING_LENGTH} value={project.seed} onChange={(event) => mutate((draft) => { draft.seed = event.target.value; })} />
-                  <button type="button" onClick={() => mutate((draft) => { draft.seed = randomSeed(); })} aria-label="Randomize seed">✣</button>
+                  <button type="button" onClick={() => mutate((draft) => { draft.seed = randomSeed(); })} aria-label="Randomize seed" title="Choose a fresh seed for the next Generate">✣</button>
                 </div>
               </Field>
+              <p className="field-note">New atlases start with a random seed. Saved projects keep theirs. Changing this seed takes effect when you Generate; use a name reroll to keep the current map.</p>
               <div className="field-grid two">
                 <NumberField scope="Next generation" label="Players" value={project.settings.players} min={2} max={32} onChange={(value) => mutate((draft) => {
                   draft.settings.startDistribution = resizeStartDistribution(
@@ -1273,9 +1296,11 @@ export function MapMakerApp() {
                 </select>
               </Field>
               <p className="field-note">{OVERLAND_TOPOLOGY_MODES.find((item) => item.value === normalizeOverlandTopologyMode(project.settings.overlandTopology))!.description} This affects only solid Surface and surface-like Custom planes; sparse and cave realms keep their authored route profiles.</p>
-              <p className="scope-heading"><ScopeBadge scope="Current map" /> Name rerolls apply immediately.</p>
+              <p className="scope-heading"><ScopeBadge scope="Current Map" /> Name rerolls apply immediately.</p>
               <button className="button quiet wide" type="button" onClick={handleRegenerateProvinceNames}>Reroll generated names (preserve manual)</button>
               <p className="field-note">Names follow each plane and its effective terrain, including coasts, flooded caves, and the River Styx. Names edited in the province inspector are marked manual and survive map generation and name rerolls.</p>
+              <Toggle scope="On project open" label="Fresh generated names on open" checked={project.settings.randomizeNamesOnLoad ?? false} describedBy="fresh-names-help" onChange={(value) => mutate((draft) => { draft.settings.randomizeNamesOnLoad = value; })} />
+              <p id="fresh-names-help" className="field-note">Off by default. When enabled, reopening this project or restoring it on page load shuffles generated names only. Manual and legacy names, the world seed, terrain, and starts stay unchanged. Turn off before sharing a map with fixed names. Autosave conflict/recovery copies are never renamed.</p>
               <button
                 className="text-button danger-text"
                 type="button"
@@ -1295,7 +1320,7 @@ export function MapMakerApp() {
               <NumberField scope="Next generation" label="Each bonus plane size (% of core)" value={project.settings.specialPlaneSizePercent ?? 30} min={1} max={500} onChange={(value) => mutate((draft) => { draft.settings.specialPlaneSizePercent = value; })} />
               <p className="field-note">Players x provinces per player sizes only Surface, Cave, Cavern, and surface-like Custom core realms. Every auto-sized special plane independently uses this percentage of the combined core total; values over 100% are allowed, up to the 800-province per-plane cap.</p>
               <NumberField scope="Next generation" label="Recommended throne locations" value={project.settings.throneCount} min={0} max={64} onChange={(value) => mutate((draft) => { draft.settings.throneCount = value; })} />
-              <Field scope="Map + next generation" label="Output resolution">
+              <Field scope="Current Map + next generation" label="Output resolution">
                 <select value={project.settings.resolution} onChange={(event) => commit(applyResolution(project, event.target.value as GenerationSettings["resolution"]))}>
                   {Object.entries(RESOLUTION_PRESETS).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}
                   <option value="custom">Custom per plane</option>
@@ -1305,8 +1330,8 @@ export function MapMakerApp() {
                 <span>{activePlane.width.toLocaleString()} × {activePlane.height.toLocaleString()}</span>
                 <small>Native D6M • condition-reactive</small>
               </div>
-              <Toggle scope="Map + next generation" label="Wrap east / west" checked={activePlane.wrapX} onChange={(value) => updateWrap("wrapX", value)} />
-              <Toggle scope="Map + next generation" label="Wrap north / south" checked={activePlane.wrapY} onChange={(value) => updateWrap("wrapY", value)} />
+              <Toggle scope="Current Map + next generation" label="Wrap east / west" checked={activePlane.wrapX} onChange={(value) => updateWrap("wrapX", value)} />
+              <Toggle scope="Current Map + next generation" label="Wrap north / south" checked={activePlane.wrapY} onChange={(value) => updateWrap("wrapY", value)} />
               <button className="button quiet wide" type="button" onClick={() => setLeftTab("planes")}>Configure plane archetypes &amp; selected links</button>
               <button
                 className="button generate-button"
@@ -1363,8 +1388,8 @@ export function MapMakerApp() {
                 onClick={stagePlane}
               >+ Add plane to plan</button>
               <Divider />
-              <Field scope="Current map" label="Plane name"><input maxLength={MAX_IMPORTED_STRING_LENGTH} value={activePlane.name} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.name = event.target.value; })} /></Field>
-              <Field scope="Map + next generation" label="Plane archetype"><select value={activePlane.kind} onChange={(event) => mutate((draft) => {
+              <Field scope="Current Map" label="Plane name"><input maxLength={MAX_IMPORTED_STRING_LENGTH} value={activePlane.name} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.name = event.target.value; })} /></Field>
+              <Field scope="Current Map + next generation" label="Plane archetype"><select value={activePlane.kind} onChange={(event) => mutate((draft) => {
                 const plane = draft.planes.find((item) => item.id === activePlane.id)!;
                 const planeIndex = draft.planes.findIndex((item) => item.id === plane.id);
                 const nextKind = event.target.value as PlaneKind;
@@ -1379,7 +1404,7 @@ export function MapMakerApp() {
               })}>{PLANE_KINDS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></Field>
               <p className="field-note">{PLANE_KINDS.find((item) => item.value === activePlane.kind)?.description}</p>
               {activePlane.kind !== "surface" && activePlane.kind !== "custom" && <p className="field-note">Themed artwork fills ownerless space in the editor and exported PNG preview. Native D6M has no separate background-raster layer, so Dominions renders that space with its own realm presentation.</p>}
-              <Field scope="Map + next generation" label="Terrain variant"><select value={activePlane.variant ?? defaultVariantForKind(activePlane.kind)} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.variant = event.target.value as PlaneVariant; })}>{PLANE_VARIANTS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></Field>
+              <Field scope="Current Map + next generation" label="Terrain variant"><select value={activePlane.variant ?? defaultVariantForKind(activePlane.kind)} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.variant = event.target.value as PlaneVariant; })}>{PLANE_VARIANTS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></Field>
               <Toggle scope="Next generation" label="Auto-size from player count" checked={activePlane.autoSize ?? project.planes[0]?.id === activePlane.id} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.autoSize = value; })} />
               {(activePlane.autoSize ?? project.planes[0]?.id === activePlane.id)
                 ? <div className="resolution-card"><span>Automatic province count</span><small>{planeAutoSizeDescription(project, activePlane)}</small></div>
@@ -1387,13 +1412,13 @@ export function MapMakerApp() {
               <PlaneStartPolicyControl plane={activePlane} onChange={(value) => mutate((draft) => {
                 draft.planes.find((plane) => plane.id === activePlane.id)!.noGeneratedStarts = value || undefined;
               })} />
-              <Toggle scope="Map + next generation" label="Wrap east / west" checked={activePlane.wrapX} onChange={(value) => updateWrap("wrapX", value)} />
-              <Toggle scope="Map + next generation" label="Wrap north / south" checked={activePlane.wrapY} onChange={(value) => updateWrap("wrapY", value)} />
+              <Toggle scope="Current Map + next generation" label="Wrap east / west" checked={activePlane.wrapX} onChange={(value) => updateWrap("wrapX", value)} />
+              <Toggle scope="Current Map + next generation" label="Wrap north / south" checked={activePlane.wrapY} onChange={(value) => updateWrap("wrapY", value)} />
               {project.settings.resolution === "custom" && (
                 <>
                   <div className="field-grid two">
-                    <NumberField scope="Map + next generation" label="Width" value={activePlane.width} min={256} max={3840} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.width = value; })} />
-                    <NumberField scope="Map + next generation" label="Height" value={activePlane.height} min={256} max={3840} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.height = value; })} />
+                    <NumberField scope="Current Map + next generation" label="Width" value={activePlane.width} min={256} max={3840} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.width = value; })} />
+                    <NumberField scope="Current Map + next generation" label="Height" value={activePlane.height} min={256} max={3840} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.height = value; })} />
                   </div>
                   <p className="field-note">Each axis is capped at 3,840 pixels; width × height must remain at or below 8.29 megapixels.</p>
                 </>
@@ -2057,8 +2082,8 @@ export function ExportDialog({ project, activePlane, issues, progress, busy, onC
 
 function SectionHeading({ kicker, title }: { kicker: string; title: string }) { return <div className="section-heading"><p className="eyebrow">{kicker}</p><h2>{title}</h2></div>; }
 function Divider() { return <div className="divider" />; }
-type ControlScope = "Next generation" | "Current map" | "Map + next generation" | "Host / export" | "Preview only" | "Saved note only";
-function ScopeBadge({ scope = "Current map" }: { scope?: ControlScope }) { return <small className="scope-badge">{scope}</small>; }
+type ControlScope = "Next generation" | "Current Map" | "Current Map + next generation" | "Host / export" | "Preview only" | "Saved note only" | "On project open";
+function ScopeBadge({ scope = "Current Map" }: { scope?: ControlScope }) { return <small className="scope-badge">{scope}</small>; }
 function Field({ label, children, scope }: { label: string; children: ReactNode; scope?: ControlScope }) { return <label className="field"><span>{label} <ScopeBadge scope={scope} /></span>{children}</label>; }
 function NumberField({ label, value, min, max, describedBy, onChange, scope }: { label: string; value: number; min: number; max: number; describedBy?: string; onChange: (value: number) => void; scope?: ControlScope }) { return <Field label={label} scope={scope}><BoundedNumberInput value={value} min={min} max={max} describedBy={describedBy} onChange={onChange} /></Field>; }
 function OptionalNumberField({ label, value, min, max, disabled = false, onChange, scope }: { label: string; value?: number; min: number; max?: number; disabled?: boolean; onChange: (value?: number) => void; scope?: ControlScope }) { return <Field label={label} scope={scope}><input type="number" value={value ?? ""} min={min} max={max} disabled={disabled} placeholder="Auto" onChange={(event) => {
@@ -2463,7 +2488,6 @@ function boundedInteger(value: string, fallback: number, minimum: number, maximu
 function optionalNumber(value: string): number | undefined { if (!value.trim()) return undefined; const parsed = Number(value); return Number.isFinite(parsed) ? parsed : undefined; }
 function optionalBooleanValue(value: boolean | undefined): "inherit" | "on" | "off" { return value === undefined ? "inherit" : value ? "on" : "off"; }
 function parseOptionalBoolean(value: string): boolean | undefined { return value === "on" ? true : value === "off" ? false : undefined; }
-function randomSeed(): string { return `realm-${crypto.getRandomValues(new Uint32Array(1))[0]!.toString(36)}`; }
 function formatBytes(bytes: number): string { if (bytes < 1_000_000) return `${Math.ceil(bytes / 1000)} KB`; return `${(bytes / 1_000_000).toFixed(bytes > 100_000_000 ? 0 : 1)} MB`; }
 function scoreClass(score: number): string { return score >= 85 ? "excellent" : score >= 70 ? "fair" : "poor"; }
 function downloadBrowserBlob(blob: Blob, name: string) { const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = name; anchor.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1500); }
