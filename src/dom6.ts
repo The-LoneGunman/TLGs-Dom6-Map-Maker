@@ -30,6 +30,7 @@ import {
 } from "./generator";
 import { auditPlaneTopology, createProvinceOwnerResolver, resolvePlaneOwnershipMode } from "./geometry";
 import { BUILTIN_DOM6_CATALOG, findCatalogEntry, siteCompatibility, type Dom6CatalogBundle } from "./catalog";
+import { terrainElevation } from "./terrainVisuals";
 
 export const D6M_MAGIC = 898933;
 export const D6M_VERSION = 3;
@@ -418,7 +419,7 @@ export async function encodeD6m(
   const owners = new Int16Array(buffer, ownerOffset, pixelCount);
   const ownerResolver = createProvinceOwnerResolver(plane);
   const seedHash = hash32(seed);
-  const baseHeights = plane.provinces.map((province) => terrainHeight(province));
+  const baseHeights = plane.provinces.map((province) => terrainElevation(province));
   const yieldEvery = Math.max(8, Math.floor(height / 40));
 
   for (let y = 0; y < height; y += 1) {
@@ -1158,37 +1159,6 @@ function minimumCapitalDistance(plane: Plane, width: number, height: number): nu
     }
   }
   return Number.isFinite(minimum) ? minimum : 0;
-}
-
-function terrainHeight(province: Province): number {
-  const heights: Record<TerrainKey, number> = {
-    plains: 90,
-    forest: 130,
-    farm: 75,
-    swamp: 18,
-    waste: 105,
-    highland: 520,
-    mountains: 900,
-    freshwater: 90,
-    sea: -380,
-    deepsea: -1180,
-    kelp: -290,
-    cave: 120,
-    caveforest: 165,
-    caveswamp: 35,
-    cavewaste: 210,
-    cavehighland: 640,
-    cavewall: 1250,
-  };
-  const flags = effectiveProvinceTerrainFlags(province);
-  if (flags.has("sea")) {
-    if (flags.has("deep")) return -1180;
-    if (flags.has("mountains") || flags.has("highland")) return -220;
-    if (flags.has("forest")) return -290;
-    return -380;
-  }
-  if (flags.has("cavewall")) return 1250;
-  return heights[province.terrain];
 }
 
 function pixelNoise(x: number, y: number, seed: number): number {

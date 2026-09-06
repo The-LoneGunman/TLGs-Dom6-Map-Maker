@@ -198,7 +198,7 @@ export interface Province {
   /** Missing on schema-v1 imports is conservatively treated as user-authored. */
   nameSource?: "generated" | "authored";
   biome: BiomeKey;
-  /** Generated/visual primary; terrainFlags can add any legal combination. */
+  /** Base terrain preset; its flags combine with terrainFlags for art and export. */
   terrain: TerrainKey;
   terrainFlags?: TerrainFlag[];
   /** Auxiliary Dominions freshwater bit; does not make a province aquatic. */

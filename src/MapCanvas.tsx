@@ -10,6 +10,8 @@ import {
   type TerrainKey,
 } from "./domain";
 import { terrainPreviewKey } from "./dom6";
+import { provinceTerrainVisuals, terrainVisualKey, type TerrainMarkKind } from "./terrainVisuals";
+import { planTerrainMarks } from "./terrainArtwork";
 import {
   computeProvinceTopology,
   connectionKey,
@@ -23,7 +25,6 @@ import {
   measurePolygonProvinceArtwork,
   measureSparseProvinceArtwork,
   periodicArtworkCopies,
-  planProvinceArtwork,
   planSeamlessTiles,
   type ProvinceArtworkMetrics,
   type SeamlessTileLayout,
@@ -137,7 +138,7 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
     ? provinceMarkerBadges(selectedProvince, markerAnnotations?.get(selectedProvince.id)).map((badge) => badge.label).join(", ")
     : "";
   const provinceStatus = selectedProvince
-    ? `Current province ${selectedProvince.index} of ${plane.provinces.length}: ${selectedProvince.name}.${selectedMarkerSummary ? ` Markers: ${selectedMarkerSummary}.` : ""} ${toolLabel} tool active.`
+    ? `Current province ${selectedProvince.index} of ${plane.provinces.length}: ${selectedProvince.name}. Terrain: ${[...effectiveProvinceTerrainFlags(selectedProvince)].join(", ") || "plains"}.${selectedMarkerSummary ? ` Markers: ${selectedMarkerSummary}.` : ""} ${toolLabel} tool active.`
     : `${plane.provinces.length} provinces. No current province. ${toolLabel} tool active.`;
   const liveStatus = keyboardAction && keyboardAction.provinceId === selectedId && keyboardAction.tool === tool
     ? keyboardAction.message
@@ -362,10 +363,36 @@ function materialFamilyForTerrain(terrain: TerrainKey): MaterialFamily {
 }
 
 export function planeMaterialAssets(plane: Pick<Plane, "provinces">, condition: PreviewCondition = "normal"): string[] {
-  return [...new Set(plane.provinces.map((province) => {
-    const terrain = terrainPreviewKey(visualTerrainKey(province), condition);
-    return UNIVERSAL_MATERIAL_ASSETS[materialFamilyForTerrain(terrain)];
+  return [...new Set(plane.provinces.flatMap((province) => {
+    const visuals = visualsForCondition(province, condition);
+    return visuals.layers.map((terrain) => UNIVERSAL_MATERIAL_ASSETS[materialFamilyForTerrain(terrain)]);
   }))].sort();
+}
+
+function visualsForCondition(province: Province, condition: PreviewCondition) {
+  return provinceTerrainVisuals(province, terrainPreviewKey(terrainVisualKey(province), condition));
+}
+
+function terrainGradient(context: CanvasRenderingContext2D, province: Province, layers: readonly TerrainKey[], condition: PreviewCondition, width: number, height: number, periodic: boolean) {
+  const gradient = context.createLinearGradient(province.x * width - width * 0.05, province.y * height - height * 0.05, province.x * width + width * 0.05, province.y * height + height * 0.05);
+  const base = layers[0]!;
+  const colors = layers.flatMap((terrain) => {
+    let palette = TERRAIN_COLORS[terrain];
+    // Mountain relief in a sea is still submerged; a mixed wall stays blocked.
+    const tint = base === "cavewall" ? 0.8 : isWaterTerrain(base) && !isWaterTerrain(terrain) ? 0.64 : 0;
+    if (tint) palette = [mix(palette[0], TERRAIN_COLORS[base][0], tint), mix(palette[1], TERRAIN_COLORS[base][1], tint)];
+    return colorsForCondition(palette, condition);
+  });
+  if (periodic) {
+    // A map-relative linear gradient cannot continue through a torus seam.
+    // Use one mixed tint per owner; seamless materials and marks carry detail.
+    const tint = colors.reduce((current, color, index) => index ? mix(current, color, 1 / (index + 1)) : color);
+    gradient.addColorStop(0, tint);
+    gradient.addColorStop(1, tint);
+  } else {
+    colors.forEach((color, index) => gradient.addColorStop(index / (colors.length - 1), color));
+  }
+  return gradient;
 }
 
 /** Artwork is only needed where canonical owner-0 leaves visible negative space. */
@@ -465,20 +492,16 @@ function paintPlane(
   for (const province of plane.provinces) {
     const cell = cellById.get(province.id);
     if (!cell?.polygons.length) continue;
-    const terrain = terrainPreviewKey(visualTerrainKey(province), condition);
-    const [primary, secondary] = colorsForCondition(TERRAIN_COLORS[terrain], condition);
+    const visuals = visualsForCondition(province, condition);
     drawCellPath(context, cell.polygons, width, height);
-    const gradient = context.createLinearGradient(province.x * width - width * 0.05, province.y * height - height * 0.05, province.x * width + width * 0.05, province.y * height + height * 0.05);
-    gradient.addColorStop(0, primary);
-    gradient.addColorStop(1, secondary);
-    context.fillStyle = gradient;
+    context.fillStyle = terrainGradient(context, province, visuals.layers, condition, width, height, plane.wrapX || plane.wrapY);
     context.fill();
     const metrics = measurePolygonProvinceArtwork(cell.polygons, province, plane, width, height);
-    paintProvinceMaterial(context, plane, province, terrain, cell.polygons, undefined, width, height, options.materialImages, materialLayouts);
+    paintProvinceMaterial(context, plane, province, visuals.layers, cell.polygons, undefined, width, height, options.materialImages, materialLayouts);
     context.strokeStyle = options.selectedId === province.id ? "#f5d67c" : "rgba(15, 24, 27, .72)";
     context.lineWidth = options.selectedId === province.id ? Math.max(2, width / 900) : Math.max(0.75, width / 3400);
     context.stroke();
-    if (options.detail) drawTerrainMarks(context, plane, province, terrain, metrics, cell.polygons, width, height, condition);
+    drawTerrainMarks(context, plane, province, visuals.marks, metrics, cell.polygons, width, height, condition, options.detail);
   }
 
   context.save();
@@ -577,25 +600,14 @@ function paintSparsePlane(
   plane.provinces.forEach((province, owner) => {
     const path = mask.ownerPaths[owner];
     if (!path) return;
-    const terrain = terrainPreviewKey(visualTerrainKey(province), condition);
-    const [primary, secondary] = colorsForCondition(TERRAIN_COLORS[terrain], condition);
+    const visuals = visualsForCondition(province, condition);
     layerContext.save();
     layerContext.clip(path);
-    const gradient = layerContext.createLinearGradient(
-      province.x * width - width * 0.05,
-      province.y * height - height * 0.05,
-      province.x * width + width * 0.05,
-      province.y * height + height * 0.05,
-    );
-    gradient.addColorStop(0, primary);
-    gradient.addColorStop(1, secondary);
-    layerContext.fillStyle = gradient;
+    layerContext.fillStyle = terrainGradient(layerContext, province, visuals.layers, condition, width, height, plane.wrapX || plane.wrapY);
     layerContext.fillRect(0, 0, width, height);
-    paintProvinceMaterial(layerContext, plane, province, terrain, undefined, path, width, height, options.materialImages, materialLayouts);
-    if (options.detail) {
-      const metrics = measureSparseProvinceArtwork(owner, province, ownership, width, height);
-      drawTerrainMarks(layerContext, plane, province, terrain, metrics, undefined, width, height, condition);
-    }
+    paintProvinceMaterial(layerContext, plane, province, visuals.layers, undefined, path, width, height, options.materialImages, materialLayouts);
+    const metrics = measureSparseProvinceArtwork(owner, province, ownership, width, height);
+    drawTerrainMarks(layerContext, plane, province, visuals.marks, metrics, undefined, width, height, condition, options.detail);
     if (options.selectedId === province.id) {
       layerContext.fillStyle = "rgba(245, 214, 124, .2)";
       layerContext.fillRect(0, 0, width, height);
@@ -777,7 +789,7 @@ function paintProvinceMaterial(
   context: CanvasRenderingContext2D,
   plane: Plane,
   province: Province,
-  terrain: TerrainKey,
+  terrains: readonly TerrainKey[],
   polygons: Point[][] | undefined,
   path: Path2D | undefined,
   width: number,
@@ -785,30 +797,31 @@ function paintProvinceMaterial(
   images: Map<string, HTMLImageElement> | undefined,
   layouts: Map<string, SeamlessTileLayout>,
 ) {
-  const family = materialFamilyForTerrain(terrain);
-  const source = UNIVERSAL_MATERIAL_ASSETS[family];
-  const image = images?.get(source);
-  if (!image) return; // The terrain gradient is the guaranteed load-failure fallback.
-  const sourceWidth = image.naturalWidth || image.width;
-  const sourceHeight = image.naturalHeight || image.height;
-  if (!sourceWidth || !sourceHeight) return;
-  let layout = layouts.get(source);
-  if (!layout) {
-    layout = planSeamlessTiles(width, height, sourceWidth, sourceHeight, plane.wrapX, plane.wrapY);
-    layouts.set(source, layout);
+  const sources = [...new Set(terrains.map((terrain) => UNIVERSAL_MATERIAL_ASSETS[materialFamilyForTerrain(terrain)]))];
+  for (const source of sources) {
+    const image = images?.get(source);
+    if (!image) continue; // The mixed terrain gradient is the load-failure fallback.
+    const sourceWidth = image.naturalWidth || image.width;
+    const sourceHeight = image.naturalHeight || image.height;
+    if (!sourceWidth || !sourceHeight) continue;
+    let layout = layouts.get(source);
+    if (!layout) {
+      layout = planSeamlessTiles(width, height, sourceWidth, sourceHeight, plane.wrapX, plane.wrapY);
+      layouts.set(source, layout);
+    }
+    context.save();
+    if (path) context.clip(path);
+    else if (polygons) {
+      drawCellPath(context, polygons, width, height);
+      context.clip();
+    }
+    // Materials stay in one map-relative coordinate system; adjacent provinces
+    // sample the same texture phase instead of each stretching a tile to fit.
+    context.globalCompositeOperation = "soft-light";
+    context.globalAlpha = (province.small ? 0.13 : province.large ? 0.22 : 0.18) / sources.length;
+    paintSeamlessTileLayout(context, image, layout);
+    context.restore();
   }
-  context.save();
-  if (path) context.clip(path);
-  else if (polygons) {
-    drawCellPath(context, polygons, width, height);
-    context.clip();
-  }
-  // Materials stay in one map-relative coordinate system; adjacent provinces
-  // sample the same texture phase instead of each stretching a tile to fit.
-  context.globalCompositeOperation = "soft-light";
-  context.globalAlpha = province.small ? 0.13 : province.large ? 0.22 : 0.18;
-  paintSeamlessTileLayout(context, image, layout);
-  context.restore();
 }
 
 function paintSeamlessTileLayout(
@@ -839,50 +852,31 @@ function drawTerrainMarks(
   context: CanvasRenderingContext2D,
   plane: Plane,
   province: Province,
-  terrain: TerrainKey,
+  markKinds: readonly TerrainMarkKind[],
   metrics: ProvinceArtworkMetrics,
   polygons: Point[][] | undefined,
   width: number,
   height: number,
   condition: PreviewCondition,
+  detail = true,
 ) {
-  const flags = effectiveProvinceTerrainFlags(province);
-  const markKinds: Array<"forest" | "mountain" | "water" | "farm" | "waste"> = [];
-  if (flags.has("forest") || ["forest", "caveforest", "kelp"].includes(terrain)) markKinds.push("forest");
-  if (flags.has("highland") || flags.has("mountains") || ["highland", "mountains", "cavehighland"].includes(terrain)) markKinds.push("mountain");
-  if (flags.has("sea") || flags.has("freshwater") || flags.has("swamp") || isWaterTerrain(terrain) || terrain.includes("swamp")) markKinds.push("water");
-  if (flags.has("farm") || terrain === "farm") markKinds.push("farm");
-  if (flags.has("waste") || terrain.includes("waste")) markKinds.push("waste");
-  if (!markKinds.length) return;
-  const plan = planProvinceArtwork(metrics, {
-    id: `procedural-terrain-${markKinds.join("-")}`,
-    minAreaReferencePx2: 120,
-    minInscribedRadiusReferencePx: 3.5,
-    maxAspectRatio: 3.8,
-    safeInsetRatio: 0.2,
-    nominalSizeReferencePx: 10,
-    density: province.small ? 0.65 : province.large ? 1.25 : 1,
-    rotation: "free",
-    mirroring: "both",
-    fallback: "micro",
-  }, province.id);
-  if (!plan.placements.length) return;
+  const placements = planTerrainMarks(metrics, markKinds, province.id, !detail ? 0.35 : province.small ? 0.65 : province.large ? 1.25 : 1);
+  if (!placements.length) return;
   context.save();
   if (polygons) {
     drawCellPath(context, polygons, width, height);
     context.clip();
   }
-  let markIndex = 0;
-  for (const placement of plan.placements) {
+  for (const placement of placements) {
+    const mark = placement.kind;
     for (const copy of periodicArtworkCopies(placement, width, height, plane.wrapX, plane.wrapY)) {
       const x = copy.x;
       const y = copy.y;
-      const radius = Math.max(1.25, Math.min(copy.width, copy.height) * 0.36);
-      context.globalAlpha = 0.23;
-      context.strokeStyle = condition === "winter" ? "#f4f7ef" : "#172b25";
-      context.fillStyle = condition === "winter" ? "#e7eee7" : "#1d352c";
-      context.lineWidth = Math.max(0.65, radius * 0.18);
-      const mark = markKinds[markIndex % markKinds.length]!;
+      const radius = Math.min(copy.width, copy.height) * 0.42;
+      context.globalAlpha = copy.opacity;
+      context.strokeStyle = condition === "winter" ? "#f4f7ef" : "#c2c49b";
+      context.fillStyle = condition === "winter" ? "#b7c8bb" : "#193d29";
+      context.lineWidth = Math.max(0.45, radius * 0.18);
       if (mark === "forest") {
         context.beginPath();
         context.moveTo(x, y - radius);
@@ -890,63 +884,81 @@ function drawTerrainMarks(
         context.lineTo(x + radius * 0.68, y + radius * 0.55);
         context.closePath();
         context.fill();
+        context.stroke();
       } else if (mark === "mountain") {
         context.beginPath();
         context.moveTo(x - radius, y + radius * 0.7);
         context.lineTo(x, y - radius);
         context.lineTo(x + radius, y + radius * 0.7);
         context.stroke();
-      } else if (mark === "water") {
-        if (condition !== "winter" && flags.has("freshwater") && !flags.has("sea")) {
-          context.globalAlpha = 0.42;
-          context.strokeStyle = "#63b5ce";
-        }
+      } else if (mark === "highland") {
         context.beginPath();
-        context.moveTo(x - radius, y);
-        context.quadraticCurveTo(x - radius * 0.4, y - radius * 0.45, x, y);
-        context.quadraticCurveTo(x + radius * 0.4, y + radius * 0.45, x + radius, y);
+        context.moveTo(x - radius, y + radius * 0.5);
+        context.quadraticCurveTo(x, y - radius, x + radius, y + radius * 0.5);
         context.stroke();
+      } else if (["water", "freshwater", "swamp", "deep"].includes(mark)) {
+        if (condition !== "winter") context.strokeStyle = mark === "freshwater" ? "#7be6f4" : "#9dccd9";
+        const rows = mark === "deep" ? 3 : mark === "freshwater" ? 2 : 1;
+        for (let row = 0; row < rows; row++) {
+          const waveY = y + (row - (rows - 1) / 2) * radius * 0.65;
+          context.beginPath();
+          context.moveTo(x - radius, waveY);
+          context.quadraticCurveTo(x - radius * 0.4, waveY - radius * 0.45, x, waveY);
+          context.quadraticCurveTo(x + radius * 0.4, waveY + radius * 0.45, x + radius, waveY);
+          context.stroke();
+        }
+        if (mark === "swamp") {
+          context.beginPath();
+          context.moveTo(x, y + radius * 0.5);
+          context.lineTo(x, y - radius);
+          context.moveTo(x - radius * 0.55, y - radius * 0.8);
+          context.lineTo(x, y - radius * 0.3);
+          context.lineTo(x + radius * 0.55, y - radius * 0.8);
+          context.stroke();
+        }
       } else if (mark === "farm") {
+        context.fillStyle = condition === "winter" ? "#d8dfc5" : "#dab568";
+        context.strokeStyle = condition === "winter" ? "#778577" : "#674d24";
+        context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+        for (let row = -1; row <= 1; row++) {
+          context.beginPath();
+          context.moveTo(x - radius * 0.8, y + row * radius * 0.55);
+          context.lineTo(x + radius * 0.8, y + row * radius * 0.55);
+          context.stroke();
+        }
+      } else if (mark === "cave") {
+        context.fillStyle = "#211c1b";
+        context.beginPath();
+        context.arc(x, y, radius, Math.PI, 0);
+        context.lineTo(x + radius, y + radius * 0.7);
+        context.lineTo(x - radius, y + radius * 0.7);
+        context.closePath();
+        context.fill();
+        context.stroke();
+      } else if (mark === "kelp") {
+        context.strokeStyle = condition === "winter" ? "#d6e6bc" : "#a4c885";
+        for (let stalk = -1; stalk <= 1; stalk++) {
+          const stalkX = x + stalk * radius * 0.6;
+          context.beginPath();
+          context.moveTo(stalkX, y + radius);
+          context.quadraticCurveTo(stalkX - radius * 0.4, y, stalkX, y - radius);
+          context.stroke();
+        }
+      } else if (mark === "cavewall") {
         context.beginPath();
         context.moveTo(x - radius, y - radius);
         context.lineTo(x + radius, y + radius);
-        context.moveTo(x, y - radius);
-        context.lineTo(x + radius, y);
+        context.moveTo(x - radius, y + radius);
+        context.lineTo(x + radius, y - radius);
         context.stroke();
       } else if (mark === "waste") {
         context.beginPath();
         context.arc(x, y, radius * 0.52, 0, TAU);
         context.stroke();
       }
-      markIndex += 1;
     }
   }
   context.restore();
-}
-
-function visualTerrainKey(province: Province): TerrainKey {
-  const flags = effectiveProvinceTerrainFlags(province);
-  if (flags.has("cavewall")) return "cavewall";
-  if (flags.has("sea")) {
-    if (flags.has("deep")) return "deepsea";
-    if (flags.has("forest")) return "kelp";
-    return "sea";
-  }
-  if (flags.has("cave")) {
-    if (flags.has("forest")) return "caveforest";
-    if (flags.has("swamp")) return "caveswamp";
-    if (flags.has("waste")) return "cavewaste";
-    if (flags.has("mountains") || flags.has("highland")) return "cavehighland";
-    return "cave";
-  }
-  if (province.terrain !== "plains" && province.terrain !== "freshwater") return province.terrain;
-  if (flags.has("mountains")) return "mountains";
-  if (flags.has("highland")) return "highland";
-  if (flags.has("forest")) return "forest";
-  if (flags.has("swamp")) return "swamp";
-  if (flags.has("waste")) return "waste";
-  if (flags.has("farm")) return "farm";
-  return "plains";
 }
 
 function drawCellPath(context: CanvasRenderingContext2D, polygons: Point[][], width: number, height: number) {

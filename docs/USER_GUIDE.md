@@ -502,7 +502,7 @@ The header shows the editable province name and the decimal Dominions 64-bit ter
 
 #### Primary terrain
 
-The primary terrain controls artwork and contributes mechanical flags:
+The primary terrain is a preset that contributes mechanical flags. Artwork uses the complete combination, including any additional flags:
 
 - Plains
 - Forest
@@ -540,6 +540,10 @@ Heartland, Wildwood, Marshlands, Sunscorched, High country, Tundra, Archipelago,
 #### Additional terrain flags
 
 Sea, Highland, Swamp, Wasteland, Forest, Farm, Deep sea, Cave, Mountains, and Impassable cave wall can be combined additively.
+
+Changes repaint the map immediately and appear in **Export PNG**. Mixed terrain combines its colors, materials, and symbols: Farm adds field rows, Forest adds trees (kelp under water), and Cave adds a cave arch. Mountains, hills, marshes, waste, and water have their own marks. Details fit within the province and remain clipped on irregular, narrow, and wrapped shapes; zoom in on small provinces. Fresh water adds a water marker without turning land into a sea. Deep sea only has an effect when Sea is also present.
+
+Download or install the package again after editing; a new Dominions game uses the updated terrain mask and elevation. You do not need to regenerate the atlas or edit image files. The game draws its own native terrain artwork, so it will not be pixel-identical to Atlas's preview. The [official D6M specification](https://www.illwinter.com/dom6/dom6fileformats.pdf) separates geography in `.d6m` from terrain in `.map`; Atlas exports both from the current province flags. Existing games do not automatically adopt terrain edits.
 
 Useful combinations:
 
