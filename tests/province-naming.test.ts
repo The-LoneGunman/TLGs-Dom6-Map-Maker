@@ -4,6 +4,7 @@ import { performance } from "node:perf_hooks";
 import { cloneProject, type Plane, type PlaneKind, type PlaneVariant, type Province, type TerrainFlag, type TerrainKey } from "../src/domain";
 import { compileMapText } from "../src/dom6";
 import { createDefaultProject, generateProject } from "../src/generator";
+import { DISTINCTIVE_REALM_NAMES, DISTINCTIVE_TERRAIN_NAMES, distinctiveRealmNames } from "../src/nameVocabulary";
 import {
   MIN_CONTEXTUAL_NAME_POOL,
   RESERVED_CAPITAL_NAMES,
@@ -101,8 +102,10 @@ test("all plane kind and variant combinations retain a recognizable plane vocabu
       const context = provinceNameContext(plane, plane.provinces[0]!);
       assert.equal(context.planeTheme, expectedTheme, `${kind}/${variant}`);
       regenerateGeneratedProvinceNames([plane], "plane-variant-matrix", 0);
-      const modifier = plane.provinces[0]!.name.replace(/^The /, "").split(/\s+/)[0]!;
-      assert.ok(THEME_MODIFIERS[expectedTheme]!.has(modifier), `${kind}/${variant} produced ${plane.provinces[0]!.name}`);
+      const name = plane.provinces[0]!.name.replace(/^The /, "");
+      const modifier = name.split(/\s+/)[0]!;
+      const namedPlaces = distinctiveRealmNames(expectedTheme) ?? DISTINCTIVE_TERRAIN_NAMES[context.terrainThemes[0]!]!;
+      assert.ok(THEME_MODIFIERS[expectedTheme]!.has(modifier) || namedPlaces.includes(name), `${kind}/${variant} produced ${plane.provinces[0]!.name}`);
       assert.equal(isReservedProvinceName(plane.provinces[0]!.name), false);
     }
   }
@@ -126,7 +129,9 @@ test("effective additive terrain combinations select compound, aquatic, cave, an
     const province = plane.provinces[0]!;
     assert.deepEqual(provinceNameContext(plane, province).terrainThemes, expected);
     regenerateGeneratedProvinceNames([plane], `terrain-combination:${index}`, 0);
-    assert.match(province.name, words);
+    const namedPlaces = DISTINCTIVE_TERRAIN_NAMES[expected[0]!] ?? [];
+    assert.ok(words.test(province.name) || namedPlaces.some(name => province.name === name
+      || province.name.endsWith(` ${name}`) || province.name.includes(`${name} of `)), province.name);
     if (expected.length > 1) assert.match(province.name, / of /, "compound flags must contribute an epithet");
   }
 
@@ -183,6 +188,76 @@ test("article variants cannot bypass manual-name preservation or uniqueness", ()
     assert.ok(report.collisionProbes >= 1);
     assert.equal(new Set(plane.provinces.map(province => normalizeProvinceName(province.name))).size, 13);
   }
+});
+
+test("the expanded vocabulary contains 528 distinct original, capital-safe place names", () => {
+  const pools = [...Object.values(DISTINCTIVE_TERRAIN_NAMES), ...Object.values(DISTINCTIVE_REALM_NAMES)];
+  const names = pools.flat();
+  assert.equal(names.length, 528);
+  assert.ok(pools.every(pool => pool.length === 16));
+  assert.equal(new Set(names.map(normalizeProvinceName)).size, names.length);
+  for (const name of names) {
+    assert.equal(isReservedProvinceName(name), false, `${name} conflicts with a capital or reserved realm`);
+    assert.doesNotMatch(name, /\bthe\b/i);
+    assert.doesNotMatch(name, /[\r\n\d]/);
+    assert.equal(name, name.trim());
+    assert.ok(name.length <= 32, `${name} should remain readable on the map`);
+  }
+});
+
+test("all physical terrain pools contribute named places without borrowing from unrelated terrains", () => {
+  const cases: Array<[string, TerrainKey, TerrainFlag[]?, PlaneKind?]> = [
+    ["plains", "plains"], ["farm", "farm"], ["forest", "forest"], ["swamp", "swamp"],
+    ["waste", "waste"], ["highland", "highland"], ["mountains", "mountains"],
+    ["coast", "plains"], ["sea", "sea"], ["deep_sea", "deepsea"], ["kelp", "kelp"],
+    ["freshwater", "plains", ["freshwater"]], ["cave", "cave"], ["cave_forest", "caveforest"],
+    ["cave_swamp", "caveswamp"], ["cave_waste", "cavewaste"], ["cave_highland", "cavehighland"],
+    ["flooded_cave", "cave", ["sea"]], ["styx", "cave", ["sea"], "underworld"], ["cavewall", "cavewall"],
+  ];
+  for (const [key, terrain, flags, kind = "surface"] of cases) {
+    const plane = fixturePlane(kind, "temperate", terrain, flags);
+    const prototype = plane.provinces[0]!;
+    plane.provinces = Array.from({ length: 64 }, (_, i) => ({ ...prototype, id: `named-${i}`, index: i + 1 }));
+    if (key === "coast") {
+      const sea = { ...prototype, id: "coast-water", index: 65, terrain: "sea" as const, name: "Test Ocean", nameSource: "authored" as const };
+      plane.edges = plane.provinces.map(p => ({ id: `shore-${p.id}`, a: p.id, b: sea.id, kind: "standard" as const }));
+      plane.provinces.push(sea);
+    }
+    assert.deepEqual(provinceNameContext(plane, plane.provinces[0]!).terrainThemes, [key]);
+    regenerateGeneratedProvinceNames([plane], `distinctive-terrain-${key}`);
+    const actual = plane.provinces.filter(p => p.nameSource === "generated").map(p => p.name);
+    assert.equal(actual.filter(name => DISTINCTIVE_TERRAIN_NAMES[key]!.includes(name)).length, 16, key);
+    const otherPools = Object.entries(DISTINCTIVE_TERRAIN_NAMES).filter(([other]) => other !== key).flatMap(([, names]) => names);
+    assert.ok(actual.every(name => !otherPools.includes(name)), key);
+  }
+});
+
+test("realm landmarks are interleaved from the first provinces and custom variants inherit the right traditions", () => {
+  for (const kind of KINDS) for (const variant of VARIANTS) {
+    const plane = fixturePlane(kind, variant, kind === "cave" || kind === "cavern" ? "cave" : "plains");
+    const theme = provinceNameContext(plane, plane.provinces[0]!).planeTheme;
+    const places = distinctiveRealmNames(theme) ?? DISTINCTIVE_TERRAIN_NAMES.plains!;
+    const prototype = plane.provinces[0]!;
+    plane.provinces = Array.from({ length: 64 }, (_, i) => ({ ...prototype, id: `landmark-${i}`, index: i + 1 }));
+    regenerateGeneratedProvinceNames([plane], `realm-landmarks-${kind}-${variant}`);
+    const actual = plane.provinces.map(p => p.name);
+    assert.equal(actual.filter(name => places.includes(name)).length, 16, `${kind}/${variant}`);
+    assert.ok(actual.slice(0, 4).some(name => places.includes(name)));
+    assert.ok(actual.some(name => /^The /.test(name)));
+  }
+});
+
+test("a manually claimed landmark is preserved and the allocator moves past it without duplicates", () => {
+  const plane = fixturePlane("dream", "wild");
+  const prototype = plane.provinces[0]!;
+  plane.provinces = Array.from({ length: 80 }, (_, i) => ({ ...prototype, id: `dream-${i}`, index: i + 1 }));
+  plane.provinces.push({ ...prototype, id: "manual-larkglass", index: 81, name: "The Larkglass", nameSource: "authored" });
+  const report = regenerateGeneratedProvinceNames([plane], "claimed-landmark");
+  assert.equal(report.authoredPreserved, 1);
+  assert.ok(report.collisionProbes > 0);
+  assert.equal(plane.provinces.at(-1)!.name, "The Larkglass");
+  assert.equal(new Set(plane.provinces.map(p => normalizeProvinceName(p.name))).size, 81);
+  assert.equal(report.numericFallbacks, 0);
 });
 
 test("the 96-province duplicate repro is unique, deterministic, and capital-safe", () => {
