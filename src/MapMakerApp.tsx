@@ -1608,8 +1608,8 @@ function TerrainInspector({ planeId, province, update, mutateProject }: { planeI
   const additionalFlags = ADDITIVE_TERRAIN_FLAGS.filter((flag) => !inherentFlags.has(flag));
   return (
     <div className="inspector-stack">
-      <SectionHeading kicker="MECHANICAL TERRAIN" title="Biome & terrain" />
-      <Field label="Visual / primary terrain"><select value={province.terrain} onChange={(event) => {
+      <SectionHeading kicker="TERRAIN & ARTWORK" title="Biome & terrain" />
+      <Field label="Primary terrain preset"><select value={province.terrain} onChange={(event) => {
         const terrain = event.target.value as TerrainKey;
         mutateProject((draft) => { applyPrimaryTerrain(draft, planeId, province.id, terrain); });
       }}>{TERRAIN_KEYS.map((key) => <option value={key} key={key}>{TERRAIN_LABELS[key]}</option>)}</select></Field>
@@ -1654,7 +1654,7 @@ function TerrainInspector({ planeId, province, update, mutateProject }: { planeI
       <div className="path-grid">
         {MAGIC_PATHS.map((path) => <CheckCard key={path} compact label={MAGIC_PATH_LABELS[path]} checked={province.siteBias.includes(path)} onChange={(value) => update((item) => { item.siteBias = value ? [...new Set([...item.siteBias, path])] : item.siteBias.filter((entry) => entry !== path); })} />)}
       </div>
-      <div className="info-card"><strong>Native terrain rendering</strong><p>The terrain mask is the source of truth. Fresh water is an auxiliary marker and does not make a province aquatic. Dominions redraws winter, forests, flooding/submergence, farms, waste, kelp, and related changes itself.</p></div>
+      <div className="info-card"><strong>Terrain changes update the artwork</strong><p>Combined flags appear together: fields for Farm, trees or kelp for Forest, and an arch for Cave. The map and PNG update immediately; zoom in for small details. Download or install the package again to use edited terrain in a new Dominions game. Dominions draws its own native artwork from the exported terrain mask and geography, not from the PNG.</p></div>
     </div>
   );
 }
