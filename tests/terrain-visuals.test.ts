@@ -172,6 +172,13 @@ test("the shared PNG painter changes for each added flag and restores the origin
     assert.ok(combined.includes("#211c1b"), "cave arches are painted");
     province.terrainFlags = [];
     assert.equal(await trace(), plain);
+    for (const [wrapX, wrapY] of [[true, false], [false, true], [true, true]]) {
+      Object.assign(plane, { wrapX, wrapY });
+      province.terrainFlags = ["forest", "farm", "cave"];
+      await trace();
+      const colors = calls.filter(call => call[0] === "color").map(call => call[2]);
+      assert.equal(new Set(colors).size, 1, "wrapped province fragments share one mixed tint without a seam jump");
+    }
   } finally {
     if (priorDocument) Object.defineProperty(globalThis, "document", priorDocument);
     else Reflect.deleteProperty(globalThis, "document");

@@ -373,7 +373,7 @@ function visualsForCondition(province: Province, condition: PreviewCondition) {
   return provinceTerrainVisuals(province, terrainPreviewKey(terrainVisualKey(province), condition));
 }
 
-function terrainGradient(context: CanvasRenderingContext2D, province: Province, layers: readonly TerrainKey[], condition: PreviewCondition, width: number, height: number) {
+function terrainGradient(context: CanvasRenderingContext2D, province: Province, layers: readonly TerrainKey[], condition: PreviewCondition, width: number, height: number, periodic: boolean) {
   const gradient = context.createLinearGradient(province.x * width - width * 0.05, province.y * height - height * 0.05, province.x * width + width * 0.05, province.y * height + height * 0.05);
   const base = layers[0]!;
   const colors = layers.flatMap((terrain) => {
@@ -383,7 +383,15 @@ function terrainGradient(context: CanvasRenderingContext2D, province: Province, 
     if (tint) palette = [mix(palette[0], TERRAIN_COLORS[base][0], tint), mix(palette[1], TERRAIN_COLORS[base][1], tint)];
     return colorsForCondition(palette, condition);
   });
-  colors.forEach((color, index) => gradient.addColorStop(index / (colors.length - 1), color));
+  if (periodic) {
+    // A map-relative linear gradient cannot continue through a torus seam.
+    // Use one mixed tint per owner; seamless materials and marks carry detail.
+    const tint = colors.reduce((current, color, index) => index ? mix(current, color, 1 / (index + 1)) : color);
+    gradient.addColorStop(0, tint);
+    gradient.addColorStop(1, tint);
+  } else {
+    colors.forEach((color, index) => gradient.addColorStop(index / (colors.length - 1), color));
+  }
   return gradient;
 }
 
@@ -486,7 +494,7 @@ function paintPlane(
     if (!cell?.polygons.length) continue;
     const visuals = visualsForCondition(province, condition);
     drawCellPath(context, cell.polygons, width, height);
-    context.fillStyle = terrainGradient(context, province, visuals.layers, condition, width, height);
+    context.fillStyle = terrainGradient(context, province, visuals.layers, condition, width, height, plane.wrapX || plane.wrapY);
     context.fill();
     const metrics = measurePolygonProvinceArtwork(cell.polygons, province, plane, width, height);
     paintProvinceMaterial(context, plane, province, visuals.layers, cell.polygons, undefined, width, height, options.materialImages, materialLayouts);
@@ -595,7 +603,7 @@ function paintSparsePlane(
     const visuals = visualsForCondition(province, condition);
     layerContext.save();
     layerContext.clip(path);
-    layerContext.fillStyle = terrainGradient(layerContext, province, visuals.layers, condition, width, height);
+    layerContext.fillStyle = terrainGradient(layerContext, province, visuals.layers, condition, width, height, plane.wrapX || plane.wrapY);
     layerContext.fillRect(0, 0, width, height);
     paintProvinceMaterial(layerContext, plane, province, visuals.layers, undefined, path, width, height, options.materialImages, materialLayouts);
     const metrics = measureSparseProvinceArtwork(owner, province, ownership, width, height);
