@@ -101,7 +101,7 @@ test("all plane kind and variant combinations retain a recognizable plane vocabu
       const context = provinceNameContext(plane, plane.provinces[0]!);
       assert.equal(context.planeTheme, expectedTheme, `${kind}/${variant}`);
       regenerateGeneratedProvinceNames([plane], "plane-variant-matrix", 0);
-      const modifier = plane.provinces[0]!.name.split(/\s+/)[1]!;
+      const modifier = plane.provinces[0]!.name.replace(/^The /, "").split(/\s+/)[0]!;
       assert.ok(THEME_MODIFIERS[expectedTheme]!.has(modifier), `${kind}/${variant} produced ${plane.provinces[0]!.name}`);
       assert.equal(isReservedProvinceName(plane.provinces[0]!.name), false);
     }
@@ -136,6 +136,53 @@ test("effective additive terrain combinations select compound, aquatic, cave, an
   coast.provinces.push(sea);
   coast.edges = [{ id: "coast-edge", a: land.id, b: sea.id, kind: "standard" }];
   assert.deepEqual(provinceNameContext(coast, land).terrainThemes, ["coast"]);
+});
+
+test("short and compound names blend article-free and The-prefixed forms in every realm", () => {
+  for (const kind of KINDS) for (const variant of VARIANTS) for (const compound of [false, true]) {
+    const plane = fixturePlane(kind, variant, "plains", compound ? ["mountains", "forest"] : undefined);
+    const prototype = plane.provinces[0]!;
+    plane.provinces = Array.from({ length: 32 }, (_, i) => ({ ...prototype, id: `mix-${i}`, index: i + 1 }));
+    regenerateGeneratedProvinceNames([plane], "name-style-matrix", 2);
+    const names = plane.provinces.map(province => province.name);
+    const withArticle = names.filter(name => /^The /.test(name)).length;
+    assert.ok(withArticle >= 6 && withArticle <= 10, `${kind}/${variant}/${compound}: ${withArticle} of 32 names began with The`);
+    assert.ok(names.filter(name => !/^The /.test(name)).every(name => !/\bthe\b/i.test(name)));
+    assert.equal(new Set(names.map(normalizeProvinceName)).size, names.length);
+    if (compound) assert.ok(names.every(name => name.includes(" of ")), "secondary terrain must still contribute its epithet");
+  }
+});
+
+test("ordinary mixed-terrain maps retain a blend across seeds and name-only rerolls", () => {
+  const project = cloneProject(NAMING_TEMPLATE);
+  const withoutNames = (planes: Plane[]) => planes.map(plane => ({ ...plane,
+    provinces: plane.provinces.map(province => ({ ...province, name: "" })),
+  }));
+  const originalMap = withoutNames(project.planes);
+  for (let reroll = 0; reroll < 12; reroll++) {
+    regenerateGeneratedProvinceNames(project.planes, `name-blend-${reroll}`, reroll);
+    const names = project.planes.flatMap(plane => plane.provinces.map(province => province.name));
+    const withArticle = names.filter(name => /^The /.test(name)).length;
+    assert.ok(withArticle >= names.length * 0.15 && withArticle <= names.length * 0.35, `${withArticle}/${names.length} names began with The`);
+    assert.deepEqual(withoutNames(project.planes), originalMap, "name rerolls must not alter terrain, starts, units or geography");
+  }
+});
+
+test("article variants cannot bypass manual-name preservation or uniqueness", () => {
+  for (const withArticle of [false, true]) {
+    const plane = fixturePlane("surface", "temperate");
+    const prototype = plane.provinces[0]!;
+    plane.provinces = Array.from({ length: 12 }, (_, i) => ({ ...prototype, id: `collision-${i}`, index: i + 1 }));
+    regenerateGeneratedProvinceNames([plane], "article-collision");
+    const baseName = plane.provinces[0]!.name.replace(/^The /, "");
+    const manualName = `${withArticle ? "The " : ""}${baseName}`;
+    plane.provinces.push({ ...prototype, id: "manual", index: 13, name: manualName, nameSource: "authored" });
+    const report = regenerateGeneratedProvinceNames([plane], "article-collision");
+    assert.equal(plane.provinces.at(-1)!.name, manualName);
+    assert.equal(report.authoredPreserved, 1);
+    assert.ok(report.collisionProbes >= 1);
+    assert.equal(new Set(plane.provinces.map(province => normalizeProvinceName(province.name))).size, 13);
+  }
 });
 
 test("the 96-province duplicate repro is unique, deterministic, and capital-safe", () => {

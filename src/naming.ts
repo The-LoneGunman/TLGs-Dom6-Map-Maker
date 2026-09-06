@@ -310,13 +310,17 @@ function candidateAtRank(vocabulary: ReturnType<typeof namingVocabulary>, seed: 
   const simpleSize = vocabulary.modifiers.length * vocabulary.nouns.length;
   const complexSize = simpleSize * vocabulary.epithets.length;
   const hash = stableHash(`${seed}:${vocabulary.key}`);
+  // Seeded cadence keeps short and compound names mostly article-free, while
+  // retaining "The" for one in four candidates in each contextual vocabulary.
+  // Articles do not add to the unique-name pool: collision checks ignore them.
+  const article = (rank + (hash >>> 16)) % 4 === 0 ? "The " : "";
   if (!vocabulary.requiresEpithet && rank < simpleSize) {
     const offset = hash % simpleSize;
     const step = permutationStep(simpleSize, hash >>> 8);
     const value = (offset + rank * step) % simpleSize;
     const modifier = vocabulary.modifiers[Math.floor(value / vocabulary.nouns.length)]!;
     const noun = vocabulary.nouns[value % vocabulary.nouns.length]!;
-    return { name: `The ${modifier} ${noun}`, numericFallback: false };
+    return { name: `${article}${modifier} ${noun}`, numericFallback: false };
   }
   const simpleOffset = vocabulary.requiresEpithet ? 0 : simpleSize;
   if (rank < simpleOffset + complexSize) {
@@ -329,7 +333,7 @@ function candidateAtRank(vocabulary: ReturnType<typeof namingVocabulary>, seed: 
     const modifier = vocabulary.modifiers[Math.floor(pair / vocabulary.nouns.length)]!;
     const noun = vocabulary.nouns[pair % vocabulary.nouns.length]!;
     const epithet = vocabulary.epithets[epithetIndex]!;
-    return { name: `The ${modifier} ${noun} of ${epithet}`, numericFallback: false };
+    return { name: `${article}${modifier} ${noun} of ${epithet}`, numericFallback: false };
   }
   const poolSize = simpleOffset + complexSize;
   const recycled = candidateAtRank(vocabulary, seed, rank % poolSize);

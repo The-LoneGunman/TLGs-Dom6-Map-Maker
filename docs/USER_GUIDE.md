@@ -262,6 +262,8 @@ This affects solid Surface and surface-like Custom planes. Cave-family and spars
 
 Generated names are unique across the atlas and avoid known nation, epithet, home/capital-site, and special-realm names.
 
+Names blend article-free forms such as **Silver Grove** with occasional **The**-prefixed forms. Roughly one in four candidates uses **The**, including longer compound names. Existing saved names do not change automatically: use **Reroll generated names (preserve manual)** to apply the new blend without regenerating the map.
+
 ### Each bonus plane size (% of core)
 
 Range: **1-500%**. Default: **30%**.
