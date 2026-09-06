@@ -8,6 +8,8 @@ Pantokrator Atlas is a local-first map maker for Dominions 6. It generates deter
 
 Projects, imported catalogs, and generated packages remain in your browser profile or on your device. Pantokrator Atlas does not upload or synchronize them. Save **Editable project JSON** backups to move projects between browsers or app addresses.
 
+The Windows v0.1.4 installer predates the generation-budget and start-region analysis controls described below; those are part of this branch's hosted-app update. Keep a JSON backup from your older app before testing new project metadata.
+
 ## Run locally on Windows
 
 1. Download `Pantokrator-Atlas-Setup-x64.exe` from the [latest release](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/latest).
@@ -31,6 +33,7 @@ Where browser folder access is supported, use **Install directly**; otherwise us
 - Searchable game-content catalogs and scenario editing for nations, commanders, squads, sites, buildings, battle settings, and advanced directives.
 - Combined terrain-flag artwork in the editor and PNG previews: adding Farm, Forest, Cave, and other flags changes the province's appearance immediately.
 - Browser autosave, Undo/Redo, editable JSON backups, direct folder installation, ZIP export, and structural/gameplay validation.
+- Planned-versus-current province budgets, control-scope labels, cross-plane province search, and a per-start structural inspector with temporary region highlights.
 
 For every generator, plane, scenario, province, catalog, validation, and export control, use the [user guide](docs/USER_GUIDE.md).
 
@@ -38,13 +41,17 @@ For every generator, plane, scenario, province, catalog, validation, and export 
 
 1. Choose player count, provinces per player, start allocation, ocean style, and output size on **Generate**.
 2. Add or customize planes, their sizes, start policies, terrain variants, and links on **Planes**.
-3. Generate the atlas and review its balance notices and validation report.
+3. Review the next-generation province budget, generate the atlas, then inspect current starts and validation notices.
 4. Inspect or edit provinces, borders, gateways, starts, thrones, guardians, sites, and scenario settings.
 5. Save **Editable project JSON** as a backup, then use **Install directly** or **Download ready ZIP**.
 
 `Players x provinces per player` sizes only core Surface, Cave, Cavern, and surface-like solid Custom realms. Auto-sized bonus planes are added as a configurable percentage of that core total; percentages above 100% are allowed. Manual plane sizes are preserved.
 
 Start provinces and their directly connected neighbors are protected from generated thrones and guardians. Gates prefer endpoints farther from starts and produce a warning when a constrained map requires a closer fallback. Assigning a nation-specific start clears conflicting independent setup from its capital. Start-blocked planes remain available for later manual or nation-specific allocation.
+
+**Inspect starts** separates export validity, the legacy structural score, and analysis limitations. Compare potential graph connections with conservative dry/water-separated routes; inspect nearby population, authored guardians, thrones, competing starts, and realm entrances. Distances are graph hops, not turns, and unknown population or guardian difficulty remains unknown. These diagnostics do not simulate nation strength or certify multiplayer balance.
+
+Optional game-patch and mod notes travel with project JSON and host reports. They never change generation or enable nation bonuses. Catalog versions are selector snapshots, not balance rulesets; patches and mods can invalidate nation-specific assumptions.
 
 ## Dominions engine boundaries
 

@@ -96,12 +96,16 @@ Adding a plane to the generation plan preserves every existing actual gateway; t
 The main areas and controls are:
 
 - **Header:** project name, autosave state, New atlas, Save now, Undo, Redo, Validate, and Install / export.
-- **Setup panel:** Generate, Planes, and Scenario tabs.
+- **Setup panel:** Find a province, then Generate, Planes, and Scenario tabs.
 - **Map workbench:** the active plane, editing tools, condition preview, zoom, plane strip, and generation/fairness status.
-- **Province inspector:** Terrain, Gameplay, Sites & PD, and Advanced tabs for the selected province.
+- **Province inspector:** Terrain, Gameplay, Sites & guardians, and Advanced tabs for the selected province.
 - **Open project:** the fixed button near the lower-left corner imports a saved Atlas project JSON.
 
 Selecting a plane in the Planes list or the strip below the map makes it active. Selecting a province opens it in the inspector.
+
+**Find a province** searches all planes by province name, plane name, or number. Numbers (with or without `#`) match either the global export number or the local province number. Add a plane-name word to narrow ambiguous local numbers. The first 30 matches are shown with both numbers. Selecting a result switches to **Select** and cancels any armed border/gateway endpoint; it does not edit the map.
+
+Control labels identify their scope: **Next generation**, **Current map**, **Map + next generation**, **Host / export**, **Preview only**, or **Saved note only**. Current-map changes are reflected in later exports; they do not alter a map already installed in Dominions. Biome and patch notes are descriptive, while primary terrain and terrain flags affect artwork and game rules.
 
 The map marker legend distinguishes all authored gameplay markers instead of collapsing them into a generic symbol: **S/#/N** means generic/team/nation-specific start, **♜/♛/×** means preferred/fixed/avoided throne, **✦/M** means a placed site/many-sites terrain, **G** means guardian groups, and **◎** means a gateway endpoint. A province can show several badges at once. The selected-province screen-reader status announces its combined terrain, the same marker meanings, and relevant group, nation, site, guardian, and gate numbers.
 
@@ -110,6 +114,14 @@ The **Project** name in the header becomes the map title and the basis for the e
 ## Generate tab
 
 Generation controls define the next generated atlas. Changing most of them does not alter existing geography until **Generate balanced atlas** is pressed.
+
+### Generation plan and province budget
+
+The **Next generation** summary shows core, bonus, and total planned provinces. Expand **Province budget by plane** to compare each plane's current count with its next target, including manual-size preservation, start-buffer minimums, start blocking, and the 800-province per-plane cap. It uses the same sizing calculation as generation; counts do not guarantee feasible start spacing or water allocation.
+
+The pending summary groups inputs changed since the last generation recorded by this editor. It deliberately excludes manual province edits, name rerolls, host options, and patch notes. “Plan matches” is not proof that the current map is unedited. Older projects have no recorded baseline and say so; generating establishes one. Resolution, wrapping, and archetype changes can also affect current display/export behavior before generation, as their scope labels indicate.
+
+**Review current starts** opens the start-region inspector described below. It analyzes the current map, not the ungenerated plan.
 
 ### Fresh-project defaults
 
@@ -492,7 +504,7 @@ Cycles **Neutral -> Preferred -> Avoid -> Neutral** and clears a fixed-throne se
 
 ### Site
 
-Toggles the **Many sites** terrain bit. It does not place a named magic site; use Sites & PD for that.
+Toggles the **Many sites** terrain bit. It does not place a named magic site; use Sites & guardians for that.
 
 ### Condition preview
 
@@ -602,7 +614,7 @@ The Generate throne count creates preferred locations, not fixed sites. Fixed th
 
 Population type affects local recruitment; it is not a separate initial-army or custom-PD roster identifier.
 
-### Sites & PD tab
+### Sites & guardians tab
 
 #### Placed magic sites
 
@@ -704,7 +716,7 @@ Validation checks include start counts/categories/spacing, start exits, throne a
 
 ### Fairness score
 
-The score is diagnostic, not an export gate:
+The score is a legacy structural heuristic, not an export gate or certificate of nation, combat, or economic balance. Its display bands are:
 
 - **85-100:** excellent
 - **70-84:** fair
@@ -720,11 +732,34 @@ It combines:
 - Connectivity: 10%
 - Start-category allocation: 10%
 
-Nearby-throne parity counts thrones reachable within four actual movement steps, including valid gates. Remote or unreachable thrones are neutral. The score penalizes unequal nearby-throne counts between starts; it does not punish an equal abundance of nearby thrones.
+Nearby-throne parity counts throne markers within four potential graph hops, including valid gates. These are not conquest turns: the graph does not simulate sailing, flight, seasonal barriers, or a nation's ability to enter water. Remote or unreachable thrones are neutral. The score penalizes unequal nearby-throne counts between starts; it does not punish an equal abundance of nearby thrones.
 
 Sparse bonus realms are scored according to their intended route/chamber profiles rather than being treated as defective because ordinary provinces have only one or two exits.
 
 Clicking a validation issue that identifies a plane/province navigates to it when possible.
+
+### Start-region analysis
+
+Open **Review current starts** under Generate, **Inspect starts** in the footer, or **Inspect every start** in Validate. The panel separates export blockers, the legacy score (including low subscores), and limited analysis confidence. All generic, team, and nation-specific start locations are included and deduplicated. Manual map edits recalculate the current diagnostics; they do not need regeneration.
+
+Choose an access model:
+
+- **Potential connections:** includes land/water transitions and potentially traversable rivers/passes. This is a topology view, not an army-movement prediction.
+- **Conservative dry / water-separated routes:** keeps dry starts on dry provinces and water starts underwater. It excludes rivers, mountain passes, mountain borders, and their corresponding custom border bits. A gate must connect the same medium to be traversed in this view.
+
+Both models count a gate as one graph hop, ignore blocked provinces, and omit all capitals from expansion counts. Neither simulates sailing, flight, seasonal scales, movement costs, ownership, battle outcomes, or conquest turns. Same-number team-start annotations are treated as allies, including group zero; the host must configure the intended teams.
+
+Each row shows useful exits, provinces within two/three steps, two-step exclusive/contested access, known population plus the number of unknown provinces, authored guardian provinces, nearby preferred/fixed throne markers, and nearest rival/throne/cross-plane entrance. Exclusive means strictly closer than every competing start; contested includes ties and provinces a rival reaches sooner. Neither predicts ownership. Population is not income/resources; random independents and guardian difficulty remain unknown. Throne markers do not certify final engine placement.
+
+Click a start name to navigate safely to it and highlight its two-step region in teal. The overlay is editor-only, works across plane switches, and is hidden after project edits so it cannot present stale results. **Clear highlight** removes it. PNG and playable exports never include this overlay. `—` means no reachable target, a blocked start, or incomplete analysis.
+
+Analysis is capped at 64 start locations for responsiveness. Larger imported start sets show an incomplete-analysis warning and no exclusive/contested comparison. This is an analysis limit, not a new limit on saved scenario starts.
+
+### Patch and mod assumptions
+
+Under **Game patch and mod assumptions**, record the intended game patch and mod names/versions. These are user-declared notes, not auto-detected compatibility. They are saved in project JSON and the host-facing reports; editing them never changes geography or applies nation compensation.
+
+A missing patch, a mismatch with the selector catalog, or declared mods is explicitly unverified. Even an exact catalog-version match certifies neither nation movement nor combat balance. The model identifier (`structural-inspector-1`) versions these structural assumptions independently of game patches. Reassess nation-specific expectations after any game or mod update.
 
 ## Saving and reopening projects
 
@@ -748,6 +783,8 @@ The header buttons keep up to 30 project snapshots. A new edit clears Redo. Undo
 
 ### Editable project JSON
 
+Projects saved by this version can contain optional analysis notes and generation-input snapshots. This version opens older schema-v1 projects without inventing a generation baseline; older app versions may reject these newly added fields. Keep a pre-upgrade backup if you need to return to an older app.
+
 Choose **Install / export -> Editable project JSON** for a portable backup named `<map-name>.atlas.json`. Every playable package also includes `atlas_project.json`.
 
 Choose **Open project** and select either file to reopen it. The importer accepts up to 16 MiB of UTF-8 Atlas schema-v1 JSON with at most 8 planes and 800 provinces per plane. It does not open ZIP, `.map`, `.d6m`, custom catalog JSON, or arbitrary JSON.
@@ -768,8 +805,8 @@ A playable package contains:
 - `_plane2` through `_plane8` `.map` and `.d6m` files as needed.
 - `INSTALL.txt`.
 - `atlas_project.json`.
-- `balance_report.txt`.
-- `host_settings.txt`.
+- `balance_report.txt`: legacy score, validation, both per-start structural models, and unverified patch/mod assumptions. Treat this as host-facing analysis.
+- `host_settings.txt`: intended host setup and the same declared patch/mod notes.
 - `host_topology.txt` — a host-only spoiler dossier listing every plane, local/global province number, start/throne marker, connection, border type, and gateway endpoint. Do not distribute it to players.
 
 The first plane uses the normalized map name with no suffix. Later plane display names do not change the `_planeN` file convention.

@@ -85,6 +85,8 @@ import {
   type ProjectGenerationTask,
 } from "./generationWorker";
 import { MapCanvas, canRenderPlanePreview, renderPlanePng, type ProvinceMarkerAnnotations } from "./MapCanvas";
+import { GenerationPlanSummary, ProvinceExplorer, StartBalancePanel } from "./WorkbenchPanels";
+import { recordGenerationInputs, type AnalysisMode, type ProvinceReference } from "./workbench";
 import { CatalogCombobox } from "./catalog/CatalogCombobox";
 import { BoundedNumberInput, ItemListInput } from "./EditorInputs";
 import {
@@ -395,7 +397,7 @@ export function GenerationBalanceNotice({ issues, generationWarnings = [] }: { i
 }
 
 export function MapMakerApp() {
-  const [project, setProject] = useState<MapProject>(() => createDefaultProject());
+  const [project, setProject] = useState<MapProject>(() => recordGenerationInputs(createDefaultProject()));
   const [activePlaneId, setActivePlaneId] = useState("");
   const [selectedId, setSelectedId] = useState<string>();
   const [tool, setTool] = useState<Tool>("select");
@@ -407,6 +409,8 @@ export function MapMakerApp() {
   const [undoStack, setUndoStack] = useState<MapProject[]>([]);
   const [redoStack, setRedoStack] = useState<MapProject[]>([]);
   const [validationOpen, setValidationOpen] = useState(false);
+  const [balanceOpen, setBalanceOpen] = useState(false);
+  const [analysisSelection, setAnalysisSelection] = useState<{ project: MapProject; keys: string[]; label: string; mode: AnalysisMode }>();
   const [exportOpen, setExportOpen] = useState(false);
   const [replaceAllNamesOpen, setReplaceAllNamesOpen] = useState(false);
   const [destructiveConfirmation, setDestructiveConfirmation] = useState<DestructiveConfirmation>();
@@ -464,6 +468,17 @@ export function MapMakerApp() {
     sum + item.audit.missing.length + item.audit.extra.length, 0);
   const errorCount = issues.filter((issue) => issue.severity === "error").length;
   const warningCount = issues.filter((issue) => issue.severity === "warning").length;
+  const currentAnalysis = analysisSelection?.project === project ? analysisSelection : undefined;
+  const analysisProvinceIds = useMemo(() => currentAnalysis
+    ? new Set(currentAnalysis.keys.filter(key => key.startsWith(`${activePlane.id}:`)).map(key => key.slice(activePlane.id.length + 1)))
+    : undefined, [activePlane.id, currentAnalysis]);
+  const inspectProvince = (ref: ProvinceReference) => {
+    setActivePlaneId(ref.planeId);
+    setSelectedId(ref.provinceId);
+    setTool("select");
+    setLinkSource(undefined);
+    setGateSource(undefined);
+  };
   const totalProvinces = project.planes.reduce((sum, plane) => sum + plane.provinces.length, 0);
   const autosaveLabel = autosaveState.conflict
     ? "Autosave conflict"
@@ -655,7 +670,7 @@ export function MapMakerApp() {
         setToast("Generation finished, but the project changed while it was running, so the result was safely discarded. Generate again to use the latest settings.");
         return;
       }
-      if (!commit(next)) return;
+      if (!commit(recordGenerationInputs(next))) return;
       setActivePlaneId(next.planes[0]?.id ?? "");
       setSelectedId(undefined);
       setLinkSource(undefined);
@@ -722,7 +737,7 @@ export function MapMakerApp() {
     const task = generationTaskRef.current;
     generationTaskRef.current = undefined;
     task?.cancel();
-    const next = createDefaultProject();
+    const next = recordGenerationInputs(createDefaultProject());
     currentProjectRef.current = next;
     rangeEditStartRef.current = undefined;
     setProject(next);
@@ -738,6 +753,8 @@ export function MapMakerApp() {
     setInspectorTab("terrain");
     setLeftTab("generate");
     setValidationOpen(false);
+    setBalanceOpen(false);
+    setAnalysisSelection(undefined);
     setExportOpen(false);
     setReplaceAllNamesOpen(false);
     setGenerationBusy(false);
@@ -1144,6 +1161,7 @@ export function MapMakerApp() {
 
       <div className="workbench">
         <aside className="left-panel panel">
+          <ProvinceExplorer project={project} onSelect={inspectProvince} />
           <div className="tab-row compact-tabs" role="tablist" aria-label="Map setup">
             {LEFT_TABS.map((tab) => (
               <button key={tab} id={`setup-tab-${tab}`} type="button" role="tab" tabIndex={leftTab === tab ? 0 : -1} aria-selected={leftTab === tab} aria-controls="setup-active-panel" className={leftTab === tab ? "active" : ""} onClick={() => setLeftTab(tab)} onKeyDown={(event) => handleTabKey(event, LEFT_TABS, leftTab, setLeftTab)}>
@@ -1162,15 +1180,15 @@ export function MapMakerApp() {
                 title="Restore Generate-tab defaults without replacing the current map"
                 onClick={() => mutate((draft) => resetGeneratorDefaults(draft, activePlane.id))}
               >Reset generator defaults</button>
-              <p className="microcopy">Restores the visible generator controls. Current planes, provinces, scenario setup, gate plans, and manual map edits stay in place; Undo restores the prior values.</p>
-              <Field label="Seed">
+              <p className="microcopy">Restores generator controls, current output dimensions, and the selected plane’s default wrap. Provinces, scenario setup, gate plans, and manual content stay in place; Undo restores the prior values.</p>
+              <Field scope="Next generation" label="Seed">
                 <div className="input-with-button">
                   <input maxLength={MAX_IMPORTED_STRING_LENGTH} value={project.seed} onChange={(event) => mutate((draft) => { draft.seed = event.target.value; })} />
                   <button type="button" onClick={() => mutate((draft) => { draft.seed = randomSeed(); })} aria-label="Randomize seed">✣</button>
                 </div>
               </Field>
               <div className="field-grid two">
-                <NumberField label="Players" value={project.settings.players} min={2} max={32} onChange={(value) => mutate((draft) => {
+                <NumberField scope="Next generation" label="Players" value={project.settings.players} min={2} max={32} onChange={(value) => mutate((draft) => {
                   draft.settings.startDistribution = resizeStartDistribution(
                     draft.settings.startDistribution ?? defaultStartDistribution(draft.settings.players),
                     draft.settings.players,
@@ -1178,12 +1196,13 @@ export function MapMakerApp() {
                   );
                   draft.settings.players = value;
                 })} />
-                <NumberField label="Provinces / player" value={project.settings.provincesPerPlayer} min={8} max={30} onChange={(value) => mutate((draft) => { draft.settings.provincesPerPlayer = value; })} />
+                <NumberField scope="Next generation" label="Provinces / player" value={project.settings.provincesPerPlayer} min={8} max={30} onChange={(value) => mutate((draft) => { draft.settings.provincesPerPlayer = value; })} />
               </div>
+              <GenerationPlanSummary project={project} onReview={() => setBalanceOpen(true)} />
               <Divider />
               <SectionHeading kicker="PLAYER HOMELANDS" title="Start allocation" />
               <div className="start-allocation-grid">
-                {START_TYPES.map((item) => <NumberField
+                {START_TYPES.map((item) => <NumberField scope="Next generation"
                   key={item.value}
                   label={`${item.label} starts`}
                   value={startDistribution[item.value]}
@@ -1217,19 +1236,19 @@ export function MapMakerApp() {
                   <ul>{startPlanErrors.map((message) => <li key={message}>{message}</li>)}</ul>
                 </div>
               )}
-              <NumberField label="Target useful connections at starts" value={project.settings.startDegreeTarget ?? 4} min={1} max={8} onChange={(value) => mutate((draft) => { draft.settings.startDegreeTarget = value; })} />
+              <NumberField scope="Next generation" label="Target useful connections at starts" value={project.settings.startDegreeTarget ?? 4} min={1} max={8} onChange={(value) => mutate((draft) => { draft.settings.startDegreeTarget = value; })} />
               <p className="microcopy">Land, coast, water, cave, and other counts must total the player count. Four useful connections is the recommended multiplayer baseline; targets from five to eight use the closest feasible common degree when the province geometry cannot give every start the requested value.</p>
               <Divider />
               <SectionHeading kicker="WORLD SHAPE" title={`${project.planes.length}-plane generation plan`} />
-              <RangeField label="Water provinces" value={project.settings.waterPercent} suffix="%" min={0} max={60} onInteractionStart={beginRangeEdit} onInteractionEnd={finishRangeEdit} onChange={(value) => mutate((draft) => { draft.settings.waterPercent = value; }, false)} />
-              <Field label="Overland ocean layout">
+              <RangeField scope="Next generation" label="Water provinces" value={project.settings.waterPercent} suffix="%" min={0} max={60} onInteractionStart={beginRangeEdit} onInteractionEnd={finishRangeEdit} onChange={(value) => mutate((draft) => { draft.settings.waterPercent = value; }, false)} />
+              <Field scope="Next generation" label="Overland ocean layout">
                 <select value={project.settings.oceanLayout ?? "natural"} onChange={(event) => mutate((draft) => { draft.settings.oceanLayout = event.target.value as OceanLayout; })}>
                   {OCEAN_LAYOUTS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                 </select>
               </Field>
               {(project.settings.oceanLayout ?? "natural") === "island_chains" && <p className="field-note">Island chains use at least {ISLAND_CHAIN_MIN_WATER_PERCENT}% water so land is genuinely separated; Generate records that effective value when the slider is lower.</p>}
               {(project.settings.oceanLayout ?? "natural") === "multiple_continents" && <>
-                <NumberField
+                <NumberField scope="Next generation"
                   label="Major continents"
                   value={project.settings.continentCount ?? 3}
                   min={2}
@@ -1238,22 +1257,23 @@ export function MapMakerApp() {
                 />
                 <p className="field-note">This is a topology target. If the water quota and wrapping cannot sustain every requested landmass, Generate and validation report the achieved count.</p>
               </>}
-              <RangeField label="Biome cohesion" value={project.settings.biomeCohesion} suffix="%" min={0} max={100} onInteractionStart={beginRangeEdit} onInteractionEnd={finishRangeEdit} onChange={(value) => mutate((draft) => { draft.settings.biomeCohesion = value; }, false)} />
+              <RangeField scope="Next generation" label="Biome cohesion" value={project.settings.biomeCohesion} suffix="%" min={0} max={100} onInteractionStart={beginRangeEdit} onInteractionEnd={finishRangeEdit} onChange={(value) => mutate((draft) => { draft.settings.biomeCohesion = value; }, false)} />
               <p className="field-note">Lower cohesion creates more local variation and patchwork; higher cohesion creates larger contiguous biome regions. Minimum terrain variety remains enforced.</p>
               <Divider />
               <SectionHeading kicker="MULTIPLAYER POLICY" title="Balance and overland routes" />
-              <Field label="Economy balance">
+              <Field scope="Next generation" label="Economy balance">
                 <select value={normalizeEconomyBalanceMode(project.settings.economyBalance)} onChange={(event) => mutate((draft) => { draft.settings.economyBalance = event.target.value as EconomyBalanceMode; })}>
                   {ECONOMY_BALANCE_MODES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                 </select>
               </Field>
               <p className="field-note">{ECONOMY_BALANCE_MODES.find((item) => item.value === normalizeEconomyBalanceMode(project.settings.economyBalance))!.description}</p>
-              <Field label="Overland topology">
+              <Field scope="Next generation" label="Overland topology">
                 <select value={normalizeOverlandTopologyMode(project.settings.overlandTopology)} onChange={(event) => mutate((draft) => { draft.settings.overlandTopology = event.target.value as OverlandTopologyMode; })}>
                   {OVERLAND_TOPOLOGY_MODES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                 </select>
               </Field>
               <p className="field-note">{OVERLAND_TOPOLOGY_MODES.find((item) => item.value === normalizeOverlandTopologyMode(project.settings.overlandTopology))!.description} This affects only solid Surface and surface-like Custom planes; sparse and cave realms keep their authored route profiles.</p>
+              <p className="scope-heading"><ScopeBadge scope="Current map" /> Name rerolls apply immediately.</p>
               <button className="button quiet wide" type="button" onClick={handleRegenerateProvinceNames}>Reroll generated names (preserve manual)</button>
               <p className="field-note">Names follow each plane and its effective terrain, including coasts, flooded caves, and the River Styx. Names edited in the province inspector are marked manual and survive map generation and name rerolls.</p>
               <button
@@ -1272,10 +1292,10 @@ export function MapMakerApp() {
                   </div>
                 </div>
               )}
-              <NumberField label="Each bonus plane size (% of core)" value={project.settings.specialPlaneSizePercent ?? 30} min={1} max={500} onChange={(value) => mutate((draft) => { draft.settings.specialPlaneSizePercent = value; })} />
+              <NumberField scope="Next generation" label="Each bonus plane size (% of core)" value={project.settings.specialPlaneSizePercent ?? 30} min={1} max={500} onChange={(value) => mutate((draft) => { draft.settings.specialPlaneSizePercent = value; })} />
               <p className="field-note">Players x provinces per player sizes only Surface, Cave, Cavern, and surface-like Custom core realms. Every auto-sized special plane independently uses this percentage of the combined core total; values over 100% are allowed, up to the 800-province per-plane cap.</p>
-              <NumberField label="Recommended throne locations" value={project.settings.throneCount} min={0} max={64} onChange={(value) => mutate((draft) => { draft.settings.throneCount = value; })} />
-              <Field label="Output resolution">
+              <NumberField scope="Next generation" label="Recommended throne locations" value={project.settings.throneCount} min={0} max={64} onChange={(value) => mutate((draft) => { draft.settings.throneCount = value; })} />
+              <Field scope="Map + next generation" label="Output resolution">
                 <select value={project.settings.resolution} onChange={(event) => commit(applyResolution(project, event.target.value as GenerationSettings["resolution"]))}>
                   {Object.entries(RESOLUTION_PRESETS).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}
                   <option value="custom">Custom per plane</option>
@@ -1285,8 +1305,8 @@ export function MapMakerApp() {
                 <span>{activePlane.width.toLocaleString()} × {activePlane.height.toLocaleString()}</span>
                 <small>Native D6M • condition-reactive</small>
               </div>
-              <Toggle label="Wrap east / west" checked={activePlane.wrapX} onChange={(value) => updateWrap("wrapX", value)} />
-              <Toggle label="Wrap north / south" checked={activePlane.wrapY} onChange={(value) => updateWrap("wrapY", value)} />
+              <Toggle scope="Map + next generation" label="Wrap east / west" checked={activePlane.wrapX} onChange={(value) => updateWrap("wrapX", value)} />
+              <Toggle scope="Map + next generation" label="Wrap north / south" checked={activePlane.wrapY} onChange={(value) => updateWrap("wrapY", value)} />
               <button className="button quiet wide" type="button" onClick={() => setLeftTab("planes")}>Configure plane archetypes &amp; selected links</button>
               <button
                 className="button generate-button"
@@ -1343,8 +1363,8 @@ export function MapMakerApp() {
                 onClick={stagePlane}
               >+ Add plane to plan</button>
               <Divider />
-              <Field label="Plane name"><input maxLength={MAX_IMPORTED_STRING_LENGTH} value={activePlane.name} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.name = event.target.value; })} /></Field>
-              <Field label="Plane archetype"><select value={activePlane.kind} onChange={(event) => mutate((draft) => {
+              <Field scope="Current map" label="Plane name"><input maxLength={MAX_IMPORTED_STRING_LENGTH} value={activePlane.name} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.name = event.target.value; })} /></Field>
+              <Field scope="Map + next generation" label="Plane archetype"><select value={activePlane.kind} onChange={(event) => mutate((draft) => {
                 const plane = draft.planes.find((item) => item.id === activePlane.id)!;
                 const planeIndex = draft.planes.findIndex((item) => item.id === plane.id);
                 const nextKind = event.target.value as PlaneKind;
@@ -1359,21 +1379,21 @@ export function MapMakerApp() {
               })}>{PLANE_KINDS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></Field>
               <p className="field-note">{PLANE_KINDS.find((item) => item.value === activePlane.kind)?.description}</p>
               {activePlane.kind !== "surface" && activePlane.kind !== "custom" && <p className="field-note">Themed artwork fills ownerless space in the editor and exported PNG preview. Native D6M has no separate background-raster layer, so Dominions renders that space with its own realm presentation.</p>}
-              <Field label="Terrain variant"><select value={activePlane.variant ?? defaultVariantForKind(activePlane.kind)} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.variant = event.target.value as PlaneVariant; })}>{PLANE_VARIANTS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></Field>
-              <Toggle label="Auto-size from player count" checked={activePlane.autoSize ?? project.planes[0]?.id === activePlane.id} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.autoSize = value; })} />
+              <Field scope="Map + next generation" label="Terrain variant"><select value={activePlane.variant ?? defaultVariantForKind(activePlane.kind)} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.variant = event.target.value as PlaneVariant; })}>{PLANE_VARIANTS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></Field>
+              <Toggle scope="Next generation" label="Auto-size from player count" checked={activePlane.autoSize ?? project.planes[0]?.id === activePlane.id} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.autoSize = value; })} />
               {(activePlane.autoSize ?? project.planes[0]?.id === activePlane.id)
                 ? <div className="resolution-card"><span>Automatic province count</span><small>{planeAutoSizeDescription(project, activePlane)}</small></div>
-                : <NumberField label="Province target" value={activePlane.provinceTarget} min={8} max={800} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.provinceTarget = value; })} />}
+                : <NumberField scope="Next generation" label="Province target" value={activePlane.provinceTarget} min={8} max={800} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.provinceTarget = value; })} />}
               <PlaneStartPolicyControl plane={activePlane} onChange={(value) => mutate((draft) => {
                 draft.planes.find((plane) => plane.id === activePlane.id)!.noGeneratedStarts = value || undefined;
               })} />
-              <Toggle label="Wrap east / west" checked={activePlane.wrapX} onChange={(value) => updateWrap("wrapX", value)} />
-              <Toggle label="Wrap north / south" checked={activePlane.wrapY} onChange={(value) => updateWrap("wrapY", value)} />
+              <Toggle scope="Map + next generation" label="Wrap east / west" checked={activePlane.wrapX} onChange={(value) => updateWrap("wrapX", value)} />
+              <Toggle scope="Map + next generation" label="Wrap north / south" checked={activePlane.wrapY} onChange={(value) => updateWrap("wrapY", value)} />
               {project.settings.resolution === "custom" && (
                 <>
                   <div className="field-grid two">
-                    <NumberField label="Width" value={activePlane.width} min={256} max={3840} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.width = value; })} />
-                    <NumberField label="Height" value={activePlane.height} min={256} max={3840} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.height = value; })} />
+                    <NumberField scope="Map + next generation" label="Width" value={activePlane.width} min={256} max={3840} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.width = value; })} />
+                    <NumberField scope="Map + next generation" label="Height" value={activePlane.height} min={256} max={3840} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.height = value; })} />
                   </div>
                   <p className="field-note">Each axis is capped at 3,840 pixels; width × height must remain at or below 8.29 megapixels.</p>
                 </>
@@ -1381,10 +1401,10 @@ export function MapMakerApp() {
               <details className="plane-advanced-settings">
                 <summary>Plane display &amp; native flags</summary>
                 <div>
-                  <Field label="Reveal this plane's map image"><select value={optionalBooleanValue(activePlane.mapNoHide)} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.mapNoHide = parseOptionalBoolean(event.target.value); })}><option value="inherit">Inherit scenario setting</option><option value="on">On</option><option value="off">Off</option></select></Field>
-                  <Field label="Disable random deep caves from this plane"><select value={optionalBooleanValue(activePlane.noDeepCaves)} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.noDeepCaves = parseOptionalBoolean(event.target.value); })}><option value="inherit">Inherit scenario setting</option><option value="on">On</option><option value="off">Off</option></select></Field>
-                  <Field label="Province-name color (#maptextcol)"><input placeholder="0.93 0.88 0.70 1.0" value={activePlane.mapTextColor ?? ""} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.mapTextColor = event.target.value || undefined; })} /></Field>
-                  <Field label="Dominion-overlay color (#mapdomcol)"><input placeholder="238 205 112 42" value={activePlane.mapDominionColor ?? ""} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.mapDominionColor = event.target.value || undefined; })} /></Field>
+                  <Field scope="Host / export" label="Reveal this plane's map image"><select value={optionalBooleanValue(activePlane.mapNoHide)} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.mapNoHide = parseOptionalBoolean(event.target.value); })}><option value="inherit">Inherit scenario setting</option><option value="on">On</option><option value="off">Off</option></select></Field>
+                  <Field scope="Host / export" label="Disable random deep caves from this plane"><select value={optionalBooleanValue(activePlane.noDeepCaves)} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.noDeepCaves = parseOptionalBoolean(event.target.value); })}><option value="inherit">Inherit scenario setting</option><option value="on">On</option><option value="off">Off</option></select></Field>
+                  <Field scope="Host / export" label="Province-name color (#maptextcol)"><input placeholder="0.93 0.88 0.70 1.0" value={activePlane.mapTextColor ?? ""} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.mapTextColor = event.target.value || undefined; })} /></Field>
+                  <Field scope="Host / export" label="Dominion-overlay color (#mapdomcol)"><input placeholder="238 205 112 42" value={activePlane.mapDominionColor ?? ""} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.mapDominionColor = event.target.value || undefined; })} /></Field>
                 </div>
               </details>
               {project.planes.length > 1 && (
@@ -1392,14 +1412,14 @@ export function MapMakerApp() {
               )}
               <Divider />
               <SectionHeading kicker="PLANNED GENERATION LINKS" title={`Next-generation links from ${activePlane.name}`} />
-              <Field label="All-plane preset (quick seed)"><select value={project.settings.gateLayout ?? "hub"} onChange={(event) => mutate((draft) => {
+              <Field scope="Next generation" label="All-plane preset (quick seed)"><select value={project.settings.gateLayout ?? "hub"} onChange={(event) => mutate((draft) => {
                  const layout = event.target.value as GateLayout;
                  draft.settings.gateLayout = layout;
                  draft.settings.gateDirection = "bidirectional";
                  draft.settings.planeConnections = createDefaultPlaneConnections(draft.planes, layout, draft.settings.gatePairsPerConnection ?? 1);
                })}>{GATE_LAYOUTS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></Field>
               <p className="field-note">{GATE_LAYOUTS.find((item) => item.value === (project.settings.gateLayout ?? "hub"))?.description} Presets seed every plane; the rows below customize only {activePlane.name}. These rules are used on the next generation and do not change existing gateways. Every enabled link is bidirectional.</p>
-              <NumberField label="Default pairs for all enabled links" value={project.settings.gatePairsPerConnection ?? 1} min={1} max={3} onChange={(value) => mutate((draft) => {
+              <NumberField scope="Next generation" label="Default pairs for all enabled links" value={project.settings.gatePairsPerConnection ?? 1} min={1} max={3} onChange={(value) => mutate((draft) => {
                  draft.settings.gatePairsPerConnection = value;
                  draft.settings.gateDirection = "bidirectional";
                  draft.settings.planeConnections = resolvePlaneConnectionRules(draft).map((rule) => ({ ...rule, pairs: value }));
@@ -1436,23 +1456,23 @@ export function MapMakerApp() {
           {leftTab === "scenario" && (
             <div id="setup-active-panel" className="panel-scroll setup-stack" role="tabpanel" aria-labelledby="setup-tab-scenario">
               <SectionHeading kicker="HOST & SCENARIO" title="Game setup" />
-              <Field label="Description"><textarea maxLength={MAX_IMPORTED_STRING_LENGTH} rows={3} value={project.description} onChange={(event) => mutate((draft) => { draft.description = event.target.value; })} /></Field>
-              <NumberField label="Minimum Dominions version (#domversion)" value={project.targetVersion} min={600} max={999} onChange={(value) => mutate((draft) => { draft.targetVersion = value; })} />
+              <Field scope="Host / export" label="Description"><textarea maxLength={MAX_IMPORTED_STRING_LENGTH} rows={3} value={project.description} onChange={(event) => mutate((draft) => { draft.description = event.target.value; })} /></Field>
+              <NumberField scope="Host / export" label="Minimum Dominions version (#domversion)" value={project.targetVersion} min={600} max={999} onChange={(value) => mutate((draft) => { draft.targetVersion = value; })} />
               <p className="field-note">Use 635 or newer when relying on IDs from the bundled Dominions 6.35 catalog.</p>
               <div className="field-grid two">
-                <NumberField label="Sail distance" value={project.sailDistance} min={1} max={10} onChange={(value) => mutate((draft) => { draft.sailDistance = value; })} />
-                <NumberField label="Site frequency" value={project.settings.siteFrequency ?? 50} min={0} max={100} onChange={(value) => mutate((draft) => { draft.settings.siteFrequency = value; })} />
+                <NumberField scope="Host / export" label="Sail distance" value={project.sailDistance} min={1} max={10} onChange={(value) => mutate((draft) => { draft.sailDistance = value; })} />
+                <NumberField scope="Host / export" label="Site frequency" value={project.settings.siteFrequency ?? 50} min={0} max={100} onChange={(value) => mutate((draft) => { draft.settings.siteFrequency = value; })} />
               </div>
-              <OptionalNumberField label="Ascension points" value={project.victoryPoints} min={1} max={999} onChange={(value) => mutate((draft) => { draft.victoryPoints = value; })} />
+              <OptionalNumberField scope="Host / export" label="Ascension points" value={project.victoryPoints} min={1} max={999} onChange={(value) => mutate((draft) => { draft.victoryPoints = value; })} />
               <CatalogIdSetField label="Allowed nations" values={project.allowedPlayers} entries={playableNations} onChange={(values) => mutate((draft) => { draft.allowedPlayers = values; })} />
               <ComputerPlayersField values={project.computerPlayers} entries={playableNations} onChange={(values) => mutate((draft) => { draft.computerPlayers = values; })} />
               <CatalogIdSetField label="Cannot-win nations" values={project.cannotWin} entries={playableNations} onChange={(values) => mutate((draft) => { draft.cannotWin = values; })} />
-              <Toggle label="Reveal map image" checked={project.mapNoHide} onChange={(value) => mutate((draft) => { draft.mapNoHide = value; })} />
-              <Toggle label="Disable random deep-cave planes" checked={project.noDeepCaves} onChange={(value) => mutate((draft) => { draft.noDeepCaves = value; })} />
-              <Toggle label="Hide deep-plane choice" checked={project.noDeepChoice} onChange={(value) => mutate((draft) => { draft.noDeepChoice = value; })} />
-              <Toggle label="Disable homeland names" checked={project.noHomelandNames} onChange={(value) => mutate((draft) => { draft.noHomelandNames = value; })} />
-              <Toggle label="Disable name filter" checked={project.noNameFilter} onChange={(value) => mutate((draft) => { draft.noNameFilter = value; })} />
-              <Field label="Map-level directives"><textarea maxLength={MAX_IMPORTED_DIRECTIVE_LENGTH} className="code-input" rows={7} placeholder="#god 5 120\n#dominionstr 5 7" value={project.rawDirectives} onChange={(event) => mutate((draft) => { draft.rawDirectives = event.target.value; })} /></Field>
+              <Toggle scope="Host / export" label="Reveal map image" checked={project.mapNoHide} onChange={(value) => mutate((draft) => { draft.mapNoHide = value; })} />
+              <Toggle scope="Host / export" label="Disable random deep-cave planes" checked={project.noDeepCaves} onChange={(value) => mutate((draft) => { draft.noDeepCaves = value; })} />
+              <Toggle scope="Host / export" label="Hide deep-plane choice" checked={project.noDeepChoice} onChange={(value) => mutate((draft) => { draft.noDeepChoice = value; })} />
+              <Toggle scope="Host / export" label="Disable homeland names" checked={project.noHomelandNames} onChange={(value) => mutate((draft) => { draft.noHomelandNames = value; })} />
+              <Toggle scope="Host / export" label="Disable name filter" checked={project.noNameFilter} onChange={(value) => mutate((draft) => { draft.noNameFilter = value; })} />
+              <Field scope="Host / export" label="Map-level directives"><textarea maxLength={MAX_IMPORTED_DIRECTIVE_LENGTH} className="code-input" rows={7} placeholder="#god 5 120\n#dominionstr 5 7" value={project.rawDirectives} onChange={(event) => mutate((draft) => { draft.rawDirectives = event.target.value; })} /></Field>
               <p className="microcopy">Raw directives preserve advanced Dominions 6 scenario commands that do not need a dedicated control.</p>
               <Divider />
               <CatalogManager catalog={catalog} hasUserCatalog={!!userCatalog} onImport={() => catalogImportRef.current?.click()} onReset={resetCatalog} onTemplate={downloadCatalogTemplate} />
@@ -1480,7 +1500,7 @@ export function MapMakerApp() {
                 <span role="status" aria-live="polite" aria-atomic="true" title={armedStatus}>{armedStatus}</span>
                 <button type="button" onClick={() => { setLinkSource(undefined); setGateSource(undefined); }}>Cancel endpoint</button>
               </div>}
-              <label>Condition preview
+              <label>Condition preview <ScopeBadge scope="Preview only" />
                 <select value={preview} onChange={(event) => setPreview(event.target.value as PreviewCondition)}>
                   {CONDITIONS.map((condition) => <option value={condition.value} key={condition.value}>{condition.label}</option>)}
                 </select>
@@ -1488,12 +1508,13 @@ export function MapMakerApp() {
             </div>
           </div>
           <div className="map-stage">
-            <MapCanvas key={activePlane.id} plane={activePlane} selectedId={selectedId} previewCondition={preview} markerAnnotations={activePlaneMarkerAnnotations} onNavigate={setSelectedId} onActivate={handleProvinceClick} onZoomChange={setZoom} tool={tool} />
-            <div className="map-title-card">
+            <MapCanvas key={activePlane.id} plane={activePlane} selectedId={selectedId} previewCondition={preview} markerAnnotations={activePlaneMarkerAnnotations} analysisProvinceIds={analysisProvinceIds} onNavigate={setSelectedId} onActivate={handleProvinceClick} onZoomChange={setZoom} tool={tool} />
+            {currentAnalysis && <div className="analysis-region-banner" role="status"><span>Teal: {currentAnalysis.label}, 2-step region · {currentAnalysis.mode === "structural" ? "potential" : "conservative"} routes · preview only</span><button type="button" onClick={() => setAnalysisSelection(undefined)}>Clear highlight</button></div>}
+            {!currentAnalysis && <div className="map-title-card">
               <span>{activePlane.kind}</span>
               <strong>{activePlane.name}</strong>
               <small>{activePlane.provinces.length} provinces · {activePlane.width}×{activePlane.height}</small>
-            </div>
+            </div>}
             <div className="map-legend">
               <span><i className="legend-border" />Shared border = connected</span>
               <span><b>S/#/N</b> Generic/team/nation start</span>
@@ -1521,12 +1542,12 @@ export function MapMakerApp() {
                   <p className="eyebrow">PROVINCE {selected.index}</p>
                   <input maxLength={MAX_IMPORTED_STRING_LENGTH} value={selected.name} onChange={(event) => updateSelected((province) => { province.name = event.target.value; province.nameSource = "authored"; })} aria-label="Province name" />
                 </div>
-                <span className="terrain-mask" title="Dominions terrain mask">{terrainMask(selected).toString()}</span>
+                <details className="terrain-mask"><summary>Terrain mask</summary><code>{terrainMask(selected).toString()}</code></details>
               </div>
               <div className="tab-row inspector-tabs" role="tablist" aria-label="Province inspector">
                 {INSPECTOR_TABS.map((tab) => (
                   <button key={tab} id={`inspector-tab-${tab}`} type="button" role="tab" tabIndex={inspectorTab === tab ? 0 : -1} aria-selected={inspectorTab === tab} aria-controls="inspector-active-panel" className={inspectorTab === tab ? "active" : ""} onClick={() => setInspectorTab(tab)} onKeyDown={(event) => handleTabKey(event, INSPECTOR_TABS, inspectorTab, setInspectorTab)}>
-                    {tab === "sites" ? "Sites & PD" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                    {tab === "sites" ? "Sites & guardians" : tab.charAt(0).toUpperCase() + tab.slice(1)}
                   </button>
                 ))}
               </div>
@@ -1560,7 +1581,7 @@ export function MapMakerApp() {
       <footer className="statusbar">
         <span><i className={errorCount ? "status-dot bad" : "status-dot good"} />{errorCount ? `${errorCount} export blocker${errorCount === 1 ? "" : "s"}` : "Dominions checks ready"}</span>
         <span>{project.planes.length} plane{project.planes.length === 1 ? "" : "s"} · {totalProvinces} provinces · {project.settings.players} starts target</span>
-        <span>Fairness <strong className={scoreClass(fairness.overall)}>{fairness.overall}</strong></span>
+        <button className="status-review" type="button" aria-haspopup="dialog" onClick={() => setBalanceOpen(true)}>Fairness (structural) <strong className={scoreClass(fairness.overall)}>{fairness.overall}</strong> · Inspect starts</button>
         <span>{Math.round(zoom * 100)}%</span>
         <span>{formatBytes(estimatedPackageBytes(project))} package</span>
       </footer>
@@ -1573,7 +1594,15 @@ export function MapMakerApp() {
         onConfirm={confirmDestructiveAction}
       />}
 
-      {validationOpen && <ValidationDrawer issues={issues} fairness={fairness} onClose={() => setValidationOpen(false)} onSelectIssue={(issue) => {
+      {balanceOpen && <BalanceDialog project={project} fairness={fairness} errors={errorCount} catalogVersion={catalog.gameVersion}
+        onClose={() => setBalanceOpen(false)} onContextChange={context => mutate(draft => { draft.analysisContext = context; })}
+        onInspect={(ref, keys, mode) => {
+          inspectProvince(ref);
+          setAnalysisSelection({ project, keys, label: ref.province.name, mode });
+          setBalanceOpen(false);
+        }} />}
+
+      {validationOpen && <ValidationDrawer issues={issues} fairness={fairness} onReview={() => { setValidationOpen(false); setBalanceOpen(true); }} onClose={() => setValidationOpen(false)} onSelectIssue={(issue) => {
         if (issue.planeId) setActivePlaneId(issue.planeId);
         if (issue.provinceId) setSelectedId(issue.provinceId);
         setValidationOpen(false);
@@ -1613,7 +1642,7 @@ function TerrainInspector({ planeId, province, update, mutateProject }: { planeI
         const terrain = event.target.value as TerrainKey;
         mutateProject((draft) => { applyPrimaryTerrain(draft, planeId, province.id, terrain); });
       }}>{TERRAIN_KEYS.map((key) => <option value={key} key={key}>{TERRAIN_LABELS[key]}</option>)}</select></Field>
-      <Field label="Biome"><select value={province.biome} onChange={(event) => update((item) => { item.biome = event.target.value as BiomeKey; })}>{BIOME_KEYS.map((key) => <option value={key} key={key}>{BIOME_LABELS[key]}</option>)}</select></Field>
+      <Field scope="Saved note only" label="Biome (descriptive only)"><select value={province.biome} onChange={(event) => update((item) => { item.biome = event.target.value as BiomeKey; })}>{BIOME_KEYS.map((key) => <option value={key} key={key}>{BIOME_LABELS[key]}</option>)}</select></Field>
       <div className="choice-grid">
         <CheckCard label="Small province" checked={province.small} onChange={(value) => update((item) => { item.small = value; if (value) item.large = false; })} />
         <CheckCard label="Large province" checked={province.large} onChange={(value) => update((item) => { item.large = value; if (value) item.small = false; })} />
@@ -1958,12 +1987,21 @@ function DestructiveConfirmationDialog({ action, project, onClose, onBackup, onC
   </section></div>;
 }
 
-function ValidationDrawer({ issues, fairness, onClose, onSelectIssue }: { issues: ValidationIssue[]; fairness: ReturnType<typeof calculateFairness>; onClose: () => void; onSelectIssue: (issue: ValidationIssue) => void }) {
+export function BalanceDialog({ onClose, ...props }: React.ComponentProps<typeof StartBalancePanel> & { onClose: () => void }) {
+  const dialogRef = useDialogFocus<HTMLElement>(onClose);
+  return <div className="modal-backdrop"><section ref={dialogRef} className="balance-dialog" tabIndex={-1} role="dialog" aria-modal="true" aria-label="Start-region analysis">
+    <div className="dialog-heading"><div><p className="eyebrow">CURRENT MAP · NEUTRAL DIAGNOSTICS</p><h2>Start-region analysis</h2></div><button type="button" onClick={onClose} aria-label="Close start-region analysis">×</button></div>
+    <StartBalancePanel {...props} />
+  </section></div>;
+}
+
+function ValidationDrawer({ issues, fairness, onClose, onReview, onSelectIssue }: { issues: ValidationIssue[]; fairness: ReturnType<typeof calculateFairness>; onClose: () => void; onReview: () => void; onSelectIssue: (issue: ValidationIssue) => void }) {
   const dialogRef = useDialogFocus<HTMLElement>(onClose);
   return <div className="drawer-backdrop"><aside ref={dialogRef} className="validation-drawer" tabIndex={-1} aria-modal="true" role="dialog" aria-label="Map validation">
     <div className="dialog-heading"><div><p className="eyebrow">EXPORT READINESS</p><h2>Compatibility & fairness</h2></div><button type="button" onClick={onClose} aria-label="Close">×</button></div>
-    <div className="score-hero"><div className={`score-ring ${scoreClass(fairness.overall)}`} style={{ "--score": fairness.overall } as CSSProperties}><strong>{fairness.overall}</strong><small>overall</small></div><div><h3>Multiplayer balance</h3><p>{fairness.notes[0]}</p></div></div>
-    <div className="metric-grid">{([['Start spacing', fairness.startSeparation], ['Expansion parity', fairness.expansionParity], ['Nearby throne parity', fairness.throneAccess], ['Terrain variety', fairness.terrainVariety], ['Connectivity', fairness.connectivity]] as Array<[string, number]>).map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong><i><b style={{ width: `${value}%` }} /></i></div>)}</div>
+    <div className="score-hero"><div className={`score-ring ${scoreClass(fairness.overall)}`} style={{ "--score": fairness.overall } as CSSProperties}><strong>{fairness.overall}</strong><small>structural</small></div><div><h3>Structural heuristics</h3><p>A high average is not proof of nation or combat balance and never overrides an export error.</p><button className="button quiet" type="button" onClick={onReview}>Inspect every start</button></div></div>
+    <div className="metric-grid">{([['Start spacing', fairness.startSeparation], ['Expansion proxy', fairness.expansionParity], ['Nearby throne parity', fairness.throneAccess], ['Start exits', fairness.startDegree], ['Terrain variety', fairness.terrainVariety], ['Connectivity', fairness.connectivity], ['Allocation', fairness.startAllocation]] as Array<[string, number]>).map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong><i><b style={{ width: `${value}%` }} /></i></div>)}</div>
+    <details className="validation-score-notes"><summary>Score assumptions and notes</summary><ul>{fairness.notes.map(note => <li key={note}>{note}</li>)}</ul></details>
     <div className="validation-list">{issues.map((issue) => <button key={issue.id} type="button" className={`issue ${issue.severity}`} onClick={() => onSelectIssue(issue)}><span>{issue.severity === "error" ? "!" : issue.severity === "warning" ? "△" : "✓"}</span><p><strong>{issue.severity}</strong>{issue.message}</p></button>)}</div>
   </aside></div>;
 }
@@ -2019,16 +2057,19 @@ export function ExportDialog({ project, activePlane, issues, progress, busy, onC
 
 function SectionHeading({ kicker, title }: { kicker: string; title: string }) { return <div className="section-heading"><p className="eyebrow">{kicker}</p><h2>{title}</h2></div>; }
 function Divider() { return <div className="divider" />; }
-function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="field"><span>{label}</span>{children}</label>; }
-function NumberField({ label, value, min, max, describedBy, onChange }: { label: string; value: number; min: number; max: number; describedBy?: string; onChange: (value: number) => void }) { return <Field label={label}><BoundedNumberInput value={value} min={min} max={max} describedBy={describedBy} onChange={onChange} /></Field>; }
-function OptionalNumberField({ label, value, min, max, disabled = false, onChange }: { label: string; value?: number; min: number; max?: number; disabled?: boolean; onChange: (value?: number) => void }) { return <Field label={label}><input type="number" value={value ?? ""} min={min} max={max} disabled={disabled} placeholder="Auto" onChange={(event) => {
+type ControlScope = "Next generation" | "Current map" | "Map + next generation" | "Host / export" | "Preview only" | "Saved note only";
+function ScopeBadge({ scope = "Current map" }: { scope?: ControlScope }) { return <small className="scope-badge">{scope}</small>; }
+function Field({ label, children, scope }: { label: string; children: ReactNode; scope?: ControlScope }) { return <label className="field"><span>{label} <ScopeBadge scope={scope} /></span>{children}</label>; }
+function NumberField({ label, value, min, max, describedBy, onChange, scope }: { label: string; value: number; min: number; max: number; describedBy?: string; onChange: (value: number) => void; scope?: ControlScope }) { return <Field label={label} scope={scope}><BoundedNumberInput value={value} min={min} max={max} describedBy={describedBy} onChange={onChange} /></Field>; }
+function OptionalNumberField({ label, value, min, max, disabled = false, onChange, scope }: { label: string; value?: number; min: number; max?: number; disabled?: boolean; onChange: (value?: number) => void; scope?: ControlScope }) { return <Field label={label} scope={scope}><input type="number" value={value ?? ""} min={min} max={max} disabled={disabled} placeholder="Auto" onChange={(event) => {
   if (!event.target.value.trim()) onChange(undefined);
   else onChange(boundedInteger(event.target.value, min, min, max ?? Number.MAX_SAFE_INTEGER));
 }} /></Field>; }
-function RangeField({ label, value, suffix, min, max, onInteractionStart, onInteractionEnd, onChange }: {
+function RangeField({ label, value, suffix, min, max, onInteractionStart, onInteractionEnd, onChange, scope }: {
   label: string;
   value: number;
   suffix: string;
+  scope?: ControlScope;
   min: number;
   max: number;
   onInteractionStart: () => void;
@@ -2046,7 +2087,7 @@ function RangeField({ label, value, suffix, min, max, onInteractionStart, onInte
     interactionActive.current = false;
     onInteractionEnd();
   };
-  return <label className="range-field"><span>{label}<strong>{value}{suffix}</strong></span><input
+  return <label className="range-field"><span>{label}<strong>{value}{suffix}</strong></span><ScopeBadge scope={scope} /><input
     type="range"
     min={min}
     max={max}
@@ -2060,11 +2101,12 @@ function RangeField({ label, value, suffix, min, max, onInteractionStart, onInte
     onChange={(event) => { begin(); onChange(numberValue(event.target.value, min)); }}
   /></label>;
 }
-function Toggle({ label, checked, describedBy, onChange }: { label: string; checked: boolean; describedBy?: string; onChange: (value: boolean) => void }) { return <label className="toggle-row"><span>{label}</span><input type="checkbox" checked={checked} aria-describedby={describedBy} onChange={(event) => onChange(event.target.checked)} /><i /></label>; }
+function Toggle({ label, checked, describedBy, onChange, scope }: { label: string; checked: boolean; describedBy?: string; onChange: (value: boolean) => void; scope?: ControlScope }) { return <label className="toggle-row"><span>{label} <ScopeBadge scope={scope} /></span><input type="checkbox" checked={checked} aria-describedby={describedBy} onChange={(event) => onChange(event.target.checked)} /><i /></label>; }
 
 export function PlaneStartPolicyControl({ plane, onChange }: { plane: Pick<Plane, "noGeneratedStarts">; onChange: (value: boolean) => void }) {
   return <>
     <Toggle
+      scope="Next generation"
       label="Block generated starts on this plane"
       checked={plane.noGeneratedStarts ?? false}
       describedBy="plane-generated-start-policy-help"
@@ -2382,7 +2424,7 @@ function useDialogFocus<T extends HTMLElement>(onClose: () => void, closeDisable
   useEffect(() => { closeDisabledRef.current = closeDisabled; }, [closeDisabled]);
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
-    const focusableSelector = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+    const focusableSelector = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], summary, [tabindex]:not([tabindex="-1"])';
     const frame = window.requestAnimationFrame(() => {
       const dialog = dialogRef.current;
       (dialog?.querySelector<HTMLElement>(focusableSelector) ?? dialog)?.focus();

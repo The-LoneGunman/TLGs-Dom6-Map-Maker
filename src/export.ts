@@ -1,6 +1,8 @@
 import { cloneProject, sanitizeMapName, type MapProject } from "./domain";
 import { calculateFairness } from "./generator";
 import { buildHostTopologyReport } from "./hostReport";
+import { analysisContextLines, analyzeStarts, buildStartAnalysisText } from "./workbench";
+import { BUILTIN_DOM6_CATALOG } from "./catalog";
 import {
   compileMapText,
   encodeD6m,
@@ -300,6 +302,7 @@ const PROJECT_FIELDS = new Set([
   "schemaVersion", "name", "description", "seed", "targetVersion", "settings", "generationWarnings", "mapNoHide",
   "noDeepCaves", "noDeepChoice", "noHomelandNames", "noNameFilter", "sailDistance", "victoryPoints", "allowedPlayers",
   "computerPlayers", "cannotWin", "specificStarts", "planes", "gates", "rawDirectives", "createdAt", "updatedAt",
+  "analysisContext", "generationInputs",
 ]);
 const GENERATION_SETTING_FIELDS = new Set([
   "players", "provincesPerPlayer", "waterPercent", "oceanLayout", "continentCount", "specialPlaneSizePercent",
@@ -340,6 +343,22 @@ function assertProjectShape(project: Record<string, unknown>): void {
   stringAt(project.seed, "project.seed");
   numberAt(project.targetVersion, "project.targetVersion");
   assertGenerationSettings(recordAt(project.settings, "project.settings"));
+  if (project.analysisContext !== undefined) {
+    const context = recordAt(project.analysisContext, "project.analysisContext");
+    assertKnownFields(context, "project.analysisContext", new Set(["gameVersion", "mods"]));
+    optionalStringAt(context.gameVersion, "project.analysisContext.gameVersion");
+    optionalStringAt(context.mods, "project.analysisContext.mods");
+  }
+  if (project.generationInputs !== undefined) {
+    const inputs = recordAt(project.generationInputs, "project.generationInputs");
+    assertKnownFields(inputs, "project.generationInputs", new Set(["version", "seed", "starts", "terrain", "planes", "links"]));
+    if (inputs.version !== 1) throw new Error("project.generationInputs.version must be 1.");
+    for (const key of ["seed", "starts", "terrain", "planes", "links"]) {
+      if (typeof inputs[key] !== "string" || inputs[key].length > 65_536) {
+        throw new Error(`project.generationInputs.${key} must be a string of at most 65536 characters.`);
+      }
+    }
+  }
   booleanAt(project.mapNoHide, "project.mapNoHide");
   booleanAt(project.noDeepCaves, "project.noDeepCaves");
   booleanAt(project.noDeepChoice, "project.noDeepChoice");
@@ -664,11 +683,19 @@ export function estimatedTextPackageBytes(project: MapProject): number {
   const provinceCount = project.planes.reduce((sum, plane) => sum + plane.provinces.length, 0);
   const edgeCount = project.planes.reduce((sum, plane) => sum + plane.edges.length, 0);
   const gateEndpointCount = project.gates.reduce((sum, gate) => sum + gate.endpoints.length, 0);
+  // Both access views repeat up to 64 start names in quoted form. Six bytes per
+  // UTF-16 code unit covers JSON escaping, and patch notes occur in two reports.
+  const specificKeys = new Set(project.specificStarts.map(start => `${start.planeId}:${start.provinceId}`));
+  const analyzedStarts = project.planes.flatMap(plane => plane.provinces.filter(province => province.start
+    || province.teamStart !== undefined || specificKeys.has(`${plane.id}:${province.id}`))).slice(0, 64);
+  const analysisTextBytes = 16 * 1024 + analyzedStarts.reduce((sum, province) => sum + 2048 + province.name.length * 12, 0)
+    + ((project.analysisContext?.gameVersion?.length ?? 0) + (project.analysisContext?.mods?.length ?? 0)) * 18;
 
   // INSTALL, balance, host settings, and host topology. The topology dossier
   // repeats province/edge descriptions, so budget by records instead of using
   // the former fixed 64 KB allowance.
   const supportTextBytes = 64 * 1024
+    + analysisTextBytes
     + project.planes.length * 4 * 1024
     + provinceCount * 1024
     + edgeCount * 512
@@ -854,15 +881,19 @@ function supportFiles(project: MapProject): PackageFile[] {
     `Seed: ${project.seed}`,
     `Planes: ${project.planes.length}`,
     `Provinces: ${project.planes.reduce((sum, plane) => sum + plane.provinces.length, 0)}`,
-    `Player starts: ${project.planes.reduce((sum, plane) => sum + plane.provinces.filter((province) => province.start).length, 0)}`,
-    `Fairness score: ${fairness.overall}/100`,
+    `Player starts (generic, team, and specific; deduplicated): ${analyzeStarts(project).totalStarts}`,
+    `Fairness score (legacy structural heuristic, not certified balance): ${fairness.overall}/100`,
     `  Start separation: ${fairness.startSeparation}`,
     `  Expansion parity: ${fairness.expansionParity}`,
-    `  Nearby throne parity (within 4 moves): ${fairness.throneAccess}`,
+    `  Nearby throne parity (within 4 graph hops, not turns): ${fairness.throneAccess}`,
     `  Terrain variety: ${fairness.terrainVariety}`,
     `  Connectivity: ${fairness.connectivity}`,
     `  Start degree parity: ${fairness.startDegree}`,
     `  Requested start allocation: ${fairness.startAllocation}`,
+    "A high average does not override an export error or certify nation, economy, or combat balance.",
+    ...fairness.notes.map(note => `  Score note: ${note}`),
+    "",
+    buildStartAnalysisText(project, BUILTIN_DOM6_CATALOG.gameVersion),
     "",
     "PLANES",
     ...project.planes.map((plane, index) => `  ${index + 1}. ${plane.name} — ${plane.kind}/${plane.variant ?? "default"}, ${plane.provinces.length} provinces, ${project.gates.filter((gate) => gate.endpoints.some((endpoint) => endpoint.planeId === plane.id)).length} gates`),
@@ -892,6 +923,8 @@ function supportFiles(project: MapProject): PackageFile[] {
     project.victoryPoints ? `Ascension points: ${project.victoryPoints}` : "Ascension points: choose in the host setup",
     `Special starts: ${project.specificStarts.length ? "enable if using assigned nations" : "not required"}`,
     `Wrap: ${formatWrap(project.planes[0])}`,
+    "",
+    ...analysisContextLines(project, BUILTIN_DOM6_CATALOG.gameVersion),
   ].join("\r\n");
   const install = [
     "PANTOKRATOR ATLAS - INSTALLATION",

@@ -31,3 +31,12 @@ test("small-screen controls and summaries retain readable sizes", () => {
   assert.match(css, /\.map-legend\s*\{[^}]*flex-wrap:\s*wrap;[^}]*font-size:\s*11px;/);
   assert.match(css, /\.export-option > b\s*\{[^}]*font-size:\s*11px;/);
 });
+
+test("analysis panels keep scroll containment and toolbar controls wrap instead of overlapping", () => {
+  assert.match(css, /\.canvas-toolbar\s*\{[^}]*flex-wrap:\s*wrap;/);
+  assert.match(css, /\.canvas-column\s*\{[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\) 48px;/);
+  assert.match(css, /\.analysis-table-wrap\s*\{[^}]*min-width:\s*0;[^}]*overflow-x:\s*auto;/);
+  assert.match(css, /\.balance-panel\s*\{[^}]*overflow:\s*auto;/);
+  assert.match(css, /\.analysis-status-grid\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\)/);
+  assert.match(css, /@media \(min-width: 980px\)\s*\{\s*\.atlas-shell\s*\{\s*position: fixed;\s*inset: 0;/);
+});

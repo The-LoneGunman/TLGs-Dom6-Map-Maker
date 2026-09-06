@@ -61,6 +61,8 @@ interface MapCanvasProps {
   selectedId?: string;
   previewCondition: PreviewCondition;
   markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations>;
+  /** Editor-only analysis overlay; deliberately omitted from exported PNGs and D6M. */
+  analysisProvinceIds?: ReadonlySet<string>;
   onNavigate: (provinceId: string) => void;
   onActivate: (provinceId: string) => void;
   onZoomChange?: (zoom: number) => void;
@@ -111,7 +113,7 @@ export function dispatchMapKeyboardCommand(
   else onActivate(command.provinceId);
 }
 
-export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotations, onNavigate, onActivate, onZoomChange, tool = "select" }: MapCanvasProps) {
+export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotations, analysisProvinceIds, onNavigate, onActivate, onZoomChange, tool = "select" }: MapCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const keyboardHelpId = useId();
@@ -189,10 +191,10 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
     context.scale(view.zoom, view.zoom);
     context.translate(-width / 2, -height / 2);
     if (backgroundImage) paintRealmBackground(context, backgroundImage, width, height, plane.wrapX, plane.wrapY);
-    paintPlane(context, plane, cells, topology, ownership, previewCondition, width, height, { selectedId, labels: view.zoom >= 1.35, detail: view.zoom >= 0.92, materialImages, markerAnnotations });
+    paintPlane(context, plane, cells, topology, ownership, previewCondition, width, height, { selectedId, labels: view.zoom >= 1.35, detail: view.zoom >= 0.92, materialImages, markerAnnotations, analysisProvinceIds });
     context.restore();
     drawVignette(context, width, height);
-  }, [backgroundImage, cells, markerAnnotations, materialImages, ownership, plane, previewCondition, selectedId, topology, view]);
+  }, [analysisProvinceIds, backgroundImage, cells, markerAnnotations, materialImages, ownership, plane, previewCondition, selectedId, topology, view]);
 
   useEffect(() => {
     draw();
@@ -481,7 +483,7 @@ function paintPlane(
   condition: PreviewCondition,
   width: number,
   height: number,
-  options: { selectedId?: string; labels?: boolean; detail?: boolean; materialImages?: Map<string, HTMLImageElement>; markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations> },
+  options: { selectedId?: string; labels?: boolean; detail?: boolean; materialImages?: Map<string, HTMLImageElement>; markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations>; analysisProvinceIds?: ReadonlySet<string> },
 ) {
   if (ownership.mode === "sparse") {
     paintSparsePlane(context, plane, topology, ownership, condition, width, height, options);
@@ -498,6 +500,11 @@ function paintPlane(
     context.fill();
     const metrics = measurePolygonProvinceArtwork(cell.polygons, province, plane, width, height);
     paintProvinceMaterial(context, plane, province, visuals.layers, cell.polygons, undefined, width, height, options.materialImages, materialLayouts);
+    if (options.analysisProvinceIds?.has(province.id)) {
+      drawCellPath(context, cell.polygons, width, height);
+      context.fillStyle = "rgba(80, 205, 189, .28)";
+      context.fill();
+    }
     context.strokeStyle = options.selectedId === province.id ? "#f5d67c" : "rgba(15, 24, 27, .72)";
     context.lineWidth = options.selectedId === province.id ? Math.max(2, width / 900) : Math.max(0.75, width / 3400);
     context.stroke();
@@ -587,7 +594,7 @@ function paintSparsePlane(
   condition: PreviewCondition,
   width: number,
   height: number,
-  options: { selectedId?: string; labels?: boolean; detail?: boolean; materialImages?: Map<string, HTMLImageElement>; markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations> },
+  options: { selectedId?: string; labels?: boolean; detail?: boolean; materialImages?: Map<string, HTMLImageElement>; markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations>; analysisProvinceIds?: ReadonlySet<string> },
 ) {
   const layer = document.createElement("canvas");
   layer.width = width;
@@ -608,6 +615,10 @@ function paintSparsePlane(
     paintProvinceMaterial(layerContext, plane, province, visuals.layers, undefined, path, width, height, options.materialImages, materialLayouts);
     const metrics = measureSparseProvinceArtwork(owner, province, ownership, width, height);
     drawTerrainMarks(layerContext, plane, province, visuals.marks, metrics, undefined, width, height, condition, options.detail);
+    if (options.analysisProvinceIds?.has(province.id)) {
+      layerContext.fillStyle = "rgba(80, 205, 189, .28)";
+      layerContext.fillRect(0, 0, width, height);
+    }
     if (options.selectedId === province.id) {
       layerContext.fillStyle = "rgba(245, 214, 124, .2)";
       layerContext.fillRect(0, 0, width, height);

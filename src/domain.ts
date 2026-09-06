@@ -351,6 +351,19 @@ export interface MapProject {
   rawDirectives: string;
   createdAt: string;
   updatedAt: string;
+  /** Optional device-local notes; never a certificate of nation or mod balance. */
+  analysisContext?: { gameVersion?: string; mods?: string };
+  /** Inputs recorded by the editor after a successful generation, not map-edit provenance. */
+  generationInputs?: GenerationInputSnapshot;
+}
+
+export interface GenerationInputSnapshot {
+  version: 1;
+  seed: string;
+  starts: string;
+  terrain: string;
+  planes: string;
+  links: string;
 }
 
 export interface FairnessMetrics {

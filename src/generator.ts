@@ -428,6 +428,74 @@ export function addPlane(project: MapProject, kind: PlaneKind = "underworld", op
   return next;
 }
 
+export interface ProvinceBudgetRow {
+  planeId: string;
+  name: string;
+  core: boolean;
+  autoSize: boolean;
+  reserved: boolean;
+  current: number;
+  target: number;
+  requested: number;
+  allocatedStarts: number;
+  reason: string;
+}
+
+/** The same planning calculation feeds generation and its read-only budget preview. */
+export function previewProvinceBudget(project: MapProject) {
+  const settings = { ...project.settings,
+    players: clamp(Math.round(project.settings.players), 2, 32),
+    provincesPerPlayer: clamp(Math.round(project.settings.provincesPerPlayer), 8, 30),
+    specialPlaneSizePercent: clamp(Math.round(project.settings.specialPlaneSizePercent ?? 30), 1, 500),
+    startDegreeTarget: clamp(Math.round(project.settings.startDegreeTarget ?? 4), 1, 8),
+  };
+  const planes = project.planes.map((plane, index) => ({ ...plane,
+    kind: normalizePlaneKind(plane.kind),
+    variant: plane.variant ?? ARCHETYPE_PROFILES[normalizePlaneKind(plane.kind)].defaultVariant,
+    autoSize: plane.autoSize ?? index === 0,
+    provinceTarget: clamp(Math.round(plane.provinceTarget), 8, 800),
+  }));
+  const requestedStarts = normalizeStartDistribution(settings.startDistribution, settings.players);
+  const coreTargets = new Map<number, number>();
+  const corePlanningPlanes = planes.map(plane => plane.autoSize && isCorePlaneForSizing(plane)
+    ? { ...plane, provinces: [], provinceTarget: settings.provincesPerPlayer } : plane);
+  const coreStartTargets = generatedStartPlaneTargets({ planes: corePlanningPlanes }, requestedStarts);
+  const count = (targets: Map<StartType, Map<string, number>>, id: string, types: StartType[]) =>
+    types.reduce((sum, type) => sum + (targets.get(type)?.get(id) ?? 0), 0);
+  planes.forEach((plane, index) => {
+    if (!isCorePlaneForSizing(plane)) return;
+    const allocated = count(coreStartTargets, plane.id, isTrueCaveCorePlane(plane) ? ["cave"] : ["land", "coastal", "water"]);
+    coreTargets.set(index, plane.autoSize ? Math.max(18, Math.round(allocated * settings.provincesPerPlayer)) : plane.provinceTarget);
+  });
+  const actualCore = [...coreTargets.values()].reduce((sum, value) => sum + clamp(value, 8, 800), 0);
+  const referenceCore = actualCore || settings.players * settings.provincesPerPlayer;
+  const percentageTarget = Math.round(referenceCore * settings.specialPlaneSizePercent / 100);
+  const bonusPlanningPlanes = planes.map((plane, index) => ({ ...plane, provinces: [],
+    provinceTarget: plane.autoSize
+      ? isCorePlaneForSizing(plane) ? coreTargets.get(index) ?? plane.provinceTarget : Math.max(18, percentageTarget)
+      : plane.provinceTarget,
+  }));
+  const bonusStartTargets = generatedStartPlaneTargets({ planes: bonusPlanningPlanes }, requestedStarts);
+  const rows: ProvinceBudgetRow[] = planes.map((plane, index) => {
+    const core = isCorePlaneForSizing(plane);
+    const allocatedStarts = core
+      ? count(coreStartTargets, plane.id, isTrueCaveCorePlane(plane) ? ["cave"] : ["land", "coastal", "water"])
+      : count(bonusStartTargets, plane.id, ["cave", "other"]);
+    const minimumForStarts = allocatedStarts ? allocatedStarts * (12 + 2 * settings.startDegreeTarget) : 18;
+    const requested = !plane.autoSize ? plane.provinceTarget : core ? coreTargets.get(index) ?? plane.provinceTarget
+      : Math.max(18, minimumForStarts, percentageTarget);
+    const target = clamp(Math.round(requested), 8, 800);
+    const reason = !plane.autoSize ? "Manual size preserved" : requested > 800 ? "Limited to 800 provinces"
+      : core ? allocatedStarts ? `${allocatedStarts} starts × ${settings.provincesPerPlayer} provinces/player${requested === 18 && allocatedStarts * settings.provincesPerPlayer < 18 ? "; 18 minimum" : ""}` : "18-province minimum; no allocated starts"
+        : minimumForStarts > Math.max(18, percentageTarget) ? `${settings.specialPlaneSizePercent}% of core enlarged for start/guardian buffers`
+          : percentageTarget < 18 ? "18-province minimum" : `${settings.specialPlaneSizePercent}% of ${referenceCore} core provinces`;
+    return { planeId: plane.id, name: plane.name, core, autoSize: plane.autoSize, reserved: plane.noGeneratedStarts ?? false,
+      current: plane.provinces.length, target, requested, allocatedStarts, reason };
+  });
+  return { planes: rows, core: actualCore, bonus: rows.filter(r => !r.core).reduce((sum, r) => sum + r.target, 0),
+    total: rows.reduce((sum, r) => sum + r.target, 0), referenceCore, usesFallbackCore: actualCore === 0 };
+}
+
 export function generateProject(project: MapProject): MapProject {
   const next = cloneProject(project);
   removeGeneratedCaveSpecificStarts(next);
@@ -472,67 +540,9 @@ export function generateProject(project: MapProject): MapProject {
     normalized.provinceTarget = clamp(Math.round(normalized.provinceTarget), 8, 800);
     return normalized;
   });
-  const coreTargets = new Map<number, number>();
-  // Work out per-core start shares against the intended auto-sized budget,
-  // not against stale provinceTarget values left by a previous generation.
-  // Otherwise an earlier/default first plane can monopolize starts merely
-  // because it still carries a larger historical target.
-  const corePlanningPlanes = next.planes.map((plane) => (
-    plane.autoSize && isCorePlaneForSizing(plane)
-      ? { ...plane, provinces: [], provinceTarget: next.settings.provincesPerPlayer }
-      : plane
-  ));
-  const coreStartTargets = generatedStartPlaneTargets({ planes: corePlanningPlanes }, requestedStarts);
-  next.planes.forEach((plane, index) => {
-    if (!isCorePlaneForSizing(plane)) return;
-    if (!plane.autoSize) {
-      coreTargets.set(index, plane.provinceTarget);
-    } else if (isTrueCaveCorePlane(plane)) {
-      const allocatedStarts = coreStartTargets.get("cave")?.get(plane.id) ?? 0;
-      coreTargets.set(index, Math.max(18, Math.round(allocatedStarts * next.settings.provincesPerPlayer)));
-    } else {
-      const allocatedStarts = (coreStartTargets.get("land")?.get(plane.id) ?? 0)
-        + (coreStartTargets.get("coastal")?.get(plane.id) ?? 0)
-        + (coreStartTargets.get("water")?.get(plane.id) ?? 0);
-      coreTargets.set(index, Math.max(18, Math.round(allocatedStarts * next.settings.provincesPerPlayer)));
-    }
-  });
-  const coreTotal = [...coreTargets.values()].reduce((sum, value) => sum + clamp(value, 8, 800), 0)
-    || next.settings.players * next.settings.provincesPerPlayer;
-
-  // Freeze the entire plan before changing any targets. Old generated province
-  // arrays and earlier callbacks must not affect another bonus realm's size.
-  const bonusPlanningPlanes = next.planes.map((plane, index) => ({
-    ...plane,
-    provinces: [],
-    provinceTarget: plane.autoSize
-      ? isCorePlaneForSizing(plane)
-        ? coreTargets.get(index) ?? plane.provinceTarget
-        : Math.max(18, Math.round(coreTotal * next.settings.specialPlaneSizePercent! / 100))
-      : plane.provinceTarget,
-  }));
-  const bonusStartTargets = generatedStartPlaneTargets({ planes: bonusPlanningPlanes }, requestedStarts);
-
+  const budget = previewProvinceBudget(next);
   next.planes = next.planes.map((normalized, index) => {
-    if (normalized.autoSize) {
-      if (isCorePlaneForSizing(normalized)) {
-        normalized.provinceTarget = coreTargets.get(index) ?? normalized.provinceTarget;
-      } else {
-        const allocatedStarts = (bonusStartTargets.get("cave")?.get(normalized.id) ?? 0)
-          + (bonusStartTargets.get("other")?.get(normalized.id) ?? 0);
-        // Higher requested capital degree expands the protected two-ring. Scale
-        // capacity with it, then reserve four additional neutral provinces per
-        // start so hard special realms retain themed guardians.
-        const provincesPerSpecialStart = 12 + 2 * (next.settings.startDegreeTarget ?? 4);
-        const minimumForStarts = allocatedStarts ? allocatedStarts * provincesPerSpecialStart : 18;
-        normalized.provinceTarget = Math.max(
-          18,
-          minimumForStarts,
-          Math.round(coreTotal * next.settings.specialPlaneSizePercent! / 100),
-        );
-      }
-    }
-    normalized.provinceTarget = clamp(Math.round(normalized.provinceTarget), 8, 800);
+    normalized.provinceTarget = budget.planes[index]!.target;
     const requestedWater = next.settings.startDistribution!.water + (next.settings.startDistribution!.coastal ? Math.max(2, next.settings.startDistribution!.coastal) : 0);
     const waterPercent = ARCHETYPE_PROFILES[normalized.kind].waterCapable
       ? Math.max(next.settings.waterPercent, Math.ceil((requestedWater * 100) / normalized.provinceTarget))
