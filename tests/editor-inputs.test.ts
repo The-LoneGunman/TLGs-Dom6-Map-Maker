@@ -14,7 +14,7 @@ interface ControlProps {
   value?: string;
   onChange?: (event: { target: { value: string } }) => void;
   onFocus?: () => void;
-  onBlur?: () => void;
+  onBlur?: (event: { currentTarget: { value: string } }) => void;
 }
 
 function capture<P>(component: (props: P) => ReactNode, props: P): ReactNode {
@@ -44,11 +44,46 @@ test("catalog focus and untouched blur preserve generated-cave provenance and cr
     onCommit(value: string) { edits += 1; setNationSpecificStart(project, plane.id, plane.provinces[0]!.id, Number(value)); },
   }), "input");
   input.props.onFocus!();
-  input.props.onBlur!();
+  input.props.onBlur!({ currentTarget: { value: "15" } });
   assert.equal(edits, 0);
   assert.equal(project.specificStarts[0]!.source, "generated-cave");
   updateCaveStartNations(project, []);
   assert.equal(project.specificStarts.length, 0);
+});
+
+test("numeric catalog blur resolves IDs and unique names but preserves ambiguous or invalid drafts", () => {
+  const commits: string[] = [];
+  const input = control(capture(CatalogCombobox, {
+    label: "Specific-start nation", value: 15, entries: BUILTIN_DOM6_CATALOG.nations,
+    numericOnly: true, isValueAllowed: (value: string) => Number(value) >= 5,
+    onCommit: (value: string) => commits.push(value),
+  }), "input");
+  for (const query of ["Agartha", "unknown nation", "#015", "15", "#2", "-8", "9007199254740993"]) {
+    input.props.onChange!({ target: { value: query } });
+    input.props.onBlur!({ currentTarget: { value: query } });
+    assert.deepEqual(commits, [], `${query} must not clear or reassign the current start`);
+  }
+  input.props.onBlur!({ currentTarget: { value: "#59" } });
+  assert.deepEqual(commits, ["59"]);
+  input.props.onBlur!({ currentTarget: { value: "" } });
+  assert.deepEqual(commits, ["59", ""], "only explicit empty input clears");
+  const unique = control(capture(CatalogCombobox, {
+    label: "Population type", value: 2, numericOnly: true,
+    entries: [{ id: 31, name: "Unique Folk", aliases: ["Local Folk"], provenanceId: "test" }],
+    onCommit: (value: string) => commits.push(value),
+  }), "input");
+  unique.props.onBlur!({ currentTarget: { value: "local folk" } });
+  assert.equal(commits.at(-1), "31");
+});
+
+test("unit and site catalog fields retain free-text mod references", () => {
+  const commits: string[] = [];
+  const input = control(capture(CatalogCombobox, {
+    label: "Commander", value: "34", entries: BUILTIN_DOM6_CATALOG.units,
+    onCommit: (value: string) => commits.push(value),
+  }), "input");
+  input.props.onBlur!({ currentTarget: { value: "My Mod Commander" } });
+  assert.deepEqual(commits, ["My Mod Commander"]);
 });
 
 test("typing a valid multi-digit count does not commit its out-of-range prefix", () => {

@@ -15,6 +15,8 @@ interface CatalogComboboxProps {
   getEntryStatus?: (entry: CatalogEntry) => { label: string; compatible: boolean };
   isValueAllowed?: (value: string) => boolean;
   rejectedMessage?: string;
+  /** ID-only fields must not silently convert an unresolved name to an empty value. */
+  numericOnly?: boolean;
 }
 
 export function CatalogCombobox({
@@ -29,6 +31,7 @@ export function CatalogCombobox({
   getEntryStatus,
   isValueAllowed,
   rejectedMessage = "That value is not available in this field.",
+  numericOnly = false,
 }: CatalogComboboxProps) {
   const inputId = useId();
   const listboxId = `${inputId}-results`;
@@ -47,11 +50,16 @@ export function CatalogCombobox({
   }, [value]);
 
   const commit = (next: string) => {
-    const normalized = next.trim();
+    const raw = next.trim();
+    const id = numericOnly && raw ? resolveCatalogNumericValue(entries, raw) : undefined;
+    const normalized = numericOnly && id !== undefined ? String(id) : raw;
     const current = value === undefined ? "" : String(value).trim();
-    if (normalized !== current && normalized && isValueAllowed && !isValueAllowed(normalized)) {
+    if (normalized && ((numericOnly && id === undefined)
+      || (normalized !== current && isValueAllowed && !isValueAllowed(normalized)))) {
       setQuery(value === undefined ? "" : String(value));
-      setError(rejectedMessage);
+      setError(numericOnly && id === undefined
+        ? "Choose a catalog result or enter a numeric ID. This name is unknown or matches more than one entry; the previous value was kept."
+        : rejectedMessage);
       setOpen(false);
       setActiveIndex(0);
       return;
@@ -90,9 +98,9 @@ export function CatalogCombobox({
             setOpen(true);
             setActiveIndex(0);
           }}
-          onBlur={() => {
+          onBlur={(event) => {
             focusRef.current = false;
-            commit(query);
+            commit(event.currentTarget.value);
           }}
           onKeyDown={(event) => {
             if (event.key === "ArrowDown" && results.length) {
@@ -139,11 +147,24 @@ export function CatalogCombobox({
               <b>#{entry.id}</b>
             </button>
           ))}
-          {!results.length && <div role="option" aria-disabled="true" aria-selected="false"><span>{entries.length ? "No catalog matches. Press Enter to keep the raw value." : emptyMessage}</span></div>}
+          {!results.length && <div role="option" aria-disabled="true" aria-selected="false"><span>{numericOnly ? "No catalog matches. Enter a verified numeric ID or choose another name." : entries.length ? "No catalog matches. Press Enter to keep the raw value." : emptyMessage}</span></div>}
         </div>
       )}
     </div>
   );
+}
+
+export function resolveCatalogNumericValue(entries: readonly CatalogEntry[], value: string): number | undefined {
+  const raw = value.trim();
+  if (/^#?\d+$/.test(raw)) {
+    const id = Number(raw.replace(/^#/, ""));
+    return Number.isSafeInteger(id) ? id : undefined;
+  }
+  const query = raw.toLocaleLowerCase();
+  const matches = entries.filter((entry) => [entry.name, ...(entry.aliases ?? [])]
+    .some((name) => name.toLocaleLowerCase() === query));
+  const ids = new Set(matches.map((entry) => entry.id));
+  return ids.size === 1 ? ids.values().next().value : undefined;
 }
 
 function catalogEntryDetails(entry: CatalogEntry, status?: { label: string; compatible: boolean }): string {

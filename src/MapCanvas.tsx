@@ -119,7 +119,7 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
   const keyboardHelpId = useId();
   const provinceStatusId = useId();
   const currentOptionId = useId();
-  const dragRef = useRef<{ x: number; y: number; panX: number; panY: number; moved: boolean } | null>(null);
+  const dragRef = useRef<{ pointerId: number; x: number; y: number; panX: number; panY: number; moved: boolean } | null>(null);
   const keyboardActionSerial = useRef(0);
   const [view, setView] = useState<ViewState>({ zoom: 1, panX: 0, panY: 0 });
   const [keyboardAction, setKeyboardAction] = useState<{ provinceId: string; tool: string; message: string }>();
@@ -213,14 +213,15 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
   };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!event.isPrimary || event.button !== 0 || dragRef.current) return;
     wrapperRef.current?.focus();
     event.currentTarget.setPointerCapture(event.pointerId);
-    dragRef.current = { x: event.clientX, y: event.clientY, panX: view.panX, panY: view.panY, moved: false };
+    dragRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, panX: view.panX, panY: view.panY, moved: false };
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const drag = dragRef.current;
-    if (!drag) return;
+    if (!drag || drag.pointerId !== event.pointerId) return;
     const dx = event.clientX - drag.x;
     const dy = event.clientY - drag.y;
     if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
@@ -229,8 +230,11 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
 
   const handlePointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
     dragRef.current = null;
-    if (!drag?.moved) {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    const moved = drag.moved || Math.abs(event.clientX - drag.x) + Math.abs(event.clientY - drag.y) > 4;
+    if (event.isPrimary && event.button === 0 && !moved) {
       const point = screenToWorld(event.clientX, event.clientY);
       const province = provinceAtOwnershipPoint(plane, ownership, point.x, point.y);
       if (province) {
@@ -238,6 +242,10 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
         onActivate(province.id);
       }
     }
+  };
+
+  const cancelPointer = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
   };
 
   const handleWheel = (event: React.WheelEvent<HTMLCanvasElement>) => {
@@ -282,7 +290,8 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
-          onPointerCancel={() => { dragRef.current = null; }}
+          onPointerCancel={cancelPointer}
+          onLostPointerCapture={cancelPointer}
           onWheel={handleWheel}
         />
         {selectedProvince && <div id={currentOptionId} className="sr-only" role="option" aria-selected="true" aria-posinset={selectedPosition} aria-setsize={plane.provinces.length}>{selectedProvince.name}</div>}

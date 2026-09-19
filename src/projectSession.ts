@@ -3,6 +3,22 @@ import { createDefaultProject } from "./generator";
 import { regenerateGeneratedProvinceNames } from "./naming";
 import { recordGenerationInputs } from "./workbench";
 
+/** A late file read may not overwrite edits, an Undo, or a more recent open. */
+export function createProjectImportGuard() {
+  let request = 0;
+  let revision = 0;
+  return {
+    begin() {
+      const token = ++request;
+      const initialRevision = revision;
+      return () => token !== request ? "superseded" as const
+        : initialRevision !== revision ? "changed" as const : "current" as const;
+    },
+    changed() { revision += 1; },
+    cancel() { request += 1; },
+  };
+}
+
 export function randomSeed(): string {
   const words = globalThis.crypto.getRandomValues(new Uint32Array(2));
   return `realm-${words[0]!.toString(36)}-${words[1]!.toString(36)}`;

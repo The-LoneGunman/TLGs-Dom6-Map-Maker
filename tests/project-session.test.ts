@@ -10,7 +10,7 @@ import { compileMapText } from "../src/dom6";
 import { parseProject, serializeProject } from "../src/export";
 import { addPlane, createDefaultProject } from "../src/generator";
 import { normalizeProvinceName } from "../src/naming";
-import { createFreshProject, prepareProjectForOpening, randomSeed } from "../src/projectSession";
+import { createFreshProject, createProjectImportGuard, prepareProjectForOpening, randomSeed } from "../src/projectSession";
 import { pendingGenerationGroups, recordGenerationInputs } from "../src/workbench";
 
 function entropy(t: TestContext, ...values: number[]) {
@@ -27,6 +27,45 @@ function entropy(t: TestContext, ...values: number[]) {
 
 const template = recordGenerationInputs(addPlane(createDefaultProject("session-name-fixture"), "underworld"));
 const names = (project: MapProject) => project.planes.flatMap(plane => plane.provinces.map(province => province.name));
+
+test("late imports cannot overwrite a newer open, intervening edits, Undo, or unmount", async () => {
+  const guard = createProjectImportGuard();
+  const applied: string[] = [];
+  const errors: unknown[] = [];
+  const pending = () => {
+    let resolve!: (name: string) => void;
+    let reject!: (error: unknown) => void;
+    const promise = new Promise<string>((yes, no) => { resolve = yes; reject = no; });
+    return { promise, resolve, reject };
+  };
+  const open = async (read: Promise<string>) => {
+    const status = guard.begin();
+    try {
+      const name = await read;
+      if (status() !== "current") return;
+      applied.push(name);
+      guard.changed();
+    } catch (error) {
+      if (status() === "current") errors.push(error);
+    }
+  };
+  const a = pending(); const b = pending();
+  const runA = open(a.promise); const runB = open(b.promise);
+  b.resolve("B"); await runB;
+  a.resolve("A"); await runA;
+  assert.deepEqual(applied, ["B"]);
+  for (const action of ["edit", "New Atlas", "Undo back to same object", "recovery", "generation"]) {
+    const read = pending(); const run = open(read.promise);
+    guard.changed(); read.resolve(action); await run;
+  }
+  const staleError = pending(); const failed = open(staleError.promise);
+  await open(Promise.resolve("latest"));
+  staleError.reject(new Error("old read failed")); await failed;
+  const unmounted = pending(); const stopped = open(unmounted.promise);
+  guard.cancel(); unmounted.resolve("unmounted"); await stopped;
+  assert.deepEqual(applied, ["B", "latest"]);
+  assert.deepEqual(errors, []);
+});
 
 test("fresh atlases use independent random seeds and record the generated baseline", t => {
   entropy(t, 1, 2, 3, 4, 0xffffffff, 0);

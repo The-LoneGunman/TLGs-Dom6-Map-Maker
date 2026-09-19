@@ -2,7 +2,7 @@
 
 Pantokrator Atlas is a local-first map maker for Dominions 6. It generates deterministic, multiplayer-oriented atlases with one to eight planes and exports native `.map` and `.d6m` files that Dominions can load directly.
 
-This guide describes v0.1.4: the recommended workflow, every major option in the interface, manual editing, validation, installation, and common problems. For development from a GitHub checkout, see [Develop from source](../README.md#develop-from-source).
+This guide describes the current hosted/source edition: the recommended workflow, major interface options, manual editing, validation, installation, and common problems. Older Windows releases may not include all controls; check the release notes before moving projects between versions. For development from a GitHub checkout, see [Develop from source](../README.md#develop-from-source).
 
 ## Contents
 
@@ -344,7 +344,7 @@ Core planes are Surface, Cave, Great Cavern, and solid Custom realms with Temper
 
 ## Planes tab
 
-An atlas can have **one to eight planes**. Archetype, variant, auto-sizing, and planned-link changes are inputs to the next generation; they do not transform existing provinces immediately.
+An atlas can have **one to eight planes**. Auto-sizing and planned-link changes apply to the next generation. Archetype changes immediately update the current plane's identity, ownership presentation and borders; surviving authored border types are preserved. Terrain, starts, sites and guardians are not regenerated until **Generate**. Wrap changes, including **Reset generator defaults**, also synchronize current borders in the same undoable edit. Review validation after changing topology because start spacing may change.
 
 ### Add plane to plan
 
@@ -824,7 +824,7 @@ Choose **Install directly** and select the top-level Dominions user-data `maps` 
 
 In Dominions, use **Tools & Manuals -> Open User Data Directory** to find the correct location, then select its `maps` folder in the picker.
 
-An existing nonempty map folder must contain a valid `atlas_project.json` identifying that normalized map name. Otherwise Atlas refuses the reinstall without changing files. Choose a different project name, or back up and move the conflicting folder before trying again.
+An existing nonempty map folder must contain a valid `atlas_project.json` identifying that normalized map name, unless it contains only recognizable staging files from an interrupted first install. Otherwise Atlas refuses the reinstall without changing files. Choose a different project name, or back up and move the conflicting folder before trying again.
 
 Back up an existing same-named map folder before an important reinstall. Atlas stages the package and attempts to restore touched files if installation fails; follow any recovery message before hosting the map.
 
@@ -850,7 +850,9 @@ Folder and file stems use safe ASCII letters, digits, and underscores, with a ma
 
 ### Browser limitations
 
-Direct folder access requires a browser context with the File System Access API. If it is unavailable, use the ZIP. For large 4K multi-plane atlases, direct installation is more memory-efficient than ZIP generation.
+Direct folder access requires a secure browser context with the File System Access API and Web Locks. If either is unavailable, use the ZIP. Atlas permits only one direct installation at a time across tabs using the same app address. Do not install into the same folder from different app addresses, browsers or profiles simultaneously: browser locks do not cover those writers. Atlas also checks for outside changes and retains recovery backups rather than overwriting a detected conflict.
+
+A retry can use a folder containing only recognizable staging files from an interrupted first install; those old files are preserved, not deleted. If recovery reports retained backups or an unrecognized folder, do not host it yet. Review the folder and backups, or choose a new atlas name for a clean installation. For large 4K multi-plane atlases, direct installation is more memory-efficient than ZIP generation.
 
 ## Keyboard and accessibility controls
 
@@ -864,7 +866,7 @@ When the map has keyboard focus:
 
 For the setup and inspector tab groups, Arrow keys move between tabs and Home/End jumps to the first/last tab.
 
-In catalog fields, type a name or ID, use Up/Down to move through results, Enter to commit, and Escape to close and restore the previous value.
+In catalog fields, type a name or ID, use Up/Down to move through results, Enter to commit, and Escape to close and restore the previous value. Nation, population-type and fort fields accept numeric IDs (including `#15`) or an exact unique name on blur. An ambiguous name such as **Agartha**, which exists in several eras, keeps the previous value and asks you to choose a result. Only explicitly clearing the field removes its assignment. Unit and site fields still accept raw mod references.
 
 Validation, replacement-confirmation, and export dialogs trap focus. Escape closes them unless package export is busy. Export progress, autosave, start allocation, selected province/tool, armed endpoints, and balance notices are announced to assistive technology. The layout reflows on narrow screens and respects reduced-motion settings.
 

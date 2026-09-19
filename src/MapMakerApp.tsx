@@ -65,7 +65,7 @@ import {
 import { ADVANCED_COMMANDS, terrainMask, validateProject } from "./dom6";
 import { auditPlaneTopology, canAuthorPlaneEdge, connectionKey } from "./geometry";
 import { regenerateAllProvinceNames, regenerateGeneratedProvinceNames } from "./naming";
-import { createFreshProject, prepareProjectForOpening, randomSeed } from "./projectSession";
+import { createFreshProject, createProjectImportGuard, prepareProjectForOpening, randomSeed } from "./projectSession";
 import {
   downloadPackage,
   downloadProject,
@@ -367,9 +367,24 @@ export function resetGeneratorDefaults(draft: MapProject, activePlaneId: string)
   const activePlane = draft.planes.find((plane) => plane.id === activePlaneId) ?? draft.planes[0];
   if (activePlane) {
     const wrapsByDefault = activePlane.kind !== "underworld";
+    const wrapChanged = activePlane.wrapX !== wrapsByDefault || activePlane.wrapY !== wrapsByDefault;
     activePlane.wrapX = wrapsByDefault;
     activePlane.wrapY = wrapsByDefault;
+    if (wrapChanged) activePlane.edges = synchronizePlaneEdges(activePlane, `${draft.seed}:reset-wrap`).edges;
   }
+}
+
+/** Update current ownership and borders without regenerating province content. */
+export function updatePlaneArchetype(draft: MapProject, planeId: string, nextKind: PlaneKind): void {
+  const planeIndex = draft.planes.findIndex((item) => item.id === planeId);
+  const plane = draft.planes[planeIndex];
+  if (!plane || plane.kind === nextKind) return;
+  if (isGeneratedPlaneName(plane.name)) {
+    plane.name = uniquePlaneName(draft.planes.filter((item) => item.id !== plane.id), defaultPlaneName(nextKind, planeIndex));
+  }
+  plane.kind = nextKind;
+  plane.variant = defaultVariantForKind(nextKind);
+  plane.edges = synchronizePlaneEdges(plane, `${draft.seed}:plane:${planeIndex}:archetype-sync`).edges;
 }
 
 export function updateCaveStartNations(draft: MapProject, nations: number[]): void {
@@ -432,6 +447,7 @@ export function MapMakerApp() {
   const catalogImportRef = useRef<HTMLInputElement>(null);
   const generationTaskRef = useRef<ProjectGenerationTask | undefined>(undefined);
   const currentProjectRef = useRef(project);
+  const importGuardRef = useRef(createProjectImportGuard());
   const rangeEditStartRef = useRef<MapProject | undefined>(undefined);
   const autosaveRevisionRef = useRef<AutosaveRevision | null>(null);
   const autosaveQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -594,6 +610,7 @@ export function MapMakerApp() {
   }, [toast]);
 
   useEffect(() => () => {
+    importGuardRef.current.cancel();
     const task = generationTaskRef.current;
     generationTaskRef.current = undefined;
     task?.cancel();
@@ -611,6 +628,7 @@ export function MapMakerApp() {
     }
     // A new edit branches away from Redo, including coalesced range edits.
     setRedoStack([]);
+    importGuardRef.current.changed();
     currentProjectRef.current = next;
     setAutosaveSaving(true);
     setProject(next);
@@ -650,6 +668,7 @@ export function MapMakerApp() {
     rangeEditStartRef.current = undefined;
     setUndoStack((stack) => stack.slice(0, -1));
     setRedoStack((stack) => appendHistorySnapshot(stack, currentProjectRef.current));
+    importGuardRef.current.changed();
     currentProjectRef.current = previous;
     setProject(previous);
     setAutosaveSaving(true);
@@ -664,6 +683,7 @@ export function MapMakerApp() {
     rangeEditStartRef.current = undefined;
     setRedoStack((stack) => stack.slice(0, -1));
     setUndoStack((stack) => appendHistorySnapshot(stack, currentProjectRef.current));
+    importGuardRef.current.changed();
     currentProjectRef.current = next;
     setProject(next);
     setAutosaveSaving(true);
@@ -757,6 +777,7 @@ export function MapMakerApp() {
     generationTaskRef.current = undefined;
     task?.cancel();
     const next = createFreshProject();
+    importGuardRef.current.changed();
     currentProjectRef.current = next;
     rangeEditStartRef.current = undefined;
     setProject(next);
@@ -1018,7 +1039,7 @@ export function MapMakerApp() {
       if (kind === "install") {
         const result = await installPackage(project, setExportProgress);
         if (result === "unsupported") {
-          setToast("Direct folder access is unavailable here. Use the ready-to-install ZIP instead.");
+          setToast("Direct folder access or safe cross-tab locking is unavailable here. Use the ready-to-install ZIP instead.");
         } else if (result === "installed") {
           clearActionError("package-export");
           setToast("Installed into your selected Dominions 6 maps folder.");
@@ -1055,8 +1076,13 @@ export function MapMakerApp() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
+    const importStatus = importGuardRef.current.begin();
     try {
       const opened = await parseProjectImportFile(file);
+      if (importStatus() !== "current") {
+        if (importStatus() === "changed") setToast("Project not opened because the current atlas changed while the file was being read. Open the file again when ready.");
+        return;
+      }
       const next = prepareProjectForOpening(opened);
       if (!commit(next)) return;
       setActivePlaneId(next.planes[0]?.id ?? "");
@@ -1066,6 +1092,7 @@ export function MapMakerApp() {
       clearActionError("project-import");
       setToast(`Opened ${next.name}.${next !== opened ? " Fresh generated names applied; manual names and the map are unchanged." : ""}`);
     } catch (error) {
+      if (importStatus() !== "current") return;
       showActionError("project-import", error, "Project import failed.");
     }
   };
@@ -1120,6 +1147,7 @@ export function MapMakerApp() {
     autosaveRevisionRef.current = result.revision ?? null;
     setAutosaveState(result);
     // Conflict/recovery inspection must show the exact saved copy, even with name rerolls enabled.
+    importGuardRef.current.changed();
     currentProjectRef.current = result.project;
     setProject(result.project);
     setActivePlaneId(result.project.planes[0]?.id ?? "");
@@ -1390,17 +1418,7 @@ export function MapMakerApp() {
               <Divider />
               <Field scope="Current Map" label="Plane name"><input maxLength={MAX_IMPORTED_STRING_LENGTH} value={activePlane.name} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.name = event.target.value; })} /></Field>
               <Field scope="Current Map + next generation" label="Plane archetype"><select value={activePlane.kind} onChange={(event) => mutate((draft) => {
-                const plane = draft.planes.find((item) => item.id === activePlane.id)!;
-                const planeIndex = draft.planes.findIndex((item) => item.id === plane.id);
-                const nextKind = event.target.value as PlaneKind;
-                if (isGeneratedPlaneName(plane.name)) {
-                  plane.name = uniquePlaneName(
-                    draft.planes.filter((item) => item.id !== plane.id),
-                    defaultPlaneName(nextKind, planeIndex),
-                  );
-                }
-                plane.kind = nextKind;
-                plane.variant = defaultVariantForKind(plane.kind);
+                updatePlaneArchetype(draft, activePlane.id, event.target.value as PlaneKind);
               })}>{PLANE_KINDS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></Field>
               <p className="field-note">{PLANE_KINDS.find((item) => item.value === activePlane.kind)?.description}</p>
               {activePlane.kind !== "surface" && activePlane.kind !== "custom" && <p className="field-note">Themed artwork fills ownerless space in the editor and exported PNG preview. Native D6M has no separate background-raster layer, so Dominions renders that space with its own realm presentation.</p>}
@@ -1728,7 +1746,7 @@ function GameplayInspector({ catalog, project, planeId, province, update, mutate
         item.teamStart = value;
         if (value !== undefined) prepareProvinceForPlayerStart(item);
       })} />
-      <CatalogCombobox label="Specific-start nation" value={specific?.nation} entries={playableNations} placeholder="Search playable nation name or ID" onCommit={(value) => {
+      <CatalogCombobox numericOnly label="Specific-start nation" value={specific?.nation} entries={playableNations} placeholder="Search playable nation name or ID" isValueAllowed={(value) => isPlayerNationId(Number(value))} rejectedMessage="A player nation requires an ID of 5 or greater. The previous assignment was kept." onCommit={(value) => {
         const nation = optionalNumber(value);
         mutateProject((draft) => {
           setNationSpecificStart(draft, planeId, province.id, nation !== undefined && isPlayerNationId(nation) ? nation : undefined);
@@ -1743,9 +1761,9 @@ function GameplayInspector({ catalog, project, planeId, province, update, mutate
       <Divider />
       <SectionHeading kicker="PROVINCE SETUP" title="Ownership & economy" />
       <div className="catalog-field-grid">
-        <CatalogCombobox label="Owner nation" value={province.owner} entries={catalog.nations} placeholder="Search nation name or ID" onCommit={(value) => update((item) => { item.owner = optionalNumber(value); if (item.owner !== undefined && [0, 2, 4].includes(item.owner)) item.provinceDefense = undefined; })} />
-        <CatalogCombobox label="Population type" value={province.poptype} entries={catalog.poptypes} placeholder="Search poptype name or ID" onCommit={(value) => update((item) => { item.poptype = optionalNumber(value); })} />
-        <CatalogCombobox label="Fortification" value={province.fort} entries={catalog.forts} placeholder="Search fort name or ID" onCommit={(value) => update((item) => { item.fort = optionalNumber(value); })} />
+        <CatalogCombobox numericOnly label="Owner nation" value={province.owner} entries={catalog.nations} placeholder="Search nation name or ID" onCommit={(value) => update((item) => { item.owner = optionalNumber(value); if (item.owner !== undefined && [0, 2, 4].includes(item.owner)) item.provinceDefense = undefined; })} />
+        <CatalogCombobox numericOnly label="Population type" value={province.poptype} entries={catalog.poptypes} placeholder="Search poptype name or ID" onCommit={(value) => update((item) => { item.poptype = optionalNumber(value); })} />
+        <CatalogCombobox numericOnly label="Fortification" value={province.fort} entries={catalog.forts} placeholder="Search fort name or ID" onCommit={(value) => update((item) => { item.fort = optionalNumber(value); })} />
       </div>
       <div className="field-grid two">
         <OptionalNumberField label="Population" value={province.population} min={0} max={50000} onChange={(value) => update((item) => { item.population = value; })} />
@@ -2196,7 +2214,7 @@ function CatalogIdSetField({ label, values, entries, emptyMessage = "Unrestricte
     onChange(next);
   };
   return <div className="catalog-id-field">
-    <CatalogCombobox key={values.join(",")} label={`Add ${label.toLocaleLowerCase()}`} value={draft} entries={entries} onCommit={add} placeholder="Search nation name or ID" />
+    <CatalogCombobox numericOnly key={values.join(",")} label={`Add ${label.toLocaleLowerCase()}`} value={draft} entries={entries} onCommit={add} placeholder="Search nation name or ID" />
     <div className={`catalog-chip-list ${ordered ? "ordered" : ""}`} aria-label={label}>
       {values.map((id, index) => {
         const entry = findCatalogEntry(entries, id);
@@ -2225,7 +2243,7 @@ function ComputerPlayersField({ values, entries, onChange }: { values: ComputerP
     setDraft("");
   };
   return <div className="computer-player-field">
-    <CatalogCombobox key={values.map((entry) => entry.nation).join(",")} label="Add computer-controlled nation" value={draft} entries={entries} onCommit={add} placeholder="Search nation name or ID" />
+    <CatalogCombobox numericOnly key={values.map((entry) => entry.nation).join(",")} label="Add computer-controlled nation" value={draft} entries={entries} onCommit={add} placeholder="Search nation name or ID" />
     <div className="computer-player-rows">
       {values.map((player, index) => {
         const entry = findCatalogEntry(entries, player.nation);
