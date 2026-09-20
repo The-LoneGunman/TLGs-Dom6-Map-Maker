@@ -2,7 +2,7 @@
 
 Research date: 2026-09-06. Atlas baseline: application v0.1.4 at [ba19a51](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/commit/ba19a5147930828827a02ece88b013c7aea71050).
 
-This is a research and design proposal, not a record of implemented features or a claim that a map is competitively balanced. It compares creator documentation and selected source code, inspects Atlas's current implementation, and records bounded in-memory diagnostics. Competing applications were not installed or benchmarked, and no new Dominions multiplayer sessions or participant usability studies were conducted.
+This is a historical research and design proposal, not a record of implemented features or a claim that a map is competitively balanced. It compares creator documentation and selected source code, inspects Atlas at the baseline above, and records bounded in-memory diagnostics. Competing applications were not installed or benchmarked, and no new Dominions multiplayer sessions or participant usability studies were conducted. See [implementation status](MULTIPLAYER_IMPLEMENTATION_STATUS.md) for what has since been built; competitor descriptions and proposed targets below remain dated research, not fresh verification.
 
 ## Main conclusion
 
@@ -37,7 +37,7 @@ A future reference gallery should describe a map's intended player mix, wrapping
 
 ## 2. Atlas: existing strengths and material gaps
 
-The baseline below was checked against the [current guide](USER_GUIDE.md), [settings model](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/ba19a5147930828827a02ece88b013c7aea71050/src/domain.ts#L292), and [editor implementation](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/ba19a5147930828827a02ece88b013c7aea71050/src/MapMakerApp.tsx).
+The baseline below was checked against the [guide at that revision](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/ba19a5147930828827a02ece88b013c7aea71050/docs/USER_GUIDE.md), [settings model](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/ba19a5147930828827a02ece88b013c7aea71050/src/domain.ts#L292), and [editor implementation](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/ba19a5147930828827a02ece88b013c7aea71050/src/MapMakerApp.tsx).
 
 | Area | Already present | Improvement still needed |
 |---|---|---|

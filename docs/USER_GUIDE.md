@@ -2,7 +2,7 @@
 
 Pantokrator Atlas is a local-first map maker for Dominions 6. It generates deterministic, multiplayer-oriented atlases with one to eight planes and exports native `.map` and `.d6m` files that Dominions can load directly.
 
-This guide describes the current hosted/source edition: the recommended workflow, major interface options, manual editing, validation, installation, and common problems. Older Windows releases may not include all controls; check the release notes before moving projects between versions. For development from a GitHub checkout, see [Develop from source](../README.md#develop-from-source).
+This guide describes the current `main` source: the recommended workflow, interface options, manual editing, validation, installation, and common problems. The hosted GUI and Windows releases can lag behind it; see [Versions and documentation](../README.md#versions-and-documentation) for the dated channel comparison. In particular, September 20's recovery, catalog, custom-border, and preview corrections are source-only until separately published. For the latest source, see [Develop from source](../README.md#develop-from-source).
 
 ## Contents
 
@@ -157,7 +157,7 @@ Resets the Generate options, name-reroll counter, plane resolution, and active-p
 
 ### Seed
 
-A free-text deterministic seed. A first visit without a saved atlas and each **New atlas** use a fresh random seed. Reopening an existing project preserves its seed. The same effective settings and seed reproduce the same generated atlas. The icon beside the field creates another random realm-style seed for the next **Generate**; it does not immediately rename or regenerate the current map. To change only names, use the name controls below.
+A free-text deterministic seed. A first visit without a saved atlas and each **New atlas** use a fresh random seed. Reopening an existing project preserves its seed. The same effective settings and seed reproduce the same generated atlas within the same generator revision; updates can change generation, so keep project JSON when an exact map matters. The icon beside the field creates another random realm-style seed for the next **Generate**; it does not immediately rename or regenerate the current map. To change only names, use the name controls below.
 
 ### Players
 
@@ -523,7 +523,7 @@ These previews are illustrative, not simulations of temperature or game events. 
 
 Drag to pan, use the wheel/trackpad to zoom from 78% to 400%, and choose **Fit** to return to 100% and center the plane. Use the strip below the map to switch planes.
 
-The editor preserves the map's aspect ratio, so unused space may appear around it. Labels avoid markers and other labels; labels that cannot fit are hidden. Hover over or select a province to read its full name and start, throne, or gateway details.
+The editor preserves the map's aspect ratio, so unused space may appear around it. Province labels appear from 135% zoom; they avoid markers and other labels, and labels that cannot fit are hidden. Hover over or select a province at any zoom to read its full name and start, throne, or gateway details.
 
 ## Province inspector
 
@@ -647,7 +647,7 @@ Guardian groups are explicit initial independent defenders, not replenishing pos
 - **Use role-focused lists** narrows the picker to known commanders or troops. Unusual summons and independents remain available in the broader list.
 - Exact numeric IDs remain accepted, including valid records hidden from normal browsing.
 - A group contains a Commander, optional display name, and any number of squads.
-- Each squad has a unit and count.
+- Each squad has a unit and count from 1 to 1,000.
 - Commander details include experience 0-900, random items 0-4, specific item names, Clear innate magic, bodyguard unit/count, and Fire/Air/Water/Earth/Astral/Death/Nature/Glamour/Blood/Holy levels 0-10.
 - Holy exports as priest magic.
 - Multiple groups create multiple commander blocks.
@@ -762,7 +762,7 @@ Choose an access model:
 
 Both models count a gate as one graph hop, ignore blocked provinces, and omit all capitals from expansion counts. Neither simulates sailing, flight, seasonal scales, movement costs, ownership, battle outcomes, or conquest turns. Same-number team-start annotations are treated as allies, including group zero; the host must configure the intended teams.
 
-Each row shows useful exits, provinces within two/three steps, two-step exclusive/contested access, known population plus the number of unknown provinces, authored guardian provinces, nearby preferred/fixed throne markers, and nearest rival/throne/cross-plane entrance. Exclusive means strictly closer than every competing start; contested includes ties and provinces a rival reaches sooner. Neither predicts ownership. Population is not income/resources; random independents and guardian difficulty remain unknown. Throne markers do not certify final engine placement.
+Each row shows useful exits, provinces within two/three steps, two-step exclusive/contested access, known population plus the number of unknown provinces, authored guardian provinces, nearby preferred/fixed throne markers, and nearest rival/throne/cross-plane entrance. Exclusive means strictly closer than every competing start; contested includes ties and provinces a rival reaches sooner. Neither predicts ownership. Missing or invalid population values count as unknown rather than inflating the total; invalid values still block playable export. Population is not income/resources; random independents and guardian difficulty remain unknown. Throne markers do not certify final engine placement.
 
 Click a start name to navigate safely to it and highlight its two-step region in teal. The overlay is editor-only, works across plane switches, and is hidden after project edits so it cannot present stale results. **Clear highlight** removes it. PNG and playable exports never include this overlay. `—` means no reachable target, a blocked start, or incomplete analysis.
 
@@ -882,6 +882,7 @@ Validation, replacement-confirmation, and export dialogs trap focus. Escape clos
 
 | Message or symptom | Meaning and response |
 |---|---|
+| A documented control is missing | Check [Versions and documentation](../README.md#versions-and-documentation). The hosted GUI and Windows installer may be older than the source guide; reinstalling the same release will not add newer controls. |
 | Windows shows Unknown publisher | The setup is not currently code-signed. Confirm it came from this project's GitHub release and verify the matching `.sha256` file before proceeding. |
 | Portable copy says Node.js is required | Install Node.js 22.13.0 or newer from the official link opened by the launcher, then run it again. The installed edition bundles its own private runtime. |
 | Launcher startup fails | For the installer edition, reinstall the latest setup. For a portable copy, keep the extracted release in a writable folder and do not run inside the ZIP. If it still fails, include the complete terminal error in a [GitHub issue](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/issues). |
@@ -914,11 +915,15 @@ Validation, replacement-confirmation, and export dialogs trap focus. Escape clos
 | Skybox/battle-map asset warning | Copy referenced `.tga`, `.rgb`, or `.d3m` files beside the map files. |
 | Backdrop differs in Dominions | Expected: backdrops are editor/PNG-only; native D6M owner-zero space is game-rendered. |
 | Terrain looks unchanged after editing | Biome is metadata only; change Primary terrain or Additional terrain flags. For Dominions, export/install the package again and start a new game. Atlas's PNG artwork is not embedded in native D6M. |
+| Province labels are hidden or cut off at the screen edge | Names appear from 135% zoom and can be omitted to avoid collisions. Pan to bring a province into view, or hover/select it for the complete name and marker details. |
+| Preview colors differ from the game | Condition previews are illustrative. They do not simulate temperature, events, army movement, or the game's exact artwork. |
 | Guardians cannot be added to a start | Intentional protection for the nation's starting army and pretender. |
 
 ## Dominions engine boundaries
 
-Pantokrator Atlas aims to be honest about what a standalone map can do:
+The latest source repairs passed automated and browser checks, but the September 20 test did not establish current-patch in-game behavior. See the [repair verification record](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/REPAIR_VERIFICATION_2026-09-20.md) before treating a generated map as playtested in Dominions.
+
+Native map data and Atlas's preview have different roles:
 
 - **Initial guardians vs persistent PD:** guardian groups create initial independents. Persistent post-capture rosters come from a nation/poptype and wholly new rosters require `.dm` modding.
 - **Population types:** `#poptype` controls local recruitment; it is not a separate PD-roster ID and does not replace the initial random army.

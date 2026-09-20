@@ -2,7 +2,9 @@
 
 This document separates the shipped artwork from the authoring contract for future asset packs. Reusable art must accommodate randomly generated provinces without assuming they are square, large, or compact.
 
-## Current implementation (v0.1.4)
+## Current source implementation
+
+Reviewed September 20, 2026. The v0.1.4 release already includes the four materials, but renderer fixes below are newer than that installer and the September 19 hosted build. See [Versions and documentation](../README.md#versions-and-documentation).
 
 The editor and high-resolution PNG preview use four bundled grayscale materials, seven realm backdrops, and procedural terrain marks. The renderer selects and combines materials from the effective terrain flags in code, repeats them in map-relative coordinates, and clips them to canonical province ownership. Missing images leave the underlying terrain or realm color intact. Optional procedural marks use safe interior footprints and can be reduced or omitted on constrained shapes.
 
@@ -11,6 +13,10 @@ The `earth.png`, `foliage.png`, `stone.png`, and `water.png` materials are opaqu
 The TypeScript contract and validator live in [`src/artAssetManifest.ts`](../src/artAssetManifest.ts); [`public/map-art/manifest.json`](../public/map-art/manifest.json) describes the four shipped materials. Tests validate this inventory, but the runtime does not consume it as a general asset-pack engine. Multi-resolution selection, bitmap decals, line brushes, adjacency/family avoidance, and ordered asset fallback chains are **future implementation requirements**, not shipped features.
 
 Artwork appears automatically in the editor and PNG previews; there is no separate illustrated-pack export mode. Native `.map`/`.d6m` packages contain gameplay geometry and terrain data, not these raster illustrations. Dominions renders its own native scenery.
+
+The editor fits the plane's aspect ratio and uses the inverse drawing transform for pointer selection. Terrain artwork remains clipped to canonical ownership, but province names and strategic badges are separate overlays so narrow chambers do not crop them. Names appear from 135% zoom, use collision-aware placement, and can be omitted when they do not fit; hover/selection text retains the complete name and marker details. Border artwork derives from the effective native bitmask, including custom combinations, in both solid and sparse ownership modes.
+
+Condition previews resolve a separate, non-mutating terrain mask. Submerged preserves cave identity while adding water; transformed cover removes incompatible vegetation, and cave walls remain unchanged. Winter cover is an illustrative policy, not a temperature simulation: water, caves, and outer realms are excluded, and eligible land responds to Warmer/Colder. Neither editor nor PNG appearance certifies the game's exact seasonal rendering.
 
 ## Future pack requirements
 
@@ -65,7 +71,7 @@ All files are authored in sRGB. Pantokrator Atlas does not use chroma keys or co
 Every semantic asset placement must be checked against generated map data, not inferred from pixel color. These requirements concern future bitmap decorations; the shipped procedural cave mark indicates Cave terrain, not a gateway:
 
 - Ports require a land/coastal province with a real water neighbor. Reefs and kelp require aquatic terrain.
-- Bridges require a `bridge` edge; river art requires a `river` edge. Mountain ridges require a mountain-border, impassable, mountain-pass, or explicitly tagged mountain feature.
+- Bridges and rivers require the corresponding effective native border bits, whether stored as a preset or Custom value. Mountain ridges require an appropriate mountain-border/pass bit or explicitly tagged mountain feature; an impassable flag alone is not evidence of mountains.
 - Gate art is anchored to a real gate endpoint. Cave-opening art additionally requires a cave-family connection. Throne art requires a preferred or fixed throne.
 - A province-local decal cannot cross its owner boundary. Only a line brush whose manifest explicitly allows border crossing may span a shared border.
 - Starts, thrones, gates, sites, province markers, and labels have exclusion geometry. Strategic information always wins; optional decoration is shifted, reduced within its envelope, or omitted.

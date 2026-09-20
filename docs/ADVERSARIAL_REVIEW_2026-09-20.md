@@ -2,11 +2,11 @@
 
 Reviewed revision: `c0ab14ac5da4d52f552872885b493b640b1d123d` on `codex/audit-fixes-sep19`.
 
-Historical review: the findings below describe that revision, not the subsequent repairs. See [repair verification](REPAIR_VERIFICATION_2026-09-20.md) for implementation status, regression results, and remaining in-engine verification limits.
+Historical review: all nine findings below and the population-overflow hardening gap were corrected in `bc5fe0a`. The reproductions describe the reviewed revision, not an unresolved issue list. See [repair verification](REPAIR_VERIFICATION_2026-09-20.md) for results and remaining in-engine limits, and the root [version table](../README.md#versions-and-documentation) for delivery-channel status.
 
-## Verdict
+## Verdict at the reviewed revision
 
-The regression baseline is healthy, but this is **not a clean release sign-off**. Nine actionable findings remain: one high-priority data-loss race, seven medium-priority functional or preview-accuracy issues, and one lower-priority readability issue.
+The regression baseline was healthy, but this was **not a clean release sign-off**. Nine actionable findings were identified: one high-priority data-loss race, seven medium-priority functional or preview-accuracy issues, and one lower-priority readability issue.
 
 This review changes no application code and publishes nothing. The only repository addition is this report. Browser experiments used disposable local projects on an isolated loopback port, not the user's public-app project or Dominions maps folder.
 

@@ -3,7 +3,7 @@
 **Original audit snapshot:** 2026-08-11
 **Remediation status updated:** 2026-08-13
 
-This is a historical record, not the current issue tracker. See the [2026-09-05 follow-up](BUGFIX_AUDIT_2026-09-05.md) for later repairs and its dated clean dependency-audit result, and the [user guide](USER_GUIDE.md) for current behavior. Source links and line references below describe historical snapshots and may no longer align with the present tree. Test counts and engine-load observations are not new v0.1.4 verification.
+This is a historical record, not the current issue tracker. The [documentation index](README.md) links subsequent repairs, including the [September 20 verification](REPAIR_VERIFICATION_2026-09-20.md); use the [user guide](USER_GUIDE.md) for current behavior. Source links and line references below describe historical snapshots and may no longer align with the present tree. August test counts and engine-load observations do not certify the current source or Dominions 6.37.
 
 **Scope:** generation, multiplayer balance, all plane families, UI workflows, accessibility, persistence, project/catalog import, validation, Dominions map compilation, D6M encoding, direct install, ZIP packaging, dependencies, and documentation
 

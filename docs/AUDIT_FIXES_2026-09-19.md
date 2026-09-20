@@ -1,6 +1,6 @@
 # September 19, 2026 repair notes
 
-This is a corrective pass, not completion of the [multiplayer feature roadmap](MULTIPLAYER_IMPLEMENTATION_STATUS.md).
+This dated record describes the corrective pass committed as `c0ab14a`, not completion of the [multiplayer feature roadmap](MULTIPLAYER_IMPLEMENTATION_STATUS.md). The [September 20 verification](REPAIR_VERIFICATION_2026-09-20.md) records subsequent corrections. See the root [version table](../README.md#versions-and-documentation) for which delivery channels include them.
 
 ## Corrected
 

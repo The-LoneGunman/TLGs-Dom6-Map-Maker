@@ -1,6 +1,6 @@
 # Adversarial repairs and verification — September 20, 2026
 
-Branch: `codex/adversarial-repairs-sep20`, based on `c0ab14ac5da4d52f552872885b493b640b1d123d`. These repairs address the [preceding review](ADVERSARIAL_REVIEW_2026-09-20.md). This report records verification before commit and push; merging and public app/installer publication are separate steps.
+Repair commit: [`bc5fe0a`](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/commit/bc5fe0a18601bd0665770f62fe6a643ef257088d), developed on `codex/adversarial-repairs-sep20` from `c0ab14ac5da4d52f552872885b493b640b1d123d`. These repairs address the [preceding review](ADVERSARIAL_REVIEW_2026-09-20.md). This is a dated verification record, not a live deployment status; see [Versions and documentation](../README.md#versions-and-documentation) for the source, hosted app, and Windows release distinction.
 
 ## Implemented corrections
 
@@ -24,6 +24,7 @@ The [user guide](USER_GUIDE.md) now explains custom border editing, preview limi
 
 - `npm test`: production build and **368 passing tests** (14 JavaScript, 354 TypeScript), no failures or skips.
 - `npm run typecheck`, `npm run lint`, `npm run licenses:check`, and whitespace checks passed.
+- [GitHub Release quality CI](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35515033664) passed for `bc5fe0a`, including the Linux quality job and Windows launcher job.
 - Local production-server smoke passed: loopback binding, page, manifest, icon, and traversal rejection.
 - Browser playtest used a disposable local project: three planes, 154 provinces, generation, custom-border editing, condition changes, zoom, plane switching, keyboard selection, autosave and recovery. At a 390×844 viewport, document content did not overflow horizontally; the map remained aspect-correct.
 - A two-tab conflict kept unsaved local work intact. Loading the newer copy changed the project to the remote version; Undo restored the exact local project name used to identify the displaced snapshot.
@@ -34,6 +35,6 @@ Build output retains the existing large-chunk and Vinext route-classification wa
 
 ## In-engine boundary
 
-The installed game reports Dominions 6.37. A scripted isolated new-game attempt exited without producing a saved game; that is **not a successful in-engine playtest**. A hidden-window attempt was not inspectable and was stopped. A visible-window test is awaiting user approval. Existing saves and the user's maps folder were not replaced.
+The installed game reported Dominions 6.37. A scripted isolated new-game attempt exited without producing a saved game; that is **not a successful in-engine playtest**. A hidden-window attempt was not inspectable and was stopped. No visible-window acceptance pass was completed. Existing saves and the user's maps folder were not replaced.
 
-Consequently, actual game loading, seasonal rendering, guardian combat/leadership, post-capture PD, recruitment, and multiplayer balance remain unconfirmed on that patch. The bundled catalog remains pinned to 6.35; no speculative IDs or nation-specific balance adjustments were added. Release-channel synchronization is a separate action and was not performed here.
+Consequently, actual game loading, seasonal rendering, guardian combat/leadership, post-capture PD, recruitment, and multiplayer balance remain unconfirmed on that patch. The bundled catalog remains pinned to 6.35; no speculative IDs or nation-specific balance adjustments were added. Source integration does not itself publish the hosted app or update the Windows installer.
