@@ -166,6 +166,7 @@ test("PNG rendering masks sparse overlays while leaving solid rendering on its v
   class FakeContext {
     compositeModes: string[] = [];
     drawImageCount = 0;
+    textCount = 0;
     set globalCompositeOperation(value: string) { this.compositeModes.push(value); }
     get globalCompositeOperation() { return this.compositeModes.at(-1) ?? "source-over"; }
     save() {}
@@ -182,7 +183,7 @@ test("PNG rendering masks sparse overlays while leaving solid rendering on its v
     stroke() {}
     clip() {}
     setLineDash() {}
-    fillText() {}
+    fillText() { this.textCount += 1; }
     strokeText() {}
     drawImage() { this.drawImageCount += 1; }
     createLinearGradient() { return new FakeGradient(); }
@@ -202,11 +203,14 @@ test("PNG rendering masks sparse overlays while leaving solid rendering on its v
   });
   try {
     const sparse = sparsePreviewFixture();
+    sparse.provinces[0]!.start = true;
     const sparseBlob = await renderPlanePng(sparse, "normal");
     assert.equal(sparseBlob.type, "image/png");
     assert.equal(canvases.length, 2, "sparse output uses a clipped offscreen terrain layer");
     assert.ok(canvases[1]!.context.compositeModes.includes("destination-in"));
     assert.equal(canvases[0]!.context.drawImageCount, 1);
+    assert.ok(canvases[0]!.context.textCount > 0, "semantic badges render on the final canvas outside terrain masks");
+    assert.equal(canvases[1]!.context.textCount, 0, "neither individual nor combined ownership masks may clip semantic text");
     assert.ok(paths.some((path) => path.rectCount > 0), "canonical owned scanlines populate the clipping paths");
 
     canvases.length = 0;

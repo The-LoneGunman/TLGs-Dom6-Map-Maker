@@ -3,9 +3,7 @@ import {
   effectiveProvinceTerrainFlags,
   isBlockedProvince,
   isCaveProvince,
-  isCaveTerrain,
   isWaterProvince,
-  isWaterTerrain,
   nationSpecificStartFeatureConflicts,
   planeFileSuffix,
   sanitizeMapName,
@@ -24,13 +22,15 @@ import {
   adjacencyFor,
   classifyCurrentStart,
   globalMovementAdjacency,
+  distancesToSources,
+  nearestSourceDistances,
   provinceGlobalNumber,
   scaledStartSeparationTarget,
   shortestDistances,
 } from "./generator";
 import { auditPlaneTopology, createProvinceOwnerResolver, resolvePlaneOwnershipMode } from "./geometry";
 import { BUILTIN_DOM6_CATALOG, findCatalogEntry, siteCompatibility, type Dom6CatalogBundle } from "./catalog";
-import { terrainElevation } from "./terrainVisuals";
+import { previewProvinceTerrain, terrainElevation, terrainVisualKey } from "./terrainVisuals";
 
 export const D6M_MAGIC = 898933;
 export const D6M_VERSION = 3;
@@ -693,9 +693,7 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
       .map((province) => province.id));
     const traversableProvinces = plane.provinces.filter((province) => !isBlockedProvince(province));
     const traversableAdjacency = adjacencyFor(plane, { traversableOnly: true });
-    const protectedStartDistances = [...protectedStartIds]
-      .filter((provinceId) => traversableAdjacency.has(provinceId))
-      .map((provinceId) => shortestDistances(traversableAdjacency, provinceId));
+    const protectedStartDistances = distancesToSources(traversableAdjacency, protectedStartIds, 2);
     const reachable = traversableProvinces.length
       ? shortestDistances(traversableAdjacency, traversableProvinces[0]!.id)
       : new Map<string, number>();
@@ -884,9 +882,7 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
         }
       }
       if (!protectedStartIds.has(province.id) && province.defenders.length && powerfulGuardianForce(province)) {
-        const nearestStart = protectedStartDistances.length
-          ? Math.min(...protectedStartDistances.map((distances) => distances.get(province.id) ?? Infinity))
-          : Infinity;
+        const nearestStart = protectedStartDistances.get(province.id) ?? Infinity;
         if (nearestStart === 2) {
           add("warning", `${province.name} has a powerful independent guardian force only two moves from a player start; prefer at least three moves of expansion room.`, plane.id, province.id);
         }
@@ -915,17 +911,22 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
   if (starts.length < project.settings.players) add("error", `Only ${starts.length} distinct start locations exist across all planes for ${project.settings.players} players.`);
   if (starts.length > project.settings.players) add("info", `The atlas has ${starts.length} distinct start locations for ${project.settings.players} players.`);
   if (starts.length > 1) {
-    const degrees = starts.map(({ plane, province }) => adjacencyFor(plane).get(province.id)?.length ?? 0);
+    const localAdjacency = new Map(project.planes.map((plane) => [plane.id, adjacencyFor(plane)]));
+    const degrees = starts.map(({ plane, province }) => localAdjacency.get(plane.id)!.get(province.id)?.length ?? 0);
     if (Math.min(...degrees) !== Math.max(...degrees)) add("warning", `Start connection counts across the atlas vary from ${Math.min(...degrees)} to ${Math.max(...degrees)}.`);
     const movement = globalMovementAdjacency(project);
     const globalKey = (planeId: string, provinceId: string) => `${planeId}:${provinceId}`;
-    const distances = new Map(starts.map(({ plane, province }) => {
-      const key = globalKey(plane.id, province.id);
-      return [key, shortestDistances(movement, key)];
-    }));
-    for (let left = 0; left < starts.length; left += 1) {
+    const nearestDistances = nearestSourceDistances(movement, starts.map(({ plane, province }) => globalKey(plane.id, province.id)));
+    // Normal multiplayer maps get individual pair diagnostics. Hostile/imported
+    // drafts with thousands of starts still get exact safety checks, but bounded output.
+    const closeStarts = starts.filter(({ plane, province }) => (nearestDistances.get(globalKey(plane.id, province.id)) ?? Infinity) < 3);
+    if (starts.length > 64 && closeStarts.length) {
+      const first = closeStarts[0]!;
+      add("error", `${closeStarts.length} of ${starts.length} distinct start locations are fewer than 3 movement connections from another start; distinct multiplayer starts require at least 3. Individual pair details are limited to atlases with at most 64 starts.`, first.plane.id, first.province.id);
+    }
+    for (let left = 0; starts.length <= 64 && left < starts.length; left += 1) {
       const a = starts[left]!;
-      const fromA = distances.get(globalKey(a.plane.id, a.province.id))!;
+      const fromA = shortestDistances(movement, globalKey(a.plane.id, a.province.id), 2);
       for (let right = left + 1; right < starts.length; right += 1) {
         const b = starts[right]!;
         const distance = fromA.get(globalKey(b.plane.id, b.province.id));
@@ -961,11 +962,7 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
     }
     const nearestByStart = starts.map(({ plane, province }) => {
       const key = globalKey(plane.id, province.id);
-      const fromStart = distances.get(key)!;
-      const nearest = starts.filter((other) => globalKey(other.plane.id, other.province.id) !== key)
-        .map((other) => fromStart.get(globalKey(other.plane.id, other.province.id)))
-        .filter((distance): distance is number => distance !== undefined)
-        .reduce((minimum, distance) => Math.min(minimum, distance), Infinity);
+      const nearest = nearestDistances.get(key) ?? Infinity;
       return { plane, province, nearest, target: preferredByStart.get(key) ?? 3 };
     }).filter((item) => Number.isFinite(item.nearest));
     const belowScale = nearestByStart.filter((item) => item.nearest < item.target && item.nearest >= 3);
@@ -1133,11 +1130,7 @@ export function estimatedD6mBytes(plane: Plane): number {
 }
 
 export function terrainPreviewKey(terrain: TerrainKey, condition: string): TerrainKey {
-  if (condition === "forested") return isWaterTerrain(terrain) ? "kelp" : isCaveTerrain(terrain) ? "caveforest" : "forest";
-  if (condition === "flooded") return isCaveTerrain(terrain) ? "caveswamp" : "sea";
-  if (condition === "wasted") return isCaveTerrain(terrain) ? "cavewaste" : "waste";
-  if (condition === "farmland") return isCaveTerrain(terrain) ? terrain : "farm";
-  return terrain;
+  return terrainVisualKey(previewProvinceTerrain({ terrain }, condition));
 }
 
 function minimumCapitalDistance(plane: Plane, width: number, height: number): number {

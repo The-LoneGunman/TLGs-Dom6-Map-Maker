@@ -63,8 +63,11 @@ import {
   synchronizePlaneEdges,
 } from "./generator";
 import { ADVANCED_COMMANDS, terrainMask, validateProject } from "./dom6";
+import { setBorderKind } from "./edgeVisuals";
 import { auditPlaneTopology, canAuthorPlaneEdge, connectionKey } from "./geometry";
 import { regenerateAllProvinceNames, regenerateGeneratedProvinceNames } from "./naming";
+import { createFreshProject, createProjectImportGuard, prepareProjectForOpening, randomSeed } from "./projectSession";
+import { createCatalogImportSession } from "./catalog/importSession";
 import {
   downloadPackage,
   downloadProject,
@@ -346,6 +349,7 @@ export function resetGeneratorDefaults(draft: MapProject, activePlaneId: string)
   draft.settings.continentCount = defaults.settings.continentCount;
   draft.settings.specialPlaneSizePercent = defaults.settings.specialPlaneSizePercent;
   draft.settings.provinceNameSeed = defaults.settings.provinceNameSeed;
+  draft.settings.randomizeNamesOnLoad = defaults.settings.randomizeNamesOnLoad;
   draft.settings.biomeCohesion = defaults.settings.biomeCohesion;
   draft.settings.economyBalance = defaults.settings.economyBalance;
   draft.settings.overlandTopology = defaults.settings.overlandTopology;
@@ -365,9 +369,24 @@ export function resetGeneratorDefaults(draft: MapProject, activePlaneId: string)
   const activePlane = draft.planes.find((plane) => plane.id === activePlaneId) ?? draft.planes[0];
   if (activePlane) {
     const wrapsByDefault = activePlane.kind !== "underworld";
+    const wrapChanged = activePlane.wrapX !== wrapsByDefault || activePlane.wrapY !== wrapsByDefault;
     activePlane.wrapX = wrapsByDefault;
     activePlane.wrapY = wrapsByDefault;
+    if (wrapChanged) activePlane.edges = synchronizePlaneEdges(activePlane, `${draft.seed}:reset-wrap`).edges;
   }
+}
+
+/** Update current ownership and borders without regenerating province content. */
+export function updatePlaneArchetype(draft: MapProject, planeId: string, nextKind: PlaneKind): void {
+  const planeIndex = draft.planes.findIndex((item) => item.id === planeId);
+  const plane = draft.planes[planeIndex];
+  if (!plane || plane.kind === nextKind) return;
+  if (isGeneratedPlaneName(plane.name)) {
+    plane.name = uniquePlaneName(draft.planes.filter((item) => item.id !== plane.id), defaultPlaneName(nextKind, planeIndex));
+  }
+  plane.kind = nextKind;
+  plane.variant = defaultVariantForKind(nextKind);
+  plane.edges = synchronizePlaneEdges(plane, `${draft.seed}:plane:${planeIndex}:archetype-sync`).edges;
 }
 
 export function updateCaveStartNations(draft: MapProject, nations: number[]): void {
@@ -397,6 +416,7 @@ export function GenerationBalanceNotice({ issues, generationWarnings = [] }: { i
 }
 
 export function MapMakerApp() {
+  // Keep the server and first client render identical. Randomize after autosave resolves.
   const [project, setProject] = useState<MapProject>(() => recordGenerationInputs(createDefaultProject()));
   const [activePlaneId, setActivePlaneId] = useState("");
   const [selectedId, setSelectedId] = useState<string>();
@@ -429,6 +449,8 @@ export function MapMakerApp() {
   const catalogImportRef = useRef<HTMLInputElement>(null);
   const generationTaskRef = useRef<ProjectGenerationTask | undefined>(undefined);
   const currentProjectRef = useRef(project);
+  const importGuardRef = useRef(createProjectImportGuard());
+  const catalogImportSessionRef = useRef(createCatalogImportSession());
   const rangeEditStartRef = useRef<MapProject | undefined>(undefined);
   const autosaveRevisionRef = useRef<AutosaveRevision | null>(null);
   const autosaveQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -503,14 +525,30 @@ export function MapMakerApp() {
         if (cancelled) return;
         autosaveRevisionRef.current = result.revision ?? null;
         setAutosaveState(result);
+        let next = result.project ?? createFreshProject();
         if (result.project) {
-          setProject(result.project);
-          setActivePlaneId(result.project.planes[0]?.id ?? "");
-        } else if (result.errors.length) {
+          try {
+            next = prepareProjectForOpening(result.project, Boolean(result.conflict));
+          } catch {
+            setToast("Your saved atlas was restored with its existing names; automatic name shuffling was unavailable.");
+          }
+        }
+        currentProjectRef.current = next;
+        setProject(next);
+        setActivePlaneId(next.planes[0]?.id ?? "");
+        if (result.project && next !== result.project) {
+          setUndoStack([result.project]);
+          setToast("Fresh generated names applied on open. Manual names and the map are unchanged; Undo restores the saved names.");
+        } else if (!result.project && result.errors.length) {
           setToast("The autosave could not be restored; a fresh atlas was opened.");
         }
       }).catch(() => {
-        if (!cancelled) setToast("The autosave could not be restored; a fresh atlas was opened.");
+        if (cancelled) return;
+        const next = createFreshProject();
+        currentProjectRef.current = next;
+        setProject(next);
+        setActivePlaneId(next.planes[0]?.id ?? "");
+        setToast("The autosave could not be restored; a fresh atlas was opened.");
       }).finally(() => {
         if (!cancelled) setHydrated(true);
       });
@@ -532,6 +570,7 @@ export function MapMakerApp() {
         if (saved) {
           const parsed = parseCatalogBundle(saved);
           mergeCatalogBundles(BUILTIN_DOM6_CATALOG, parsed);
+          catalogImportSessionRef.current.reset(parsed);
           setUserCatalog(parsed);
         }
       } catch {
@@ -549,6 +588,7 @@ export function MapMakerApp() {
     const timeout = window.setTimeout(() => {
       setAutosaveSaving(true);
       autosaveQueueRef.current = autosaveQueueRef.current.catch(() => undefined).then(async () => {
+        if (currentProjectRef.current !== project) return;
         const state = await saveProjectAutosave(project, undefined, { expectedRevision: autosaveRevisionRef.current });
         setAutosaveState(state);
         if (state.conflict) {
@@ -575,6 +615,8 @@ export function MapMakerApp() {
   }, [toast]);
 
   useEffect(() => () => {
+    importGuardRef.current.cancel();
+    catalogImportSessionRef.current.reset();
     const task = generationTaskRef.current;
     generationTaskRef.current = undefined;
     task?.cancel();
@@ -592,6 +634,7 @@ export function MapMakerApp() {
     }
     // A new edit branches away from Redo, including coalesced range edits.
     setRedoStack([]);
+    importGuardRef.current.changed();
     currentProjectRef.current = next;
     setAutosaveSaving(true);
     setProject(next);
@@ -631,6 +674,7 @@ export function MapMakerApp() {
     rangeEditStartRef.current = undefined;
     setUndoStack((stack) => stack.slice(0, -1));
     setRedoStack((stack) => appendHistorySnapshot(stack, currentProjectRef.current));
+    importGuardRef.current.changed();
     currentProjectRef.current = previous;
     setProject(previous);
     setAutosaveSaving(true);
@@ -645,6 +689,7 @@ export function MapMakerApp() {
     rangeEditStartRef.current = undefined;
     setRedoStack((stack) => stack.slice(0, -1));
     setUndoStack((stack) => appendHistorySnapshot(stack, currentProjectRef.current));
+    importGuardRef.current.changed();
     currentProjectRef.current = next;
     setProject(next);
     setAutosaveSaving(true);
@@ -737,7 +782,8 @@ export function MapMakerApp() {
     const task = generationTaskRef.current;
     generationTaskRef.current = undefined;
     task?.cancel();
-    const next = recordGenerationInputs(createDefaultProject());
+    const next = createFreshProject();
+    importGuardRef.current.changed();
     currentProjectRef.current = next;
     rangeEditStartRef.current = undefined;
     setProject(next);
@@ -759,7 +805,7 @@ export function MapMakerApp() {
     setReplaceAllNamesOpen(false);
     setGenerationBusy(false);
     setGenerationProgress(undefined);
-    setToast("Started a new atlas with generator defaults. The previous atlas is not in Undo; use its downloaded backup to restore it.");
+    setToast("Started a new atlas with a fresh random seed and generator defaults. The previous atlas is not in Undo; use its downloaded backup to restore it.");
   };
 
   const removePlane = (planeId: string) => {
@@ -835,20 +881,21 @@ export function MapMakerApp() {
     event.target.value = "";
     if (!file) return;
     try {
-      const imported = await parseCatalogImportFile(file);
-      const merged = userCatalog ? mergeCatalogBundles(userCatalog, imported) : imported;
-      mergeCatalogBundles(BUILTIN_DOM6_CATALOG, merged);
-      setUserCatalog(merged);
-      window.localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(merged));
+      const imported = await catalogImportSessionRef.current.import(() => parseCatalogImportFile(file), (merged) => {
+        window.localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(merged));
+        setUserCatalog(merged);
+      });
+      if (!imported) return;
       const count = imported.poptypes.length + imported.sites.length + imported.units.length + imported.nations.length + imported.forts.length + imported.planes.length + imported.siteTerrainTypes.length;
       clearActionError("catalog-import");
       setToast(`Loaded ${count.toLocaleString()} verified catalog entries from ${imported.catalogVersion}.`);
     } catch (error) {
-      showActionError("catalog-import", error, "Catalog import failed.");
+      showActionError("catalog-import", error, "Catalog import failed; the previous catalog is unchanged.");
     }
   };
 
   const resetCatalog = () => {
+    catalogImportSessionRef.current.reset();
     setUserCatalog(undefined);
     const cleared = removeStoredCustomCatalog();
     setToast(cleared
@@ -997,15 +1044,15 @@ export function MapMakerApp() {
     setExportProgress({ stage: "preparing", plane: 0, planeCount: project.planes.length, percent: 0, message: "Preparing the atlas…" });
     try {
       if (kind === "install") {
-        const result = await installPackage(project, setExportProgress);
+        const result = await installPackage(project, setExportProgress, catalog);
         if (result === "unsupported") {
-          setToast("Direct folder access is unavailable here. Use the ready-to-install ZIP instead.");
+          setToast("Direct folder access or safe cross-tab locking is unavailable here. Use the ready-to-install ZIP instead.");
         } else if (result === "installed") {
           clearActionError("package-export");
           setToast("Installed into your selected Dominions 6 maps folder.");
         }
       } else {
-        await downloadPackage(project, setExportProgress);
+        await downloadPackage(project, setExportProgress, catalog);
         clearActionError("package-export");
         setToast("Ready-to-install map package downloaded.");
       }
@@ -1036,24 +1083,32 @@ export function MapMakerApp() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
+    const importStatus = importGuardRef.current.begin();
     try {
-      const next = await parseProjectImportFile(file);
+      const opened = await parseProjectImportFile(file);
+      if (importStatus() !== "current") {
+        if (importStatus() === "changed") setToast("Project not opened because the current atlas changed while the file was being read. Open the file again when ready.");
+        return;
+      }
+      const next = prepareProjectForOpening(opened);
       if (!commit(next)) return;
       setActivePlaneId(next.planes[0]?.id ?? "");
       setSelectedId(undefined);
       setLinkSource(undefined);
       setGateSource(undefined);
       clearActionError("project-import");
-      setToast(`Opened ${next.name}.`);
+      setToast(`Opened ${next.name}.${next !== opened ? " Fresh generated names applied; manual names and the map are unchanged." : ""}`);
     } catch (error) {
+      if (importStatus() !== "current") return;
       showActionError("project-import", error, "Project import failed.");
     }
   };
 
   const saveAutosaveNow = async (replaceNewer = false) => {
+    importGuardRef.current.cancel();
     setAutosaveSaving(true);
-    try {
-      await autosaveQueueRef.current.catch(() => undefined);
+    const save = autosaveQueueRef.current.catch(() => undefined).then(async () => {
+      if (currentProjectRef.current !== project) return;
       const conflictRevisions = autosaveState.conflict?.backendRevisions;
       if (replaceNewer && autosaveState.recoveryCopies?.length) downloadAutosaveRecovery();
       if (replaceNewer && !conflictRevisions) {
@@ -1078,11 +1133,13 @@ export function MapMakerApp() {
         clearActionError("device-save");
         setToast("Project saved on this device.");
       }
-    } catch (error) {
+    }).catch((error) => {
       showActionError("device-save", error, "The project could not be saved.");
-    } finally {
-      setAutosaveSaving(false);
-    }
+    }).finally(() => {
+      if (currentProjectRef.current === project) setAutosaveSaving(false);
+    });
+    autosaveQueueRef.current = save;
+    await save;
   };
 
   const downloadAutosaveRecovery = () => {
@@ -1090,23 +1147,38 @@ export function MapMakerApp() {
   };
 
   const reloadAutosaveAfterConflict = async () => {
+    const recoveryStatus = importGuardRef.current.begin();
     const divergent = autosaveState.conflict?.reason === "divergent-copies";
     const preferredBackend = divergent ? autosaveState.conflict?.alternateBackend : undefined;
-    const result = await loadProjectAutosave(undefined, preferredBackend ? { preferredBackend } : undefined);
-    if (!result.project) {
-      setToast(`${divergent ? "The other preserved copy" : "The newer autosave"} is no longer available; the current atlas was kept.`);
-      return;
+    try {
+      // Finish pending local saves before reading their durable successor.
+      await autosaveQueueRef.current.catch(() => undefined);
+      if (recoveryStatus() !== "current") return;
+      const result = await loadProjectAutosave(undefined, preferredBackend ? { preferredBackend } : undefined);
+      if (recoveryStatus() !== "current") {
+        if (recoveryStatus() === "changed") setToast("Recovery copy not loaded because the current atlas changed. Your edits and Undo history were kept.");
+        return;
+      }
+      if (!result.project) {
+        setToast(`${divergent ? "The other preserved copy" : "The newer autosave"} is no longer available; the current atlas was kept.`);
+        return;
+      }
+      // Recovery inspection is lossless: no name reroll, and Undo retains the
+      // displaced local project rather than erasing its only recovery path.
+      if (!commit(result.project)) return;
+      rangeEditStartRef.current = undefined;
+      autosaveRevisionRef.current = result.revision ?? null;
+      setAutosaveState(result);
+      setAutosaveSaving(false);
+      setActivePlaneId(result.project.planes[0]?.id ?? "");
+      setSelectedId(undefined);
+      setLinkSource(undefined);
+      setGateSource(undefined);
+      clearActionError("device-save");
+      setToast(`${divergent ? "Loaded the other preserved device copy for inspection." : "Loaded the newer device autosave."} Undo restores your previous local atlas.`);
+    } catch (error) {
+      if (recoveryStatus() === "current") showActionError("device-save", error, "Recovery could not be loaded; the current atlas and Undo history were kept.");
     }
-    autosaveRevisionRef.current = result.revision ?? null;
-    setAutosaveState(result);
-    setProject(result.project);
-    setActivePlaneId(result.project.planes[0]?.id ?? "");
-    setSelectedId(undefined);
-    setLinkSource(undefined);
-    setGateSource(undefined);
-    setUndoStack([]);
-    setRedoStack([]);
-    setToast(divergent ? "Loaded the other preserved device copy for inspection. Neither copy has been deleted." : "Loaded the newer device autosave.");
   };
 
   if (!activePlane) return <main className="empty-state">No plane is available.</main>;
@@ -1184,9 +1256,10 @@ export function MapMakerApp() {
               <Field scope="Next generation" label="Seed">
                 <div className="input-with-button">
                   <input maxLength={MAX_IMPORTED_STRING_LENGTH} value={project.seed} onChange={(event) => mutate((draft) => { draft.seed = event.target.value; })} />
-                  <button type="button" onClick={() => mutate((draft) => { draft.seed = randomSeed(); })} aria-label="Randomize seed">✣</button>
+                  <button type="button" onClick={() => mutate((draft) => { draft.seed = randomSeed(); })} aria-label="Randomize seed" title="Choose a fresh seed for the next Generate">✣</button>
                 </div>
               </Field>
+              <p className="field-note">New atlases start with a random seed. Saved projects keep theirs. Changing this seed takes effect when you Generate; use a name reroll to keep the current map.</p>
               <div className="field-grid two">
                 <NumberField scope="Next generation" label="Players" value={project.settings.players} min={2} max={32} onChange={(value) => mutate((draft) => {
                   draft.settings.startDistribution = resizeStartDistribution(
@@ -1273,9 +1346,11 @@ export function MapMakerApp() {
                 </select>
               </Field>
               <p className="field-note">{OVERLAND_TOPOLOGY_MODES.find((item) => item.value === normalizeOverlandTopologyMode(project.settings.overlandTopology))!.description} This affects only solid Surface and surface-like Custom planes; sparse and cave realms keep their authored route profiles.</p>
-              <p className="scope-heading"><ScopeBadge scope="Current map" /> Name rerolls apply immediately.</p>
+              <p className="scope-heading"><ScopeBadge scope="Current Map" /> Name rerolls apply immediately.</p>
               <button className="button quiet wide" type="button" onClick={handleRegenerateProvinceNames}>Reroll generated names (preserve manual)</button>
               <p className="field-note">Names follow each plane and its effective terrain, including coasts, flooded caves, and the River Styx. Names edited in the province inspector are marked manual and survive map generation and name rerolls.</p>
+              <Toggle scope="On project open" label="Fresh generated names on open" checked={project.settings.randomizeNamesOnLoad ?? false} describedBy="fresh-names-help" onChange={(value) => mutate((draft) => { draft.settings.randomizeNamesOnLoad = value; })} />
+              <p id="fresh-names-help" className="field-note">Off by default. When enabled, reopening this project or restoring it on page load shuffles generated names only. Manual and legacy names, the world seed, terrain, and starts stay unchanged. Turn off before sharing a map with fixed names. Autosave conflict/recovery copies are never renamed.</p>
               <button
                 className="text-button danger-text"
                 type="button"
@@ -1295,7 +1370,7 @@ export function MapMakerApp() {
               <NumberField scope="Next generation" label="Each bonus plane size (% of core)" value={project.settings.specialPlaneSizePercent ?? 30} min={1} max={500} onChange={(value) => mutate((draft) => { draft.settings.specialPlaneSizePercent = value; })} />
               <p className="field-note">Players x provinces per player sizes only Surface, Cave, Cavern, and surface-like Custom core realms. Every auto-sized special plane independently uses this percentage of the combined core total; values over 100% are allowed, up to the 800-province per-plane cap.</p>
               <NumberField scope="Next generation" label="Recommended throne locations" value={project.settings.throneCount} min={0} max={64} onChange={(value) => mutate((draft) => { draft.settings.throneCount = value; })} />
-              <Field scope="Map + next generation" label="Output resolution">
+              <Field scope="Current Map + next generation" label="Output resolution">
                 <select value={project.settings.resolution} onChange={(event) => commit(applyResolution(project, event.target.value as GenerationSettings["resolution"]))}>
                   {Object.entries(RESOLUTION_PRESETS).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}
                   <option value="custom">Custom per plane</option>
@@ -1305,8 +1380,8 @@ export function MapMakerApp() {
                 <span>{activePlane.width.toLocaleString()} × {activePlane.height.toLocaleString()}</span>
                 <small>Native D6M • condition-reactive</small>
               </div>
-              <Toggle scope="Map + next generation" label="Wrap east / west" checked={activePlane.wrapX} onChange={(value) => updateWrap("wrapX", value)} />
-              <Toggle scope="Map + next generation" label="Wrap north / south" checked={activePlane.wrapY} onChange={(value) => updateWrap("wrapY", value)} />
+              <Toggle scope="Current Map + next generation" label="Wrap east / west" checked={activePlane.wrapX} onChange={(value) => updateWrap("wrapX", value)} />
+              <Toggle scope="Current Map + next generation" label="Wrap north / south" checked={activePlane.wrapY} onChange={(value) => updateWrap("wrapY", value)} />
               <button className="button quiet wide" type="button" onClick={() => setLeftTab("planes")}>Configure plane archetypes &amp; selected links</button>
               <button
                 className="button generate-button"
@@ -1363,23 +1438,13 @@ export function MapMakerApp() {
                 onClick={stagePlane}
               >+ Add plane to plan</button>
               <Divider />
-              <Field scope="Current map" label="Plane name"><input maxLength={MAX_IMPORTED_STRING_LENGTH} value={activePlane.name} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.name = event.target.value; })} /></Field>
-              <Field scope="Map + next generation" label="Plane archetype"><select value={activePlane.kind} onChange={(event) => mutate((draft) => {
-                const plane = draft.planes.find((item) => item.id === activePlane.id)!;
-                const planeIndex = draft.planes.findIndex((item) => item.id === plane.id);
-                const nextKind = event.target.value as PlaneKind;
-                if (isGeneratedPlaneName(plane.name)) {
-                  plane.name = uniquePlaneName(
-                    draft.planes.filter((item) => item.id !== plane.id),
-                    defaultPlaneName(nextKind, planeIndex),
-                  );
-                }
-                plane.kind = nextKind;
-                plane.variant = defaultVariantForKind(plane.kind);
+              <Field scope="Current Map" label="Plane name"><input maxLength={MAX_IMPORTED_STRING_LENGTH} value={activePlane.name} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.name = event.target.value; })} /></Field>
+              <Field scope="Current Map + next generation" label="Plane archetype"><select value={activePlane.kind} onChange={(event) => mutate((draft) => {
+                updatePlaneArchetype(draft, activePlane.id, event.target.value as PlaneKind);
               })}>{PLANE_KINDS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></Field>
               <p className="field-note">{PLANE_KINDS.find((item) => item.value === activePlane.kind)?.description}</p>
               {activePlane.kind !== "surface" && activePlane.kind !== "custom" && <p className="field-note">Themed artwork fills ownerless space in the editor and exported PNG preview. Native D6M has no separate background-raster layer, so Dominions renders that space with its own realm presentation.</p>}
-              <Field scope="Map + next generation" label="Terrain variant"><select value={activePlane.variant ?? defaultVariantForKind(activePlane.kind)} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.variant = event.target.value as PlaneVariant; })}>{PLANE_VARIANTS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></Field>
+              <Field scope="Current Map + next generation" label="Terrain variant"><select value={activePlane.variant ?? defaultVariantForKind(activePlane.kind)} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.variant = event.target.value as PlaneVariant; })}>{PLANE_VARIANTS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></Field>
               <Toggle scope="Next generation" label="Auto-size from player count" checked={activePlane.autoSize ?? project.planes[0]?.id === activePlane.id} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.autoSize = value; })} />
               {(activePlane.autoSize ?? project.planes[0]?.id === activePlane.id)
                 ? <div className="resolution-card"><span>Automatic province count</span><small>{planeAutoSizeDescription(project, activePlane)}</small></div>
@@ -1387,13 +1452,13 @@ export function MapMakerApp() {
               <PlaneStartPolicyControl plane={activePlane} onChange={(value) => mutate((draft) => {
                 draft.planes.find((plane) => plane.id === activePlane.id)!.noGeneratedStarts = value || undefined;
               })} />
-              <Toggle scope="Map + next generation" label="Wrap east / west" checked={activePlane.wrapX} onChange={(value) => updateWrap("wrapX", value)} />
-              <Toggle scope="Map + next generation" label="Wrap north / south" checked={activePlane.wrapY} onChange={(value) => updateWrap("wrapY", value)} />
+              <Toggle scope="Current Map + next generation" label="Wrap east / west" checked={activePlane.wrapX} onChange={(value) => updateWrap("wrapX", value)} />
+              <Toggle scope="Current Map + next generation" label="Wrap north / south" checked={activePlane.wrapY} onChange={(value) => updateWrap("wrapY", value)} />
               {project.settings.resolution === "custom" && (
                 <>
                   <div className="field-grid two">
-                    <NumberField scope="Map + next generation" label="Width" value={activePlane.width} min={256} max={3840} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.width = value; })} />
-                    <NumberField scope="Map + next generation" label="Height" value={activePlane.height} min={256} max={3840} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.height = value; })} />
+                    <NumberField scope="Current Map + next generation" label="Width" value={activePlane.width} min={256} max={3840} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.width = value; })} />
+                    <NumberField scope="Current Map + next generation" label="Height" value={activePlane.height} min={256} max={3840} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.height = value; })} />
                   </div>
                   <p className="field-note">Each axis is capped at 3,840 pixels; width × height must remain at or below 8.29 megapixels.</p>
                 </>
@@ -1505,6 +1570,7 @@ export function MapMakerApp() {
                   {CONDITIONS.map((condition) => <option value={condition.value} key={condition.value}>{condition.label}</option>)}
                 </select>
               </label>
+              <small className="condition-preview-note">Illustrative preview, not a temperature simulation. Winter cover skips water, caves, and outer realms; Warmer/Colder affects eligible land.</small>
             </div>
           </div>
           <div className="map-stage">
@@ -1703,7 +1769,7 @@ function GameplayInspector({ catalog, project, planeId, province, update, mutate
         item.teamStart = value;
         if (value !== undefined) prepareProvinceForPlayerStart(item);
       })} />
-      <CatalogCombobox label="Specific-start nation" value={specific?.nation} entries={playableNations} placeholder="Search playable nation name or ID" onCommit={(value) => {
+      <CatalogCombobox numericOnly label="Specific-start nation" value={specific?.nation} entries={playableNations} placeholder="Search playable nation name or ID" isValueAllowed={(value) => isPlayerNationId(Number(value))} rejectedMessage="A player nation requires an ID of 5 or greater. The previous assignment was kept." onCommit={(value) => {
         const nation = optionalNumber(value);
         mutateProject((draft) => {
           setNationSpecificStart(draft, planeId, province.id, nation !== undefined && isPlayerNationId(nation) ? nation : undefined);
@@ -1718,9 +1784,9 @@ function GameplayInspector({ catalog, project, planeId, province, update, mutate
       <Divider />
       <SectionHeading kicker="PROVINCE SETUP" title="Ownership & economy" />
       <div className="catalog-field-grid">
-        <CatalogCombobox label="Owner nation" value={province.owner} entries={catalog.nations} placeholder="Search nation name or ID" onCommit={(value) => update((item) => { item.owner = optionalNumber(value); if (item.owner !== undefined && [0, 2, 4].includes(item.owner)) item.provinceDefense = undefined; })} />
-        <CatalogCombobox label="Population type" value={province.poptype} entries={catalog.poptypes} placeholder="Search poptype name or ID" onCommit={(value) => update((item) => { item.poptype = optionalNumber(value); })} />
-        <CatalogCombobox label="Fortification" value={province.fort} entries={catalog.forts} placeholder="Search fort name or ID" onCommit={(value) => update((item) => { item.fort = optionalNumber(value); })} />
+        <CatalogCombobox numericOnly label="Owner nation" value={province.owner} entries={catalog.nations} placeholder="Search nation name or ID" onCommit={(value) => update((item) => { item.owner = optionalNumber(value); if (item.owner !== undefined && [0, 2, 4].includes(item.owner)) item.provinceDefense = undefined; })} />
+        <CatalogCombobox numericOnly label="Population type" value={province.poptype} entries={catalog.poptypes} placeholder="Search poptype name or ID" onCommit={(value) => update((item) => { item.poptype = optionalNumber(value); })} />
+        <CatalogCombobox numericOnly label="Fortification" value={province.fort} entries={catalog.forts} placeholder="Search fort name or ID" onCommit={(value) => update((item) => { item.fort = optionalNumber(value); })} />
       </div>
       <div className="field-grid two">
         <OptionalNumberField label="Population" value={province.population} min={0} max={50000} onChange={(value) => update((item) => { item.population = value; })} />
@@ -1818,7 +1884,7 @@ export function SitesDefenseInspector({ catalog, plane, province, protectedStart
   );
 }
 
-function AdvancedInspector({ project, planeId, province, update, mutateProject }: { project: MapProject; planeId: string; province: Province; update: (recipe: (province: Province) => void) => void; mutateProject: (recipe: (project: MapProject) => void) => void }) {
+export function AdvancedInspector({ project, planeId, province, update, mutateProject }: { project: MapProject; planeId: string; province: Province; update: (recipe: (province: Province) => void) => void; mutateProject: (recipe: (project: MapProject) => void) => void }) {
   const plane = project.planes.find((item) => item.id === planeId)!;
   const incident = plane.edges.filter((edge) => edge.a === province.id || edge.b === province.id);
   return (
@@ -1827,7 +1893,19 @@ function AdvancedInspector({ project, planeId, province, update, mutateProject }
       <div className="edge-list">{incident.map((edge) => {
         const otherId = edge.a === province.id ? edge.b : edge.a;
         const other = plane.provinces.find((item) => item.id === otherId);
-        return <div className="edge-row" key={edge.id}><span>{other?.index}. {other?.name}</span><select value={edge.kind} aria-label={`Border type to province ${other?.index ?? "unknown"}, ${other?.name ?? "missing province"}`} onChange={(event) => mutateProject((draft) => { const target = draft.planes.find((item) => item.id === planeId)!.edges.find((item) => item.id === edge.id)!; target.kind = event.target.value as EdgeKind; })}>{EDGE_KINDS.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}</select></div>;
+        return <div key={edge.id}>
+          <div className="edge-row"><span>{other?.index}. {other?.name}</span><select value={edge.kind} aria-label={`Border type to province ${other?.index ?? "unknown"}, ${other?.name ?? "missing province"}`} onChange={(event) => mutateProject((draft) => {
+            const target = draft.planes.find((item) => item.id === planeId)!.edges.find((item) => item.id === edge.id)!;
+            setBorderKind(target, event.target.value as EdgeKind);
+          })}>{EDGE_KINDS.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}</select></div>
+          {edge.kind === "custom" && <>
+            <NumberField label={`Border bitmask to province ${other?.index ?? "unknown"}`} value={edge.special ?? 0} min={0} max={255} onChange={(value) => mutateProject((draft) => {
+              const target = draft.planes.find((item) => item.id === planeId)!.edges.find((item) => item.id === edge.id)!;
+              target.special = value;
+            })} />
+            <p className="microcopy">Add flags: pass 1, river 2, impassable 4, road 8, bridge 16, mountain border 32. A mountain pass is 33. Zero is ordinary movement. Other bits require game-specific verification.</p>
+          </>}
+        </div>;
       })}</div>
       <Divider />
       <SectionHeading kicker="BATTLE SCENE" title="Province battlefield" />
@@ -2057,8 +2135,8 @@ export function ExportDialog({ project, activePlane, issues, progress, busy, onC
 
 function SectionHeading({ kicker, title }: { kicker: string; title: string }) { return <div className="section-heading"><p className="eyebrow">{kicker}</p><h2>{title}</h2></div>; }
 function Divider() { return <div className="divider" />; }
-type ControlScope = "Next generation" | "Current map" | "Map + next generation" | "Host / export" | "Preview only" | "Saved note only";
-function ScopeBadge({ scope = "Current map" }: { scope?: ControlScope }) { return <small className="scope-badge">{scope}</small>; }
+type ControlScope = "Next generation" | "Current Map" | "Current Map + next generation" | "Host / export" | "Preview only" | "Saved note only" | "On project open";
+function ScopeBadge({ scope = "Current Map" }: { scope?: ControlScope }) { return <small className="scope-badge">{scope}</small>; }
 function Field({ label, children, scope }: { label: string; children: ReactNode; scope?: ControlScope }) { return <label className="field"><span>{label} <ScopeBadge scope={scope} /></span>{children}</label>; }
 function NumberField({ label, value, min, max, describedBy, onChange, scope }: { label: string; value: number; min: number; max: number; describedBy?: string; onChange: (value: number) => void; scope?: ControlScope }) { return <Field label={label} scope={scope}><BoundedNumberInput value={value} min={min} max={max} describedBy={describedBy} onChange={onChange} /></Field>; }
 function OptionalNumberField({ label, value, min, max, disabled = false, onChange, scope }: { label: string; value?: number; min: number; max?: number; disabled?: boolean; onChange: (value?: number) => void; scope?: ControlScope }) { return <Field label={label} scope={scope}><input type="number" value={value ?? ""} min={min} max={max} disabled={disabled} placeholder="Auto" onChange={(event) => {
@@ -2171,7 +2249,7 @@ function CatalogIdSetField({ label, values, entries, emptyMessage = "Unrestricte
     onChange(next);
   };
   return <div className="catalog-id-field">
-    <CatalogCombobox key={values.join(",")} label={`Add ${label.toLocaleLowerCase()}`} value={draft} entries={entries} onCommit={add} placeholder="Search nation name or ID" />
+    <CatalogCombobox numericOnly key={values.join(",")} label={`Add ${label.toLocaleLowerCase()}`} value={draft} entries={entries} onCommit={add} placeholder="Search nation name or ID" />
     <div className={`catalog-chip-list ${ordered ? "ordered" : ""}`} aria-label={label}>
       {values.map((id, index) => {
         const entry = findCatalogEntry(entries, id);
@@ -2200,7 +2278,7 @@ function ComputerPlayersField({ values, entries, onChange }: { values: ComputerP
     setDraft("");
   };
   return <div className="computer-player-field">
-    <CatalogCombobox key={values.map((entry) => entry.nation).join(",")} label="Add computer-controlled nation" value={draft} entries={entries} onCommit={add} placeholder="Search nation name or ID" />
+    <CatalogCombobox numericOnly key={values.map((entry) => entry.nation).join(",")} label="Add computer-controlled nation" value={draft} entries={entries} onCommit={add} placeholder="Search nation name or ID" />
     <div className="computer-player-rows">
       {values.map((player, index) => {
         const entry = findCatalogEntry(entries, player.nation);
@@ -2463,7 +2541,6 @@ function boundedInteger(value: string, fallback: number, minimum: number, maximu
 function optionalNumber(value: string): number | undefined { if (!value.trim()) return undefined; const parsed = Number(value); return Number.isFinite(parsed) ? parsed : undefined; }
 function optionalBooleanValue(value: boolean | undefined): "inherit" | "on" | "off" { return value === undefined ? "inherit" : value ? "on" : "off"; }
 function parseOptionalBoolean(value: string): boolean | undefined { return value === "on" ? true : value === "off" ? false : undefined; }
-function randomSeed(): string { return `realm-${crypto.getRandomValues(new Uint32Array(1))[0]!.toString(36)}`; }
 function formatBytes(bytes: number): string { if (bytes < 1_000_000) return `${Math.ceil(bytes / 1000)} KB`; return `${(bytes / 1_000_000).toFixed(bytes > 100_000_000 ? 0 : 1)} MB`; }
 function scoreClass(score: number): string { return score >= 85 ? "excellent" : score >= 70 ? "fair" : "poor"; }
 function downloadBrowserBlob(blob: Blob, name: string) { const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = name; anchor.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1500); }

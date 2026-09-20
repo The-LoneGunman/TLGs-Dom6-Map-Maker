@@ -1,4 +1,5 @@
 import { BUILTIN_DOM6_CATALOG } from "./catalog/builtin";
+import { DISTINCTIVE_TERRAIN_NAMES, distinctiveRealmNames } from "./nameVocabulary";
 import {
   effectiveProvinceTerrainFlags,
   isWaterProvince,
@@ -268,7 +269,7 @@ export function provinceNameContext(plane: Plane, province: Province, coastalIds
   return { planeTheme: theme, terrainThemes, coastal };
 }
 
-function namingVocabulary(context: ProvinceNameContext): { modifiers: WordList; nouns: WordList; epithets: WordList; key: string; requiresEpithet: boolean } {
+function namingVocabulary(context: ProvinceNameContext): { modifiers: WordList; nouns: WordList; epithets: WordList; namedPlaces: WordList; namedPlaceModifier: boolean; key: string; requiresEpithet: boolean } {
   const planeTheme = PLANE_THEMES[context.planeTheme] ?? PLANE_THEMES.surface!;
   const primary = TERRAIN_THEMES[context.terrainThemes[0]!] ?? { nouns: planeTheme.nouns, epithets: planeTheme.epithets };
   const nouns = context.terrainThemes[0] === "plains" && context.planeTheme !== "surface"
@@ -277,10 +278,16 @@ function namingVocabulary(context: ProvinceNameContext): { modifiers: WordList; 
   const secondary = context.terrainThemes.length > 1
     ? TERRAIN_THEMES[context.terrainThemes[1]!] ?? primary
     : undefined;
+  const terrainKey = context.terrainThemes[0] ?? "plains";
+  const realmPlaces = terrainKey === "plains" || terrainKey === "cave"
+    ? distinctiveRealmNames(context.planeTheme) : undefined;
   return {
     modifiers: planeTheme.modifiers,
     nouns,
     epithets: secondary?.epithets ?? planeTheme.epithets,
+    namedPlaces: realmPlaces ?? DISTINCTIVE_TERRAIN_NAMES[terrainKey] ?? [],
+    namedPlaceModifier: !realmPlaces && terrainKey !== "styx"
+      && context.planeTheme !== "surface" && context.planeTheme !== "custom:temperate",
     key: `${context.planeTheme}:${context.terrainThemes.join("+")}`,
     requiresEpithet: context.terrainThemes.length > 1,
   };
@@ -307,13 +314,26 @@ function permutationStep(size: number, seed: number): number {
 }
 
 function candidateAtRank(vocabulary: ReturnType<typeof namingVocabulary>, seed: string, rank: number): { name: string; numericFallback: boolean } {
+  const hash = stableHash(`${seed}:${vocabulary.key}`);
+  const phasedRank = rank + ((hash >>> 16) % 4);
+  const namedRank = Math.floor(phasedRank / 4);
+  // Interleave a named landmark among descriptive names from the outset.
+  // Its slot never receives an article; "The" keeps its separate one-in-four slot.
+  if (phasedRank % 4 === 3 && namedRank < vocabulary.namedPlaces.length) {
+    const size = vocabulary.namedPlaces.length;
+    const index = (hash % size + namedRank * permutationStep(size, hash >>> 8)) % size;
+    const prefix = vocabulary.namedPlaceModifier ? `${vocabulary.modifiers[(hash + namedRank) % vocabulary.modifiers.length]} ` : "";
+    const suffix = vocabulary.requiresEpithet ? ` of ${vocabulary.epithets[(hash + namedRank) % vocabulary.epithets.length]}` : "";
+    return { name: `${prefix}${vocabulary.namedPlaces[index]}${suffix}`, numericFallback: false };
+  }
+  const descriptiveRank = rank - Math.min(namedRank, vocabulary.namedPlaces.length);
+  return descriptiveCandidateAtRank(vocabulary, seed, descriptiveRank, phasedRank % 4 === 0 ? "The " : "");
+}
+
+function descriptiveCandidateAtRank(vocabulary: ReturnType<typeof namingVocabulary>, seed: string, rank: number, article: string): { name: string; numericFallback: boolean } {
   const simpleSize = vocabulary.modifiers.length * vocabulary.nouns.length;
   const complexSize = simpleSize * vocabulary.epithets.length;
   const hash = stableHash(`${seed}:${vocabulary.key}`);
-  // Seeded cadence keeps short and compound names mostly article-free, while
-  // retaining "The" for one in four candidates in each contextual vocabulary.
-  // Articles do not add to the unique-name pool: collision checks ignore them.
-  const article = (rank + (hash >>> 16)) % 4 === 0 ? "The " : "";
   if (!vocabulary.requiresEpithet && rank < simpleSize) {
     const offset = hash % simpleSize;
     const step = permutationStep(simpleSize, hash >>> 8);
@@ -336,7 +356,7 @@ function candidateAtRank(vocabulary: ReturnType<typeof namingVocabulary>, seed: 
     return { name: `${article}${modifier} ${noun} of ${epithet}`, numericFallback: false };
   }
   const poolSize = simpleOffset + complexSize;
-  const recycled = candidateAtRank(vocabulary, seed, rank % poolSize);
+  const recycled = descriptiveCandidateAtRank(vocabulary, seed, rank % poolSize, article);
   return { name: `${recycled.name} ${rank - poolSize + 2}`, numericFallback: true };
 }
 

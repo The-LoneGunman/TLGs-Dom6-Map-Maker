@@ -1,6 +1,6 @@
 # September 2026 bugfix review
 
-Historical review performed on 2026-09-05 against public release v0.1.2. Three independent sub-agents audited generation/fairness, persistence/export/install, and editor interactions; the primary agent implemented and tested the repairs. This record predates v0.1.4's combined-terrain artwork/export changes; the results below apply to the repairs reviewed here. See the [user guide](USER_GUIDE.md) for current behavior.
+Historical review performed on 2026-09-05 against public release v0.1.2. Three independent sub-agents audited generation/fairness, persistence/export/install, and editor interactions; the primary agent implemented and tested the repairs. This record predates v0.1.4's combined-terrain artwork/export changes; the results below apply to the repairs reviewed here. See the [user guide](USER_GUIDE.md) for current behavior and the [documentation index](README.md) for later reviews and corrections.
 
 ## Confirmed issues repaired
 

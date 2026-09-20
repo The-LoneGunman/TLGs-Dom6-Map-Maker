@@ -13,6 +13,14 @@ The bundled catalog is pinned to 6.35; it does not automatically track later
 game or Inspector updates. Custom catalog imports add editor metadata only,
 not game content.
 
+Coverage status reviewed September 20, 2026: the bundled data is still **6.35**,
+not a complete 6.37 catalog. The intended patch/mod notes in the workbench do
+not change this data or certify nation balance. Current source imports merge
+in selection order; reset invalidates pending imports, and a failed save leaves
+the prior catalog active. Both ZIP and direct-install validation reports use
+the active merged catalog and state its assumptions. Custom catalog JSON and
+any required game mods must be backed up and distributed separately.
+
 ## Post-publication content and map-manual table gaps
 
 The supplied 6.26 map manual's nation table jumps from nation #121 to #125.

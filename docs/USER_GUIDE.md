@@ -2,7 +2,7 @@
 
 Pantokrator Atlas is a local-first map maker for Dominions 6. It generates deterministic, multiplayer-oriented atlases with one to eight planes and exports native `.map` and `.d6m` files that Dominions can load directly.
 
-This guide describes v0.1.4: the recommended workflow, every major option in the interface, manual editing, validation, installation, and common problems. For development from a GitHub checkout, see [Develop from source](../README.md#develop-from-source).
+This guide describes the current `main` source: the recommended workflow, interface options, manual editing, validation, installation, and common problems. The hosted GUI and Windows releases can lag behind it; see [Versions and documentation](../README.md#versions-and-documentation) for the dated channel comparison. In particular, September 20's recovery, catalog, custom-border, and preview corrections are source-only until separately published. For the latest source, see [Develop from source](../README.md#develop-from-source).
 
 ## Contents
 
@@ -105,7 +105,7 @@ Selecting a plane in the Planes list or the strip below the map makes it active.
 
 **Find a province** searches all planes by province name, plane name, or number. Numbers (with or without `#`) match either the global export number or the local province number. Add a plane-name word to narrow ambiguous local numbers. The first 30 matches are shown with both numbers. Selecting a result switches to **Select** and cancels any armed border/gateway endpoint; it does not edit the map.
 
-Control labels identify their scope: **Next generation**, **Current map**, **Map + next generation**, **Host / export**, **Preview only**, or **Saved note only**. Current-map changes are reflected in later exports; they do not alter a map already installed in Dominions. Biome and patch notes are descriptive, while primary terrain and terrain flags affect artwork and game rules.
+Control labels identify their scope: **Next generation**, **Current Map**, **Current Map + next generation**, **Host / export**, **Preview only**, **Saved note only**, or **On project open**. Current-map changes are reflected in later exports; they do not alter a map already installed in Dominions. Biome and patch notes are descriptive, while primary terrain and terrain flags affect artwork and game rules.
 
 The map marker legend distinguishes all authored gameplay markers instead of collapsing them into a generic symbol: **S/#/N** means generic/team/nation-specific start, **♜/♛/×** means preferred/fixed/avoided throne, **✦/M** means a placed site/many-sites terrain, **G** means guardian groups, and **◎** means a gateway endpoint. A province can show several badges at once. The selected-province screen-reader status announces its combined terrain, the same marker meanings, and relevant group, nation, site, guardian, and gate numbers.
 
@@ -127,7 +127,8 @@ The pending summary groups inputs changed since the last generation recorded by 
 
 | Option | Default |
 |---|---:|
-| Seed | `pantokrator-001` |
+| Seed | Fresh random `realm-…` seed |
+| Fresh generated names on open | Off |
 | Players | 6 |
 | Provinces / player | 16 |
 | Starts | 6 Land |
@@ -148,15 +149,15 @@ Device autosave may restore your previous atlas instead of showing a fresh proje
 
 ### New atlas
 
-Opens an explicit replacement confirmation for the current project. The dialog lists the current plane, province, and gateway totals and offers **Download backup** before continuing. Confirming creates the fresh-project defaults above, clears the selection and armed tools, and clears Undo/Redo history. The new project becomes the device autosave, so the downloaded editable JSON is the recovery path for the replaced atlas.
+Opens an explicit replacement confirmation for the current project. The dialog lists the current plane, province, and gateway totals and offers **Download backup** before continuing. Confirming creates the fresh-project defaults above with a new random seed, clears the selection and armed tools, and clears Undo/Redo history. The new project becomes the device autosave, so the downloaded editable JSON is the recovery path for the replaced atlas.
 
 ### Reset generator defaults
 
-Resets the Generate options, name-reroll counter, plane resolution, and active-plane wrapping without replacing the current atlas. It preserves planes, provinces, Scenario settings, gateways, manual edits, manual specific starts, and each plane's **Block generated starts** choice. Generated cave-nation assignments are removed until you generate again. The reset is Undoable and does not itself generate.
+Resets the Generate options, name-reroll counter, plane resolution, and active-plane wrapping without replacing the current atlas. It also turns off **Fresh generated names on open** and restores the fixed example seed `pantokrator-001`; use the seed-shuffle button for another world. It preserves planes, provinces, Scenario settings, gateways, manual edits, manual specific starts, and each plane's **Block generated starts** choice. Generated cave-nation assignments are removed until you generate again. The reset is Undoable and does not itself generate.
 
 ### Seed
 
-A free-text deterministic seed. The same effective settings and seed reproduce the same generated atlas. The icon beside the field creates a random realm-style seed. Press Generate after changing it.
+A free-text deterministic seed. A first visit without a saved atlas and each **New atlas** use a fresh random seed. Reopening an existing project preserves its seed. The same effective settings and seed reproduce the same generated atlas within the same generator revision; updates can change generation, so keep project JSON when an exact map matters. The icon beside the field creates another random realm-style seed for the next **Generate**; it does not immediately rename or regenerate the current map. To change only names, use the name controls below.
 
 ### Players
 
@@ -262,7 +263,11 @@ This affects solid Surface and surface-like Custom planes. Cave-family and spars
 
 Generated names are unique across the atlas and avoid known nation, epithet, home/capital-site, and special-realm names.
 
-Names blend article-free forms such as **Silver Grove** with occasional **The**-prefixed forms. Roughly one in four candidates uses **The**, including longer compound names. Existing saved names do not change automatically: use **Reroll generated names (preserve manual)** to apply the new blend without regenerating the map.
+Names blend article-free forms such as **Silver Grove** with occasional **The**-prefixed forms. Roughly one in four candidates uses **The**, including longer compound names. Existing saved names stay unchanged by default: use **Reroll generated names (preserve manual)** to apply the new blend without regenerating the map.
+
+The vocabulary also includes 528 original named places and landmarks, interleaved with descriptive names: **Bellroot Vault** for caves, **Candlewake Ferry** for the Styx, **Larkglass** in the Dreamlands, and **Orphaned Meridian** in the Abyss. Terrain-specific pools keep farms, forests, seas, flooded caves, and other landscapes distinct; special realms retain their own naming character. These names use the same uniqueness and capital-name protections.
+
+**Fresh generated names on open** is an optional setting saved with each project. Enable it to shuffle generated names whenever the project opens from JSON or is restored on page load. It does not rename anything immediately, change the world seed, or regenerate geography, guardians, or starts. Manual and legacy names are preserved, and conflict/recovery copies are always opened unchanged. After a page-load reroll, **Undo** restores the saved names. Turn this option off before sharing a multiplayer map whose province names should stay fixed; exported game maps never reroll names when loaded in Dominions.
 
 ### Each bonus plane size (% of core)
 
@@ -339,7 +344,7 @@ Core planes are Surface, Cave, Great Cavern, and solid Custom realms with Temper
 
 ## Planes tab
 
-An atlas can have **one to eight planes**. Archetype, variant, auto-sizing, and planned-link changes are inputs to the next generation; they do not transform existing provinces immediately.
+An atlas can have **one to eight planes**. Auto-sizing and planned-link changes apply to the next generation. Archetype changes immediately update the current plane's identity, ownership presentation and borders; surviving authored border types are preserved. Terrain, starts, sites and guardians are not regenerated until **Generate**. Wrap changes, including **Reset generator defaults**, also synchronize current borders in the same undoable edit. Review validation after changing topology because start spacing may change.
 
 ### Add plane to plan
 
@@ -512,9 +517,13 @@ Toggles the **Many sites** terrain bit. It does not place a named magic site; us
 
 Options are Normal, Frozen/winter, Forested, Submerged, Wasted, and Farmland. These change only the editor and exported PNG preview. They do not modify terrain or create alternate files. Native D6M terrain lets Dominions render actual condition changes.
 
+These previews are illustrative, not simulations of temperature or game events. Winter cover skips water, caves, and outer realms; Warmer and Colder flags adjust cover on eligible land. Submerged adds water while retaining cave identity and turning forest cover into kelp. Forested, Wasted, and Farmland replace incompatible vegetation instead of leaving the original symbols underneath; Farmland does not turn seas or caves into fields.
+
 ### Pan, zoom, Fit, and plane switching
 
 Drag to pan, use the wheel/trackpad to zoom from 78% to 400%, and choose **Fit** to return to 100% and center the plane. Use the strip below the map to switch planes.
+
+The editor preserves the map's aspect ratio, so unused space may appear around it. Province labels appear from 135% zoom; they avoid markers and other labels, and labels that cannot fit are hidden. Hover over or select a province at any zoom to read its full name and start, throne, or gateway details.
 
 ## Province inspector
 
@@ -638,7 +647,7 @@ Guardian groups are explicit initial independent defenders, not replenishing pos
 - **Use role-focused lists** narrows the picker to known commanders or troops. Unusual summons and independents remain available in the broader list.
 - Exact numeric IDs remain accepted, including valid records hidden from normal browsing.
 - A group contains a Commander, optional display name, and any number of squads.
-- Each squad has a unit and count.
+- Each squad has a unit and count from 1 to 1,000.
 - Commander details include experience 0-900, random items 0-4, specific item names, Clear innate magic, bodyguard unit/count, and Fire/Air/Water/Earth/Astral/Death/Nature/Glamour/Blood/Holy levels 0-10.
 - Holy exports as priest magic.
 - Multiple groups create multiple commander blocks.
@@ -665,9 +674,9 @@ Every saved border emits `#neighbour`; its type may add `#neighbourspec`:
 | Mountain pass | 33 | Mountain border + pass |
 | Mountain border | 32 | Mountain border |
 | Impassable | 4 | Declared neighbor but blocked movement |
-| Custom | 0-255 | Preserves an imported stored value |
+| Custom | 0-255 | Editable native border bitmask |
 
-The UI does not currently expose a numeric Custom-value editor. Prefer the named types unless project JSON already contains the intended value.
+Choosing Custom starts with the existing border value (0 for Standard) and reveals a numeric editor. Combine documented bits by adding them: pass 1, river 2, impassable 4, road 8, bridge 16, and mountain 32. For example, 10 combines river and road. The preview layers the recognized styles; undocumented bits 64 and 128 receive a purple dotted indication without claiming a game effect. Use named types unless you need a combination or know the intended native value.
 
 #### Province battlefield
 
@@ -703,6 +712,8 @@ The bundled Dominions 6.35 catalog covers units, sites, population types, nation
 - **Reset custom entries:** removes device-stored additions and returns to bundled-only lookup.
 
 Custom catalogs are stored separately on the device and are not embedded game content. Importing an ID does not install a `.dm` mod or add that content to Dominions. Back up custom catalog JSON separately and enable any matching game mod when required.
+
+Imports merge in selection order. Reset cancels pending imports, and a failed save leaves the previous catalog active. Validation reports in both ready ZIPs and direct installs use the active catalog and identify its version assumptions; they do not certify custom content or include the custom catalog JSON.
 
 ## Validation and balance report
 
@@ -751,7 +762,7 @@ Choose an access model:
 
 Both models count a gate as one graph hop, ignore blocked provinces, and omit all capitals from expansion counts. Neither simulates sailing, flight, seasonal scales, movement costs, ownership, battle outcomes, or conquest turns. Same-number team-start annotations are treated as allies, including group zero; the host must configure the intended teams.
 
-Each row shows useful exits, provinces within two/three steps, two-step exclusive/contested access, known population plus the number of unknown provinces, authored guardian provinces, nearby preferred/fixed throne markers, and nearest rival/throne/cross-plane entrance. Exclusive means strictly closer than every competing start; contested includes ties and provinces a rival reaches sooner. Neither predicts ownership. Population is not income/resources; random independents and guardian difficulty remain unknown. Throne markers do not certify final engine placement.
+Each row shows useful exits, provinces within two/three steps, two-step exclusive/contested access, known population plus the number of unknown provinces, authored guardian provinces, nearby preferred/fixed throne markers, and nearest rival/throne/cross-plane entrance. Exclusive means strictly closer than every competing start; contested includes ties and provinces a rival reaches sooner. Neither predicts ownership. Missing or invalid population values count as unknown rather than inflating the total; invalid values still block playable export. Population is not income/resources; random independents and guardian difficulty remain unknown. Throne markers do not certify final engine placement.
 
 Click a start name to navigate safely to it and highlight its two-step region in teal. The overlay is editor-only, works across plane switches, and is hidden after project edits so it cannot present stale results. **Clear highlight** removes it. PNG and playable exports never include this overlay. `—` means no reachable target, a blocked start, or incomplete analysis.
 
@@ -774,6 +785,8 @@ Atlas autosaves shortly after project changes. Wait for the saved status or choo
 - **Autosave unavailable:** no browser copy could be written; download project JSON immediately.
 
 Autosave belongs to the current browser and site address. It is not cloud synchronization, clearing browser data removes it, and it stores one current project rather than a project library. If another tab or storage copy conflicts, autosave pauses and asks whether to inspect/load the newer copy or keep the current one. **New atlas** replaces the autosave after confirmation; Undo history does not survive a reload. Keep portable project JSON backups.
+
+Loading a recovery/conflict copy preserves the displaced project in Undo during that session. If you edit the project or start another project-opening action while the copy is being read, the older request is discarded instead of replacing your newer work.
 
 If saved data cannot be opened, automatic saving pauses and **Download recovery data** preserves the original bytes. **Keep this copy** downloads that recovery backup before replacing them. Edits exceeding project limits are rejected with a persistent message; the previous project stays intact. Unfinished guardian groups can still be saved and reopened, but must be completed before playable export.
 
@@ -819,7 +832,7 @@ Choose **Install directly** and select the top-level Dominions user-data `maps` 
 
 In Dominions, use **Tools & Manuals -> Open User Data Directory** to find the correct location, then select its `maps` folder in the picker.
 
-An existing nonempty map folder must contain a valid `atlas_project.json` identifying that normalized map name. Otherwise Atlas refuses the reinstall without changing files. Choose a different project name, or back up and move the conflicting folder before trying again.
+An existing nonempty map folder must contain a valid `atlas_project.json` identifying that normalized map name, unless it contains only recognizable staging files from an interrupted first install. Otherwise Atlas refuses the reinstall without changing files. Choose a different project name, or back up and move the conflicting folder before trying again.
 
 Back up an existing same-named map folder before an important reinstall. Atlas stages the package and attempts to restore touched files if installation fails; follow any recovery message before hosting the map.
 
@@ -845,7 +858,9 @@ Folder and file stems use safe ASCII letters, digits, and underscores, with a ma
 
 ### Browser limitations
 
-Direct folder access requires a browser context with the File System Access API. If it is unavailable, use the ZIP. For large 4K multi-plane atlases, direct installation is more memory-efficient than ZIP generation.
+Direct folder access requires a secure browser context with the File System Access API and Web Locks. If either is unavailable, use the ZIP. Atlas permits only one direct installation at a time across tabs using the same app address. Do not install into the same folder from different app addresses, browsers or profiles simultaneously: browser locks do not cover those writers. Atlas also checks for outside changes and retains recovery backups rather than overwriting a detected conflict.
+
+A retry can use a folder containing only recognizable staging files from an interrupted first install; those old files are preserved, not deleted. If recovery reports retained backups or an unrecognized folder, do not host it yet. Review the folder and backups, or choose a new atlas name for a clean installation. For large 4K multi-plane atlases, direct installation is more memory-efficient than ZIP generation.
 
 ## Keyboard and accessibility controls
 
@@ -859,7 +874,7 @@ When the map has keyboard focus:
 
 For the setup and inspector tab groups, Arrow keys move between tabs and Home/End jumps to the first/last tab.
 
-In catalog fields, type a name or ID, use Up/Down to move through results, Enter to commit, and Escape to close and restore the previous value.
+In catalog fields, type a name or ID, use Up/Down to move through results, Enter to commit, and Escape to close and restore the previous value. Nation, population-type and fort fields accept numeric IDs (including `#15`) or an exact unique name on blur. An ambiguous name such as **Agartha**, which exists in several eras, keeps the previous value and asks you to choose a result. Only explicitly clearing the field removes its assignment. Unit and site fields still accept raw mod references.
 
 Validation, replacement-confirmation, and export dialogs trap focus. Escape closes them unless package export is busy. Export progress, autosave, start allocation, selected province/tool, armed endpoints, and balance notices are announced to assistive technology. The layout reflows on narrow screens and respects reduced-motion settings.
 
@@ -867,6 +882,7 @@ Validation, replacement-confirmation, and export dialogs trap focus. Escape clos
 
 | Message or symptom | Meaning and response |
 |---|---|
+| A documented control is missing | Check [Versions and documentation](../README.md#versions-and-documentation). The hosted GUI and Windows installer may be older than the source guide; reinstalling the same release will not add newer controls. |
 | Windows shows Unknown publisher | The setup is not currently code-signed. Confirm it came from this project's GitHub release and verify the matching `.sha256` file before proceeding. |
 | Portable copy says Node.js is required | Install Node.js 22.13.0 or newer from the official link opened by the launcher, then run it again. The installed edition bundles its own private runtime. |
 | Launcher startup fails | For the installer edition, reinstall the latest setup. For a portable copy, keep the extracted release in a writable folder and do not run inside the ZIP. If it still fails, include the complete terminal error in a [GitHub issue](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/issues). |
@@ -899,11 +915,15 @@ Validation, replacement-confirmation, and export dialogs trap focus. Escape clos
 | Skybox/battle-map asset warning | Copy referenced `.tga`, `.rgb`, or `.d3m` files beside the map files. |
 | Backdrop differs in Dominions | Expected: backdrops are editor/PNG-only; native D6M owner-zero space is game-rendered. |
 | Terrain looks unchanged after editing | Biome is metadata only; change Primary terrain or Additional terrain flags. For Dominions, export/install the package again and start a new game. Atlas's PNG artwork is not embedded in native D6M. |
+| Province labels are hidden or cut off at the screen edge | Names appear from 135% zoom and can be omitted to avoid collisions. Pan to bring a province into view, or hover/select it for the complete name and marker details. |
+| Preview colors differ from the game | Condition previews are illustrative. They do not simulate temperature, events, army movement, or the game's exact artwork. |
 | Guardians cannot be added to a start | Intentional protection for the nation's starting army and pretender. |
 
 ## Dominions engine boundaries
 
-Pantokrator Atlas aims to be honest about what a standalone map can do:
+The latest source repairs passed automated and browser checks, but the September 20 test did not establish current-patch in-game behavior. See the [repair verification record](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/REPAIR_VERIFICATION_2026-09-20.md) before treating a generated map as playtested in Dominions.
+
+Native map data and Atlas's preview have different roles:
 
 - **Initial guardians vs persistent PD:** guardian groups create initial independents. Persistent post-capture rosters come from a nation/poptype and wholly new rosters require `.dm` modding.
 - **Population types:** `#poptype` controls local recruitment; it is not a separate PD-roster ID and does not replace the initial random army.

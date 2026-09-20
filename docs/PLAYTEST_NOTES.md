@@ -1,6 +1,6 @@
 # Historical August 2026 playtest notes
 
-This checklist preserves the August 2026 audit and browser-playtest evidence, with checklist updates through 2026-08-12. Checked items describe the implementation and coverage recorded then. Test counts, timings, and manual observations below are historical results, not new v0.1.4 verification. See the [current user guide](USER_GUIDE.md) and [September follow-up](BUGFIX_AUDIT_2026-09-05.md) for later behavior and checks.
+This checklist preserves the August 2026 audit and browser-playtest evidence, with checklist updates through 2026-08-12. Checked items describe the implementation and coverage recorded then. Test counts, timings, and manual observations below are historical results, not current-source or Dominions 6.37 verification. See the [current user guide](USER_GUIDE.md), [September 20 repair verification](REPAIR_VERIFICATION_2026-09-20.md), and [documentation index](README.md) for later behavior and checks.
 
 ## Plane identity and presentation
 

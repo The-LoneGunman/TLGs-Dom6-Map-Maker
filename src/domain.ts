@@ -301,6 +301,8 @@ export interface GenerationSettings {
   specialPlaneSizePercent?: number;
   /** Deterministic reroll counter for generated province names. */
   provinceNameSeed?: number;
+  /** Opt-in editor behavior; reopening only rerolls names marked generated. */
+  randomizeNamesOnLoad?: boolean;
   biomeCohesion: number;
   throneCount: number;
   siteFrequency?: number;

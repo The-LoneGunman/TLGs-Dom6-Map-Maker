@@ -496,6 +496,10 @@ code { color: var(--gold-pale); font-size: 0.92em; }
 .analysis-region-banner button { flex: 0 0 auto; padding: 8px; border: 1px solid var(--teal); border-radius: 4px; background: var(--ink-800); color: var(--paper); cursor: pointer; }
 .map-canvas-wrap { position: absolute; inset: 0; overflow: hidden; background: #183544; }
 .map-canvas-wrap:focus-visible { outline-offset: -3px; }
+.map-province-summary { position: absolute; left: 12px; right: 12px; bottom: 76px; width: fit-content; max-width: calc(100% - 24px); padding: 7px 10px; border: 1px solid #52665a; border-radius: 5px; background: rgba(9, 15, 16, .94); color: #eee8d7; pointer-events: none; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.map-province-summary strong, .map-province-summary span { display: block; }
+.map-province-summary span { color: #c4d0c4; font-size: 11px; }
+.condition-preview-note { max-width: 380px; color: #aab9ad; font-size: 11px; line-height: 1.4; }
 .map-canvas { display: block; touch-action: none; cursor: grab; }
 .map-canvas:active { cursor: grabbing; }
 .map-canvas.tool-link,

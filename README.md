@@ -8,7 +8,17 @@ Pantokrator Atlas is a local-first map maker for Dominions 6. It generates deter
 
 Projects, imported catalogs, and generated packages remain in your browser profile or on your device. Pantokrator Atlas does not upload or synchronize them. Save **Editable project JSON** backups to move projects between browsers or app addresses.
 
-The Windows v0.1.4 installer predates the generation-budget and start-region analysis controls described below; those are part of this branch's hosted-app update. Keep a JSON backup from your older app before testing new project metadata.
+## Versions and documentation
+
+This README and the user guide describe the current `main` source. The delivery channels are separate; verified on **September 20, 2026**:
+
+| Edition | Verified revision | Availability |
+| --- | --- | --- |
+| GitHub source | Includes repairs in [`bc5fe0a`](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/commit/bc5fe0a18601bd0665770f62fe6a643ef257088d) | All controls and corrections described in this guide; run from source for the latest fixes. |
+| Hosted GUI | Site version 12, [`c0ab14a`](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/commit/c0ab14ac5da4d52f552872885b493b640b1d123d), published September 19 | Includes the multiplayer workbench and new naming controls, but not the September 20 repairs. |
+| Windows installer / portable release | [v0.1.4](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/tag/v0.1.4), published September 6 | Predates the multiplayer workbench, randomized fresh-project seeds, optional name shuffling on reopen, and subsequent repairs. |
+
+Merging source does not update the hosted app or create an installer release. The source package version remains `0.1.4` until another tagged release; use the commit or release above to identify a build. Keep a pre-upgrade JSON backup: older builds may reject newer optional project fields.
 
 ## Run locally on Windows
 
@@ -29,9 +39,10 @@ Where browser folder access is supported, use **Install directly**; otherwise us
 - Surface, Cave, Great Cavern, Cloud, Air, Underworld, Infernal, Abyss, Dream, Elemental, and Custom realms, including sparse chambers, corridors, and hubs.
 - Flooded caves, water-to-water interplane links, and an edge-to-edge River Styx with two banks and controlled crossings.
 - Automatic or manually edited gate networks, scale-aware starts, per-plane start blocking, cave-start nations, throne recommendations, and fairness warnings.
-- Contextual province names, themed populations/recruitment, random-site affinities, and powerful special-plane guardians.
+- Fresh random seeds for new atlases, contextual province names with optional generated-name shuffling on reopen, themed populations/recruitment, random-site affinities, and powerful special-plane guardians.
 - Searchable game-content catalogs and scenario editing for nations, commanders, squads, sites, buildings, battle settings, and advanced directives.
 - Combined terrain-flag artwork in the editor and PNG previews: adding Farm, Forest, Cave, and other flags changes the province's appearance immediately.
+- Editable custom border bitmasks with layered border styles, aspect-correct map framing, readable province details, and realm-aware illustrative condition previews.
 - Browser autosave, Undo/Redo, editable JSON backups, direct folder installation, ZIP export, and structural/gameplay validation.
 - Planned-versus-current province budgets, control-scope labels, cross-plane province search, and a per-start structural inspector with temporary region highlights.
 
@@ -61,13 +72,14 @@ Generated maps use native game content. Keep these distinctions in mind:
 - A map can define initial independent guardians and an owned province's numeric defence level. A new replenishing post-capture province-defence roster requires a nation or poptype supplied by a `.dm` mod.
 - `#poptype` controls vanilla local recruitment but does not replace the independent army Dominions initially generates.
 - Atlas's textures, terrain symbols, and realm backdrops appear in the editor and PNG previews. Playable exports carry the current terrain flags and geography; Dominions draws its own native scenery.
+- Condition previews are illustrations, not game-event or temperature simulations. Winter cover skips water, caves, and outer realms; native seasonal appearance must be checked in Dominions.
 - Custom catalog imports supply editor metadata, not game content. Custom IDs may require a matching mod in Dominions.
 - Referenced custom battle maps and skyboxes must be copied into the exported map folder separately.
 - Steam Workshop publishing remains a Steam/Dominions workflow outside Pantokrator Atlas.
 
 ## Develop from source
 
-For players, use the hosted GUI or Windows installer above. Source development requires **Node.js 22.13.0 or newer with npm**, plus Git for the clone method:
+Use source for the latest corrections in `main`; use the hosted GUI or Windows installer for the simpler setup paths above. Source development requires **Node.js 22.13.0 or newer with npm**, plus Git for the clone method:
 
 ```powershell
 git clone https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker.git
@@ -91,14 +103,18 @@ npm.cmd run licenses:check
 
 `npm test` includes a production build. CI additionally audits the locked dependencies and smoke-tests the local server and Windows launcher.
 
+The September 20 repair verification passed **368 automated tests** and desktop/narrow-screen browser checks. [GitHub CI for the repair commit](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35515033664) also passed. This is not a current-patch in-game or multiplayer-balance certification; see the [verification boundaries](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/REPAIR_VERIFICATION_2026-09-20.md).
+
 ## Documentation and references
 
 - [Complete user guide](docs/USER_GUIDE.md)
+- [Documentation index and dated verification records](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/README.md)
+- [Implemented multiplayer controls and remaining roadmap](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/MULTIPLAYER_IMPLEMENTATION_STATUS.md)
 - [Bundled catalog coverage and post-manual IDs](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/CONTENT_CATALOG.md)
 - [Artwork implementation and future asset-pack contract](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/ILLUSTRATED_ASSET_SPEC.md)
 - [Artwork provenance](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/ASSET_PROVENANCE.md)
 
-Historical verification records, not current issue lists: [August playtests](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/PLAYTEST_NOTES.md), [August audit](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/FULL_AUDIT_2026-08-11.md), and [September 5 bugfix review](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/BUGFIX_AUDIT_2026-09-05.md).
+The documentation index separates current references, unfinished proposals, and historical evidence. Old test counts and audit findings are not current release status.
 
 Official format references:
 

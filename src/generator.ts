@@ -402,6 +402,11 @@ export function addPlane(project: MapProject, kind: PlaneKind = "underworld", op
   if (project.planes.length >= MAX_PLANES) return project;
   const next = cloneProject(project);
   const plane = defaultPlane(project.seed, next.planes.length, kind);
+  // Removing a middle plane must not let the next append reuse a surviving ID.
+  const existingIds = new Set(next.planes.map((item) => item.id));
+  for (let candidate = next.planes.length; existingIds.has(plane.id); candidate += 1) {
+    plane.id = idFor(project.seed, "plane", candidate + 1);
+  }
   if (next.settings.resolution !== "custom") {
     const preset = RESOLUTION_PRESETS[next.settings.resolution];
     plane.width = preset.width;
@@ -968,9 +973,27 @@ function repairSparseStartBasins(
 ) {
   const active = plane.provinces.filter((province) => !isBlockedProvince(province)).sort((a, b) => a.index - b.index);
   if (active.length < 2) return [];
-  const { pairs, spacing } = spatialPairs(active, plane);
+  const { pairs: allPairs, spacing } = spatialPairs(active, plane);
+  // The Styx remains a water barrier even when a start needs more exits.
+  // Constrain new corridors only; existing designated bridges are preserved.
+  const dryBanks = new Map<string, string>();
+  if (plane.kind === "underworld") {
+    const dryAdjacency = new Map(active.filter((province) => !isWaterProvince(province))
+      .map((province) => [province.id, [] as string[]]));
+    for (const edge of plane.edges) {
+      if (edge.kind === "bridge" || !dryAdjacency.has(edge.a) || !dryAdjacency.has(edge.b)) continue;
+      dryAdjacency.get(edge.a)!.push(edge.b);
+      dryAdjacency.get(edge.b)!.push(edge.a);
+    }
+    for (const id of dryAdjacency.keys()) {
+      if (dryBanks.has(id)) continue;
+      for (const member of shortestDistances(dryAdjacency, id).keys()) dryBanks.set(member, id);
+    }
+  }
+  const pairs = allPairs.filter((pair) => !dryBanks.has(pair.a.id) || !dryBanks.has(pair.b.id)
+    || dryBanks.get(pair.a.id) === dryBanks.get(pair.b.id));
   const localPairs = pairs.filter((pair) => pair.distance <= spacing * 2.4 + 1e-9);
-  const pairByKey = new Map(pairs.map((pair) => [pair.key, pair]));
+  const pairByKey = new Map(allPairs.map((pair) => [pair.key, pair]));
   const selected = new Map<string, SpatialPair>();
   const degrees = new Map(active.map((province) => [province.id, 0]));
   for (const edge of plane.edges) {
@@ -4305,12 +4328,16 @@ function balanceGlobalStartRegions(project: MapProject) {
 }
 
 function markProvinceSizes(plane: Plane) {
+  for (const province of plane.provinces) {
+    province.small = false;
+    province.large = false;
+  }
   const adjacency = adjacencyFor(plane);
   const sorted = [...plane.provinces].sort((a, b) => (adjacency.get(a.id)?.length ?? 0) - (adjacency.get(b.id)?.length ?? 0));
   const smallCount = Math.floor(sorted.length * 0.06);
   const largeCount = Math.floor(sorted.length * 0.06);
   for (const province of sorted.slice(0, smallCount)) province.small = true;
-  for (const province of sorted.slice(-largeCount)) province.large = true;
+  for (const province of sorted.slice(sorted.length - largeCount)) province.large = true;
 }
 
 export function generateGates(project: MapProject): GateLink[] {
@@ -4553,12 +4580,13 @@ export function graphBridgeKeys(plane: Plane): Set<string> {
   return bridgeKeysFromPairs(active, unique.values());
 }
 
-export function shortestDistances(adjacency: Map<string, string[]>, start: string): Map<string, number> {
+export function shortestDistances(adjacency: Map<string, string[]>, start: string, maxDistance = Infinity): Map<string, number> {
   const distances = new Map<string, number>([[start, 0]]);
   const queue = [start];
   for (let cursor = 0; cursor < queue.length; cursor += 1) {
     const current = queue[cursor]!;
     const distance = distances.get(current)!;
+    if (distance >= maxDistance) continue;
     for (const neighbour of adjacency.get(current) ?? []) {
       if (distances.has(neighbour)) continue;
       distances.set(neighbour, distance + 1);
@@ -4566,6 +4594,48 @@ export function shortestDistances(adjacency: Map<string, string[]>, start: strin
     }
   }
   return distances;
+}
+
+/** Exact distance to any source, with bounded storage rather than one BFS map per source. */
+export function distancesToSources(adjacency: Map<string, string[]>, sources: Iterable<string>, maxDistance = Infinity): Map<string, number> {
+  const distances = new Map([...sources].filter((id) => adjacency.has(id)).map((id) => [id, 0]));
+  const queue = [...distances.keys()];
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const current = queue[cursor]!;
+    const distance = distances.get(current)!;
+    if (distance >= maxDistance) continue;
+    for (const neighbour of adjacency.get(current) ?? []) {
+      if (distances.has(neighbour)) continue;
+      distances.set(neighbour, distance + 1);
+      queue.push(neighbour);
+    }
+  }
+  return distances;
+}
+
+/** Exact nearest OTHER source on an undirected graph, including disconnected sources. */
+export function nearestSourceDistances(adjacency: Map<string, string[]>, sources: Iterable<string>): Map<string, number> {
+  const nearest = new Map([...sources].map((id) => [id, Infinity]));
+  const owner = new Map([...nearest.keys()].filter((id) => adjacency.has(id)).map((id) => [id, id]));
+  const distance = new Map([...owner.keys()].map((id) => [id, 0]));
+  const queue = [...owner.keys()];
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const current = queue[cursor]!;
+    const source = owner.get(current)!;
+    for (const neighbour of adjacency.get(current) ?? []) {
+      const other = owner.get(neighbour);
+      if (other === undefined) {
+        owner.set(neighbour, source);
+        distance.set(neighbour, distance.get(current)! + 1);
+        queue.push(neighbour);
+      } else if (other !== source) {
+        const candidate = distance.get(current)! + distance.get(neighbour)! + 1;
+        nearest.set(source, Math.min(nearest.get(source)!, candidate));
+        nearest.set(other, Math.min(nearest.get(other)!, candidate));
+      }
+    }
+  }
+  return nearest;
 }
 
 function reachableWithin(adjacency: Map<string, string[]>, start: string, radius: number): number {
@@ -4595,12 +4665,13 @@ export function calculateFairness(project: MapProject): FairnessMetrics {
   const generatedStarts = refs.filter((ref) => ref.province.start);
   const thrones = refs.filter((ref) => ref.province.throne === "preferred" || ref.province.throne === "fixed");
   const notes: string[] = [];
-  const distancesFrom = (ref: ProvinceRef) => shortestDistances(adjacency, globalProvinceKey(ref.plane.id, ref.province.id));
-
+  const nearest = nearestSourceDistances(adjacency, startKeys);
+  const reachableFromFirst = starts.length ? shortestDistances(adjacency, globalProvinceKey(starts[0]!.plane.id, starts[0]!.province.id)) : new Map();
+  // Preserve the existing disconnected-start penalty in the legacy score.
+  const allStartsConnected = [...startKeys].every((key) => reachableFromFirst.has(key));
   const nearestStarts = starts.map((start) => {
-    const distances = distancesFrom(start);
-    const others = starts.filter((other) => other !== start).map((other) => distances.get(globalProvinceKey(other.plane.id, other.province.id)) ?? 0);
-    return others.length ? Math.min(...others) : 0;
+    const distance = nearest.get(globalProvinceKey(start.plane.id, start.province.id)) ?? Infinity;
+    return allStartsConnected && startKeys.size > 1 && Number.isFinite(distance) ? distance : 0;
   });
   const startCountByPlane = new Map(project.planes.map((plane) => [plane.id, starts.filter((start) => start.plane.id === plane.id).length]));
   const scaledTargets = starts.map((start) => scaledStartSeparationTarget(
@@ -4621,17 +4692,29 @@ export function calculateFairness(project: MapProject): FairnessMetrics {
   }
   if (nearestSpread > 1) notes.push("Nearest-hostile-start distances vary considerably (by more than one move).");
 
-  const expansionValues = starts.map((start) => {
-    const distances = distancesFrom(start);
-    return refs
-      .filter((ref) => (distances.get(globalProvinceKey(ref.plane.id, ref.province.id)) ?? 99) <= 2)
-      .reduce((sum, ref) => sum + (ref.province.population ?? 0) / 1000 + (effectiveProvinceTerrainFlags(ref.province).has("farm") ? 2 : 0), 0);
-  });
-  const localCapacityValues = starts.map((start) => {
-    const distances = distancesFrom(start);
-    return refs.filter((ref) => !isBlockedProvince(ref.province)
-      && (distances.get(globalProvinceKey(ref.plane.id, ref.province.id)) ?? 99) <= 2).length;
-  });
+  const refsByKey = new Map(refs.map((ref) => [globalProvinceKey(ref.plane.id, ref.province.id), ref]));
+  const nearbyThroneRadius = 4;
+  const expansionValues: number[] = [];
+  const localCapacityValues: number[] = [];
+  const nearbyThroneCounts: number[] = [];
+  for (const start of starts) {
+    const distances = shortestDistances(adjacency, globalProvinceKey(start.plane.id, start.province.id), thrones.length ? nearbyThroneRadius : 2);
+    let expansion = 0;
+    let capacity = 0;
+    let nearbyThrones = 0;
+    for (const [key, distance] of distances) {
+      const province = refsByKey.get(key)?.province;
+      if (!province) continue;
+      if (distance <= 2) {
+        expansion += (province.population ?? 0) / 1000 + (effectiveProvinceTerrainFlags(province).has("farm") ? 2 : 0);
+        if (!isBlockedProvince(province)) capacity += 1;
+      }
+      if (province.throne === "preferred" || province.throne === "fixed") nearbyThrones += 1;
+    }
+    expansionValues.push(expansion);
+    localCapacityValues.push(capacity);
+    nearbyThroneCounts.push(nearbyThrones);
+  }
   const expansionParity = clamp(Math.round(100 - Math.max(
     coefficientOfVariation(expansionValues) * 260,
     coefficientOfVariation(localCapacityValues) * 150,
@@ -4665,20 +4748,17 @@ export function calculateFairness(project: MapProject): FairnessMetrics {
     notes.push(`Cave-plane traversable capacity per start is materially below overland (${mean(cavePlaneShares).toFixed(1)} versus ${mean(overlandPlaneShares).toFixed(1)} provinces).`);
   }
 
-  const nearbyThroneRadius = 4;
-  const nearbyThroneCounts = starts.map((start) => {
-    const distances = distancesFrom(start);
-    return thrones.filter((throne) => (distances.get(globalProvinceKey(throne.plane.id, throne.province.id)) ?? 99) <= nearbyThroneRadius).length;
-  });
   const nearbyCountRange = nearbyThroneCounts.length ? max(nearbyThroneCounts) - min(nearbyThroneCounts) : 0;
-  const nearbyPairDifferences: number[] = [];
-  for (let left = 0; left < nearbyThroneCounts.length; left += 1) {
-    for (let right = left + 1; right < nearbyThroneCounts.length; right += 1) {
-      nearbyPairDifferences.push(Math.abs(nearbyThroneCounts[left]! - nearbyThroneCounts[right]!));
-    }
-  }
+  let pairDifferenceSum = 0;
+  let prefixSum = 0;
+  [...nearbyThroneCounts].sort((a, b) => a - b).forEach((count, index) => {
+    pairDifferenceSum += count * index - prefixSum;
+    prefixSum += count;
+  });
+  const pairCount = nearbyThroneCounts.length * (nearbyThroneCounts.length - 1) / 2;
+  const meanPairDifference = pairCount ? pairDifferenceSum / pairCount : 0;
   const throneAccess = thrones.length && starts.length
-    ? clamp(Math.round(100 - nearbyCountRange * 25 - mean(nearbyPairDifferences) * 20), 0, 100)
+    ? clamp(Math.round(100 - nearbyCountRange * 25 - meanPairDifference * 20), 0, 100)
     : 100;
   if (throneAccess < 80) notes.push(`Nearby-throne counts are uneven (${min(nearbyThroneCounts)}-${max(nearbyThroneCounts)} within ${nearbyThroneRadius} moves).`);
 

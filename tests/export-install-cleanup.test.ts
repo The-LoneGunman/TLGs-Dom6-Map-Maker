@@ -8,6 +8,7 @@ import {
   zipPackageSafety,
 } from "../src/export";
 import { createDefaultProject } from "../src/generator";
+import { BUILTIN_DOM6_CATALOG, createCatalogTemplate, mergeCatalogBundles } from "../src/catalog";
 
 const obsoleteNames = (root: string, firstPlane: number) => {
   const names: string[] = [];
@@ -27,6 +28,7 @@ class MemoryDirectory {
   readonly files = new Map<string, Uint8Array>();
   readonly events: string[] = [];
   failWrite?: (name: string) => unknown;
+  readOverride?: (name: string, data: Uint8Array) => Uint8Array;
 
   constructor(initial: Record<string, string> = {}) {
     for (const [name, value] of Object.entries(initial)) this.files.set(name, encode(value));
@@ -49,7 +51,8 @@ class MemoryDirectory {
     return {
       getFile: async () => {
         this.events.push(`read:${name}`);
-        const data = this.files.get(name)!.slice();
+        const stored = this.files.get(name)!.slice();
+        const data = this.readOverride?.(name, stored) ?? stored;
         return { size: data.byteLength, arrayBuffer: async () => data.buffer };
       },
       createWritable: async () => {
@@ -98,6 +101,17 @@ async function withDirectoryPicker<T>(directory: MemoryDirectory, action: () => 
     },
   };
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  let locked = false;
+  Object.defineProperty(globalThis, "navigator", { configurable: true, value: {
+    locks: { async request(name: string, options: { ifAvailable: boolean }, action: (lock: object | null) => Promise<unknown>) {
+      assert.equal(name, "pantokrator-atlas:direct-install");
+      assert.equal(options.ifAvailable, true);
+      if (locked) return action(null);
+      locked = true;
+      try { return await action({ name }); } finally { locked = false; }
+    } },
+  } });
   Object.defineProperty(globalThis, "window", {
     configurable: true,
     value: { showDirectoryPicker: async () => mapsDirectory },
@@ -107,6 +121,8 @@ async function withDirectoryPicker<T>(directory: MemoryDirectory, action: () => 
   } finally {
     if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
     else Reflect.deleteProperty(globalThis, "window");
+    if (originalNavigator) Object.defineProperty(globalThis, "navigator", originalNavigator);
+    else Reflect.deleteProperty(globalThis, "navigator");
   }
 }
 
@@ -124,6 +140,91 @@ test("8-to-2 reinstall cleanup targets only plane 3 through plane 8 artifacts", 
   assert.equal(removed.includes("Atlas_Root.map"), false);
   assert.equal(removed.includes("Atlas_Root.d6m"), false);
   assert.equal(removed.some((name) => name.includes("plane2")), false);
+});
+
+test("competing direct installs are rejected before changing files and the lock releases", async () => {
+  const a = smallInstallProject();
+  const b = structuredClone(a);
+  b.description = "Competing package";
+  const directory = new MemoryDirectory();
+  let second: Promise<unknown> | undefined;
+  directory.failWrite = (name) => {
+    if (name === "Safety_Atlas.map" && !second) {
+      second = assert.rejects(installPackage(b), /Another Atlas tab is installing/);
+    }
+  };
+  await withDirectoryPicker(directory, async () => {
+    assert.equal(await installPackage(a), "installed");
+    await second;
+    assert.equal(JSON.parse(new TextDecoder().decode(directory.files.get("atlas_project.json"))).description, a.description);
+    directory.failWrite = undefined;
+    assert.equal(await installPackage(b), "installed");
+    assert.equal(JSON.parse(new TextDecoder().decode(directory.files.get("atlas_project.json"))).description, b.description);
+  });
+});
+
+test("install requires cross-tab locking and makes no changes when it is unavailable", async () => {
+  const directory = new MemoryDirectory();
+  await withDirectoryPicker(directory, async () => {
+    Object.defineProperty(globalThis, "navigator", { configurable: true, value: {} });
+    assert.equal(await installPackage(smallInstallProject()), "unsupported");
+    assert.equal(directory.events.length, 0);
+    assert.equal(directory.files.size, 0);
+  });
+});
+
+test("an interrupted first-install stage can be retried without deleting old staging bytes", async () => {
+  const orphan = ".__pantokrator_atlas_install__Safety_Atlas__old_1__stage__Safety_Atlas.d6m.tmp";
+  const directory = new MemoryDirectory({ [orphan]: "partial old stage" });
+  assert.equal(await withDirectoryPicker(directory, () => installPackage(smallInstallProject())), "installed");
+  assert.deepEqual(directory.files.get(orphan), encode("partial old stage"));
+  assert.ok(directory.events.indexOf("write:atlas_project.json") < directory.events.indexOf("write:Safety_Atlas.d6m"));
+});
+
+test("stage-only recovery never authorizes unrelated or backup filenames", async () => {
+  for (const name of [
+    ".__pantokrator_atlas_install__Safety_Atlas__old_1__stage__unrelated.txt.tmp",
+    ".__pantokrator_atlas_install__Safety_Atlas__old_1__backup__Safety_Atlas.d6m.tmp",
+    ".__pantokrator_atlas_install__Other_Atlas__old_1__stage__Safety_Atlas.d6m.tmp",
+    "Safety_Atlas.d6m",
+  ]) {
+    const directory = new MemoryDirectory({ [name]: "preserve" });
+    await assert.rejects(withDirectoryPicker(directory, () => installPackage(smallInstallProject())), /No files were changed/);
+    assert.deepEqual(directory.files.get(name), encode("preserve"));
+  }
+});
+
+test("outside writes are preserved during failed-install rollback", async () => {
+  const project = smallInstallProject();
+  const directory = new MemoryDirectory(atlasOwnedFiles(project, {
+    "Safety_Atlas.map": "old map", "Safety_Atlas.d6m": "old binary",
+  }));
+  directory.failWrite = (name) => {
+    if (name === "Safety_Atlas.map") {
+      directory.files.set("Safety_Atlas.d6m", encode("outside update"));
+      return new Error("interrupted");
+    }
+  };
+  await assert.rejects(withDirectoryPicker(directory, () => installPackage(project)), /backup temporary files were retained/i);
+  assert.deepEqual(directory.files.get("Safety_Atlas.d6m"), encode("outside update"));
+  assert.ok([...directory.files].some(([name, value]) => name.includes("__backup__") && new TextDecoder().decode(value) === "old binary"));
+});
+
+test("a changing backup read cannot substitute another writer's bytes for the original", async () => {
+  const project = smallInstallProject();
+  const directory = new MemoryDirectory(atlasOwnedFiles(project, {
+    "Safety_Atlas.map": "original map", "Safety_Atlas.d6m": "original binary",
+  }));
+  let reads = 0;
+  directory.readOverride = (name, data) => {
+    // Simulate A -> B -> A between the fingerprint and backup reads.
+    if (name === "Safety_Atlas.d6m" && ++reads === 3) return encode("transient competing binary");
+    return data;
+  };
+  await assert.rejects(withDirectoryPicker(directory, () => installPackage(project)), /changed while its backup was being read/);
+  assert.deepEqual(directory.files.get("Safety_Atlas.d6m"), encode("original binary"));
+  assert.deepEqual(directory.files.get("Safety_Atlas.map"), encode("original map"));
+  assert.equal(directory.events.includes("write:Safety_Atlas.d6m"), false);
 });
 
 test("one-plane cleanup targets plane 2 through plane 8 and leaves unrelated assets untouched", async () => {
@@ -188,6 +289,20 @@ test("direct install accepts a new empty map folder", async () => {
   assert.equal(directory.files.has("Safety_Atlas.map"), true);
   assert.equal(directory.files.has("Safety_Atlas.d6m"), true);
   assert.equal(directory.files.has("atlas_project.json"), true);
+});
+
+test("direct install reports validate against the same custom catalog as the editor", async () => {
+  const project = smallInstallProject();
+  project.planes[0]!.provinces.find(p => !p.start)!.fort = 9000;
+  const custom = createCatalogTemplate("6.35");
+  custom.catalogVersion = "synthetic-install-catalog";
+  custom.forts = [{ id: 9000, name: "Synthetic test fort", provenanceId: custom.provenance[0]!.id }];
+  const catalog = mergeCatalogBundles(BUILTIN_DOM6_CATALOG, custom);
+  const directory = new MemoryDirectory();
+  assert.equal(await withDirectoryPicker(directory, () => installPackage(project, undefined, catalog)), "installed");
+  const report = [...directory.files].filter(([name]) => name.endsWith(".txt")).map(([, data]) => new TextDecoder().decode(data)).join("\n");
+  assert.doesNotMatch(report, /\[ERROR\].*fortification 9000/);
+  assert.match(report, /Active selector catalog:.*synthetic-install-catalog/);
 });
 
 test("direct install refuses a non-Atlas normalized-name collision before changing any file", async () => {
