@@ -63,9 +63,11 @@ import {
   synchronizePlaneEdges,
 } from "./generator";
 import { ADVANCED_COMMANDS, terrainMask, validateProject } from "./dom6";
+import { setBorderKind } from "./edgeVisuals";
 import { auditPlaneTopology, canAuthorPlaneEdge, connectionKey } from "./geometry";
 import { regenerateAllProvinceNames, regenerateGeneratedProvinceNames } from "./naming";
 import { createFreshProject, createProjectImportGuard, prepareProjectForOpening, randomSeed } from "./projectSession";
+import { createCatalogImportSession } from "./catalog/importSession";
 import {
   downloadPackage,
   downloadProject,
@@ -448,6 +450,7 @@ export function MapMakerApp() {
   const generationTaskRef = useRef<ProjectGenerationTask | undefined>(undefined);
   const currentProjectRef = useRef(project);
   const importGuardRef = useRef(createProjectImportGuard());
+  const catalogImportSessionRef = useRef(createCatalogImportSession());
   const rangeEditStartRef = useRef<MapProject | undefined>(undefined);
   const autosaveRevisionRef = useRef<AutosaveRevision | null>(null);
   const autosaveQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -567,6 +570,7 @@ export function MapMakerApp() {
         if (saved) {
           const parsed = parseCatalogBundle(saved);
           mergeCatalogBundles(BUILTIN_DOM6_CATALOG, parsed);
+          catalogImportSessionRef.current.reset(parsed);
           setUserCatalog(parsed);
         }
       } catch {
@@ -584,6 +588,7 @@ export function MapMakerApp() {
     const timeout = window.setTimeout(() => {
       setAutosaveSaving(true);
       autosaveQueueRef.current = autosaveQueueRef.current.catch(() => undefined).then(async () => {
+        if (currentProjectRef.current !== project) return;
         const state = await saveProjectAutosave(project, undefined, { expectedRevision: autosaveRevisionRef.current });
         setAutosaveState(state);
         if (state.conflict) {
@@ -611,6 +616,7 @@ export function MapMakerApp() {
 
   useEffect(() => () => {
     importGuardRef.current.cancel();
+    catalogImportSessionRef.current.reset();
     const task = generationTaskRef.current;
     generationTaskRef.current = undefined;
     task?.cancel();
@@ -875,20 +881,21 @@ export function MapMakerApp() {
     event.target.value = "";
     if (!file) return;
     try {
-      const imported = await parseCatalogImportFile(file);
-      const merged = userCatalog ? mergeCatalogBundles(userCatalog, imported) : imported;
-      mergeCatalogBundles(BUILTIN_DOM6_CATALOG, merged);
-      setUserCatalog(merged);
-      window.localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(merged));
+      const imported = await catalogImportSessionRef.current.import(() => parseCatalogImportFile(file), (merged) => {
+        window.localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(merged));
+        setUserCatalog(merged);
+      });
+      if (!imported) return;
       const count = imported.poptypes.length + imported.sites.length + imported.units.length + imported.nations.length + imported.forts.length + imported.planes.length + imported.siteTerrainTypes.length;
       clearActionError("catalog-import");
       setToast(`Loaded ${count.toLocaleString()} verified catalog entries from ${imported.catalogVersion}.`);
     } catch (error) {
-      showActionError("catalog-import", error, "Catalog import failed.");
+      showActionError("catalog-import", error, "Catalog import failed; the previous catalog is unchanged.");
     }
   };
 
   const resetCatalog = () => {
+    catalogImportSessionRef.current.reset();
     setUserCatalog(undefined);
     const cleared = removeStoredCustomCatalog();
     setToast(cleared
@@ -1037,7 +1044,7 @@ export function MapMakerApp() {
     setExportProgress({ stage: "preparing", plane: 0, planeCount: project.planes.length, percent: 0, message: "Preparing the atlas…" });
     try {
       if (kind === "install") {
-        const result = await installPackage(project, setExportProgress);
+        const result = await installPackage(project, setExportProgress, catalog);
         if (result === "unsupported") {
           setToast("Direct folder access or safe cross-tab locking is unavailable here. Use the ready-to-install ZIP instead.");
         } else if (result === "installed") {
@@ -1045,7 +1052,7 @@ export function MapMakerApp() {
           setToast("Installed into your selected Dominions 6 maps folder.");
         }
       } else {
-        await downloadPackage(project, setExportProgress);
+        await downloadPackage(project, setExportProgress, catalog);
         clearActionError("package-export");
         setToast("Ready-to-install map package downloaded.");
       }
@@ -1098,9 +1105,10 @@ export function MapMakerApp() {
   };
 
   const saveAutosaveNow = async (replaceNewer = false) => {
+    importGuardRef.current.cancel();
     setAutosaveSaving(true);
-    try {
-      await autosaveQueueRef.current.catch(() => undefined);
+    const save = autosaveQueueRef.current.catch(() => undefined).then(async () => {
+      if (currentProjectRef.current !== project) return;
       const conflictRevisions = autosaveState.conflict?.backendRevisions;
       if (replaceNewer && autosaveState.recoveryCopies?.length) downloadAutosaveRecovery();
       if (replaceNewer && !conflictRevisions) {
@@ -1125,11 +1133,13 @@ export function MapMakerApp() {
         clearActionError("device-save");
         setToast("Project saved on this device.");
       }
-    } catch (error) {
+    }).catch((error) => {
       showActionError("device-save", error, "The project could not be saved.");
-    } finally {
-      setAutosaveSaving(false);
-    }
+    }).finally(() => {
+      if (currentProjectRef.current === project) setAutosaveSaving(false);
+    });
+    autosaveQueueRef.current = save;
+    await save;
   };
 
   const downloadAutosaveRecovery = () => {
@@ -1137,26 +1147,38 @@ export function MapMakerApp() {
   };
 
   const reloadAutosaveAfterConflict = async () => {
+    const recoveryStatus = importGuardRef.current.begin();
     const divergent = autosaveState.conflict?.reason === "divergent-copies";
     const preferredBackend = divergent ? autosaveState.conflict?.alternateBackend : undefined;
-    const result = await loadProjectAutosave(undefined, preferredBackend ? { preferredBackend } : undefined);
-    if (!result.project) {
-      setToast(`${divergent ? "The other preserved copy" : "The newer autosave"} is no longer available; the current atlas was kept.`);
-      return;
+    try {
+      // Finish pending local saves before reading their durable successor.
+      await autosaveQueueRef.current.catch(() => undefined);
+      if (recoveryStatus() !== "current") return;
+      const result = await loadProjectAutosave(undefined, preferredBackend ? { preferredBackend } : undefined);
+      if (recoveryStatus() !== "current") {
+        if (recoveryStatus() === "changed") setToast("Recovery copy not loaded because the current atlas changed. Your edits and Undo history were kept.");
+        return;
+      }
+      if (!result.project) {
+        setToast(`${divergent ? "The other preserved copy" : "The newer autosave"} is no longer available; the current atlas was kept.`);
+        return;
+      }
+      // Recovery inspection is lossless: no name reroll, and Undo retains the
+      // displaced local project rather than erasing its only recovery path.
+      if (!commit(result.project)) return;
+      rangeEditStartRef.current = undefined;
+      autosaveRevisionRef.current = result.revision ?? null;
+      setAutosaveState(result);
+      setAutosaveSaving(false);
+      setActivePlaneId(result.project.planes[0]?.id ?? "");
+      setSelectedId(undefined);
+      setLinkSource(undefined);
+      setGateSource(undefined);
+      clearActionError("device-save");
+      setToast(`${divergent ? "Loaded the other preserved device copy for inspection." : "Loaded the newer device autosave."} Undo restores your previous local atlas.`);
+    } catch (error) {
+      if (recoveryStatus() === "current") showActionError("device-save", error, "Recovery could not be loaded; the current atlas and Undo history were kept.");
     }
-    autosaveRevisionRef.current = result.revision ?? null;
-    setAutosaveState(result);
-    // Conflict/recovery inspection must show the exact saved copy, even with name rerolls enabled.
-    importGuardRef.current.changed();
-    currentProjectRef.current = result.project;
-    setProject(result.project);
-    setActivePlaneId(result.project.planes[0]?.id ?? "");
-    setSelectedId(undefined);
-    setLinkSource(undefined);
-    setGateSource(undefined);
-    setUndoStack([]);
-    setRedoStack([]);
-    setToast(divergent ? "Loaded the other preserved device copy for inspection. Neither copy has been deleted." : "Loaded the newer device autosave.");
   };
 
   if (!activePlane) return <main className="empty-state">No plane is available.</main>;
@@ -1548,6 +1570,7 @@ export function MapMakerApp() {
                   {CONDITIONS.map((condition) => <option value={condition.value} key={condition.value}>{condition.label}</option>)}
                 </select>
               </label>
+              <small className="condition-preview-note">Illustrative preview, not a temperature simulation. Winter cover skips water, caves, and outer realms; Warmer/Colder affects eligible land.</small>
             </div>
           </div>
           <div className="map-stage">
@@ -1861,7 +1884,7 @@ export function SitesDefenseInspector({ catalog, plane, province, protectedStart
   );
 }
 
-function AdvancedInspector({ project, planeId, province, update, mutateProject }: { project: MapProject; planeId: string; province: Province; update: (recipe: (province: Province) => void) => void; mutateProject: (recipe: (project: MapProject) => void) => void }) {
+export function AdvancedInspector({ project, planeId, province, update, mutateProject }: { project: MapProject; planeId: string; province: Province; update: (recipe: (province: Province) => void) => void; mutateProject: (recipe: (project: MapProject) => void) => void }) {
   const plane = project.planes.find((item) => item.id === planeId)!;
   const incident = plane.edges.filter((edge) => edge.a === province.id || edge.b === province.id);
   return (
@@ -1870,7 +1893,19 @@ function AdvancedInspector({ project, planeId, province, update, mutateProject }
       <div className="edge-list">{incident.map((edge) => {
         const otherId = edge.a === province.id ? edge.b : edge.a;
         const other = plane.provinces.find((item) => item.id === otherId);
-        return <div className="edge-row" key={edge.id}><span>{other?.index}. {other?.name}</span><select value={edge.kind} aria-label={`Border type to province ${other?.index ?? "unknown"}, ${other?.name ?? "missing province"}`} onChange={(event) => mutateProject((draft) => { const target = draft.planes.find((item) => item.id === planeId)!.edges.find((item) => item.id === edge.id)!; target.kind = event.target.value as EdgeKind; })}>{EDGE_KINDS.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}</select></div>;
+        return <div key={edge.id}>
+          <div className="edge-row"><span>{other?.index}. {other?.name}</span><select value={edge.kind} aria-label={`Border type to province ${other?.index ?? "unknown"}, ${other?.name ?? "missing province"}`} onChange={(event) => mutateProject((draft) => {
+            const target = draft.planes.find((item) => item.id === planeId)!.edges.find((item) => item.id === edge.id)!;
+            setBorderKind(target, event.target.value as EdgeKind);
+          })}>{EDGE_KINDS.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}</select></div>
+          {edge.kind === "custom" && <>
+            <NumberField label={`Border bitmask to province ${other?.index ?? "unknown"}`} value={edge.special ?? 0} min={0} max={255} onChange={(value) => mutateProject((draft) => {
+              const target = draft.planes.find((item) => item.id === planeId)!.edges.find((item) => item.id === edge.id)!;
+              target.special = value;
+            })} />
+            <p className="microcopy">Add flags: pass 1, river 2, impassable 4, road 8, bridge 16, mountain border 32. A mountain pass is 33. Zero is ordinary movement. Other bits require game-specific verification.</p>
+          </>}
+        </div>;
       })}</div>
       <Divider />
       <SectionHeading kicker="BATTLE SCENE" title="Province battlefield" />

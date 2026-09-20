@@ -9,8 +9,9 @@ import {
   type Province,
   type TerrainKey,
 } from "./domain";
-import { terrainPreviewKey } from "./dom6";
-import { provinceTerrainVisuals, terrainVisualKey, type TerrainMarkKind } from "./terrainVisuals";
+import { provinceTerrainVisuals, winterPreviewStrength, type TerrainMarkKind } from "./terrainVisuals";
+import { borderStyles } from "./edgeVisuals";
+import { fitMapFrame, placeMapLabel, provinceBadgeRadius, screenToMapPoint, type LabelBox } from "./mapView";
 import { planTerrainMarks } from "./terrainArtwork";
 import {
   computeProvinceTopology,
@@ -123,6 +124,7 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
   const keyboardActionSerial = useRef(0);
   const [view, setView] = useState<ViewState>({ zoom: 1, panX: 0, panY: 0 });
   const [keyboardAction, setKeyboardAction] = useState<{ provinceId: string; tool: string; message: string }>();
+  const [hoveredId, setHoveredId] = useState<string>();
   const topology = useMemo(() => computeProvinceTopology(plane), [plane]);
   const ownership = useMemo(() => createProvinceOwnershipModel(plane), [plane]);
   const cells = useMemo(() => ownership.mode === "solid" ? topology.cells : [], [ownership.mode, topology]);
@@ -134,6 +136,9 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
   const [loadedMaterials, setLoadedMaterials] = useState<{ signature: string; images: Map<string, HTMLImageElement> }>();
   const materialImages = loadedMaterials?.signature === materialSignature ? loadedMaterials.images : undefined;
   const selectedProvince = plane.provinces.find((province) => province.id === selectedId);
+  const hoverProvince = plane.provinces.find((province) => province.id === hoveredId);
+  const readableProvince = hoverProvince ?? selectedProvince;
+  const readableBadges = readableProvince ? provinceMarkerBadges(readableProvince, markerAnnotations?.get(readableProvince.id)) : [];
   const selectedPosition = selectedProvince ? plane.provinces.findIndex((province) => province.id === selectedProvince.id) + 1 : undefined;
   const toolLabel = `${tool.charAt(0).toUpperCase()}${tool.slice(1)}`;
   const selectedMarkerSummary = selectedProvince
@@ -171,8 +176,9 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
     const wrapper = wrapperRef.current;
     if (!canvas || !wrapper) return;
     const bounds = wrapper.getBoundingClientRect();
-    const width = Math.max(320, Math.floor(bounds.width));
-    const height = Math.max(260, Math.floor(bounds.height));
+    const width = Math.max(1, Math.floor(bounds.width));
+    const height = Math.max(1, Math.floor(bounds.height));
+    const frame = fitMapFrame(plane, width, height);
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     if (canvas.width !== Math.floor(width * dpr) || canvas.height !== Math.floor(height * dpr)) {
       canvas.width = Math.floor(width * dpr);
@@ -189,9 +195,11 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
     context.save();
     context.translate(width / 2 + view.panX, height / 2 + view.panY);
     context.scale(view.zoom, view.zoom);
-    context.translate(-width / 2, -height / 2);
-    if (backgroundImage) paintRealmBackground(context, backgroundImage, width, height, plane.wrapX, plane.wrapY);
-    paintPlane(context, plane, cells, topology, ownership, previewCondition, width, height, { selectedId, labels: view.zoom >= 1.35, detail: view.zoom >= 0.92, materialImages, markerAnnotations, analysisProvinceIds });
+    context.translate(-frame.width / 2, -frame.height / 2);
+    context.fillStyle = mapBackgroundColor(plane, ownership);
+    context.fillRect(0, 0, frame.width, frame.height);
+    if (backgroundImage) paintRealmBackground(context, backgroundImage, frame.width, frame.height, plane.wrapX, plane.wrapY);
+    paintPlane(context, plane, cells, topology, ownership, previewCondition, frame.width, frame.height, { selectedId, labels: view.zoom >= 1.35, detail: view.zoom >= 0.92, materialImages, markerAnnotations, analysisProvinceIds, screenScale: view.zoom });
     context.restore();
     drawVignette(context, width, height);
   }, [analysisProvinceIds, backgroundImage, cells, markerAnnotations, materialImages, ownership, plane, previewCondition, selectedId, topology, view]);
@@ -207,9 +215,7 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
     const bounds = canvasRef.current!.getBoundingClientRect();
     const sx = clientX - bounds.left;
     const sy = clientY - bounds.top;
-    const x = ((sx - bounds.width / 2 - view.panX) / view.zoom + bounds.width / 2) / bounds.width;
-    const y = ((sy - bounds.height / 2 - view.panY) / view.zoom + bounds.height / 2) / bounds.height;
-    return { x, y };
+    return screenToMapPoint(plane, bounds.width, bounds.height, view, sx, sy);
   };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -221,7 +227,12 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
 
   const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (!drag) {
+      const point = screenToWorld(event.clientX, event.clientY);
+      setHoveredId(provinceAtOwnershipPoint(plane, ownership, point.x, point.y)?.id);
+      return;
+    }
+    if (drag.pointerId !== event.pointerId) return;
     const dx = event.clientX - drag.x;
     const dy = event.clientY - drag.y;
     if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
@@ -289,11 +300,17 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
           aria-hidden="true"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
+          onPointerLeave={() => setHoveredId(undefined)}
           onPointerUp={handlePointerUp}
           onPointerCancel={cancelPointer}
           onLostPointerCapture={cancelPointer}
           onWheel={handleWheel}
+          title={readableProvince ? `${readableProvince.index}. ${readableProvince.name}${readableBadges.length ? ` — ${readableBadges.map(badge => badge.label).join("; ")}` : ""}` : undefined}
         />
+        {readableProvince && <div className="map-province-summary" aria-hidden="true">
+          <strong>{readableProvince.index}. {readableProvince.name}</strong>
+          {readableBadges.length > 0 && <span>{readableBadges.map(badge => badge.label).join(" · ")}</span>}
+        </div>}
         {selectedProvince && <div id={currentOptionId} className="sr-only" role="option" aria-selected="true" aria-posinset={selectedPosition} aria-setsize={plane.provinces.length}>{selectedProvince.name}</div>}
       </div>
       <p id={keyboardHelpId} className="sr-only">Arrow keys move the current province without applying the active tool. Home or End jumps to the first or last province. Enter or Space applies the active tool exactly once.</p>
@@ -381,10 +398,10 @@ export function planeMaterialAssets(plane: Pick<Plane, "provinces">, condition: 
 }
 
 function visualsForCondition(province: Province, condition: PreviewCondition) {
-  return provinceTerrainVisuals(province, terrainPreviewKey(terrainVisualKey(province), condition));
+  return provinceTerrainVisuals(province, condition);
 }
 
-function terrainGradient(context: CanvasRenderingContext2D, province: Province, layers: readonly TerrainKey[], condition: PreviewCondition, width: number, height: number, periodic: boolean) {
+function terrainGradient(context: CanvasRenderingContext2D, plane: Plane, province: Province, layers: readonly TerrainKey[], condition: PreviewCondition, width: number, height: number, periodic: boolean) {
   const gradient = context.createLinearGradient(province.x * width - width * 0.05, province.y * height - height * 0.05, province.x * width + width * 0.05, province.y * height + height * 0.05);
   const base = layers[0]!;
   const colors = layers.flatMap((terrain) => {
@@ -392,7 +409,7 @@ function terrainGradient(context: CanvasRenderingContext2D, province: Province, 
     // Mountain relief in a sea is still submerged; a mixed wall stays blocked.
     const tint = base === "cavewall" ? 0.8 : isWaterTerrain(base) && !isWaterTerrain(terrain) ? 0.64 : 0;
     if (tint) palette = [mix(palette[0], TERRAIN_COLORS[base][0], tint), mix(palette[1], TERRAIN_COLORS[base][1], tint)];
-    return colorsForCondition(palette, condition);
+    return colorsForCondition(palette, condition === "winter" ? winterPreviewStrength(plane, province) : 0);
   });
   if (periodic) {
     // A map-relative linear gradient cannot continue through a torus seam.
@@ -492,7 +509,7 @@ function paintPlane(
   condition: PreviewCondition,
   width: number,
   height: number,
-  options: { selectedId?: string; labels?: boolean; detail?: boolean; materialImages?: Map<string, HTMLImageElement>; markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations>; analysisProvinceIds?: ReadonlySet<string> },
+  options: { selectedId?: string; labels?: boolean; detail?: boolean; materialImages?: Map<string, HTMLImageElement>; markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations>; analysisProvinceIds?: ReadonlySet<string>; screenScale?: number },
 ) {
   if (ownership.mode === "sparse") {
     paintSparsePlane(context, plane, topology, ownership, condition, width, height, options);
@@ -505,7 +522,7 @@ function paintPlane(
     if (!cell?.polygons.length) continue;
     const visuals = visualsForCondition(province, condition);
     drawCellPath(context, cell.polygons, width, height);
-    context.fillStyle = terrainGradient(context, province, visuals.layers, condition, width, height, plane.wrapX || plane.wrapY);
+    context.fillStyle = terrainGradient(context, plane, province, visuals.layers, condition, width, height, plane.wrapX || plane.wrapY);
     context.fill();
     const metrics = measurePolygonProvinceArtwork(cell.polygons, province, plane, width, height);
     paintProvinceMaterial(context, plane, province, visuals.layers, cell.polygons, undefined, width, height, options.materialImages, materialLayouts);
@@ -529,16 +546,17 @@ function paintPlane(
     if (edge.kind === "standard") continue;
     const segments = topology.sharedBorders.get(connectionKey(edge.a, edge.b));
     if (!segments?.length) continue;
-    const style = edgeStyle(edge.kind);
-    context.strokeStyle = style.color;
-    context.lineWidth = Math.max(style.width, width / 1900);
-    context.setLineDash(style.dash.map((value) => value * Math.max(1, width / 1700)));
-    context.beginPath();
-    for (const segment of segments) {
-      context.moveTo(segment.from.x * width, segment.from.y * height);
-      context.lineTo(segment.to.x * width, segment.to.y * height);
+    for (const style of borderStyles(edge)) {
+      context.strokeStyle = style.color;
+      context.lineWidth = Math.max(style.width, width / 1900);
+      context.setLineDash(style.dash.map((value) => value * Math.max(1, width / 1700)));
+      context.beginPath();
+      for (const segment of segments) {
+        context.moveTo(segment.from.x * width, segment.from.y * height);
+        context.lineTo(segment.to.x * width, segment.to.y * height);
+      }
+      context.stroke();
     }
-    context.stroke();
   }
   context.setLineDash([]);
   context.restore();
@@ -603,8 +621,12 @@ function paintSparsePlane(
   condition: PreviewCondition,
   width: number,
   height: number,
-  options: { selectedId?: string; labels?: boolean; detail?: boolean; materialImages?: Map<string, HTMLImageElement>; markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations>; analysisProvinceIds?: ReadonlySet<string> },
+  options: { selectedId?: string; labels?: boolean; detail?: boolean; materialImages?: Map<string, HTMLImageElement>; markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations>; analysisProvinceIds?: ReadonlySet<string>; screenScale?: number },
 ) {
+  const displayWidth = width;
+  const displayHeight = height;
+  width = Math.max(1, Math.round(width));
+  height = Math.max(1, Math.round(height));
   const layer = document.createElement("canvas");
   layer.width = width;
   layer.height = height;
@@ -619,7 +641,7 @@ function paintSparsePlane(
     const visuals = visualsForCondition(province, condition);
     layerContext.save();
     layerContext.clip(path);
-    layerContext.fillStyle = terrainGradient(layerContext, province, visuals.layers, condition, width, height, plane.wrapX || plane.wrapY);
+    layerContext.fillStyle = terrainGradient(layerContext, plane, province, visuals.layers, condition, width, height, plane.wrapX || plane.wrapY);
     layerContext.fillRect(0, 0, width, height);
     paintProvinceMaterial(layerContext, plane, province, visuals.layers, undefined, path, width, height, options.materialImages, materialLayouts);
     const metrics = measureSparseProvinceArtwork(owner, province, ownership, width, height);
@@ -636,16 +658,15 @@ function paintSparsePlane(
   });
 
   drawSparseTopologyBorders(layerContext, plane, topology, width, height);
-  drawProvinceMarkers(layerContext, plane, width, height, options, mask.ownerPaths);
-
-  // Erase every overlay pixel outside canonical owner space, including
-  // antialiased borders, labels, and terrain marks around chamber edges.
+  // Only geographic artwork is clipped. Semantic labels/markers are painted
+  // afterward, so narrow chambers cannot crop names or gateway badges.
   layerContext.save();
   layerContext.globalCompositeOperation = "destination-in";
   layerContext.fillStyle = "#fff";
   layerContext.fill(mask.combinedPath);
   layerContext.restore();
-  context.drawImage(layer, 0, 0, width, height);
+  context.drawImage(layer, 0, 0, displayWidth, displayHeight);
+  drawProvinceMarkers(context, plane, displayWidth, displayHeight, options);
 }
 
 function sparsePaintMask(
@@ -694,22 +715,23 @@ function drawSparseTopologyBorders(
   width: number,
   height: number,
 ) {
-  const edgeKind = new Map(plane.edges.map((edge) => [connectionKey(edge.a, edge.b), edge.kind]));
+  const edges = new Map(plane.edges.map((edge) => [connectionKey(edge.a, edge.b), edge]));
   context.save();
   context.lineCap = "round";
   for (const pair of topology.pairs) {
     const segments = topology.sharedBorders.get(pair.key);
     if (!segments?.length) continue;
-    const style = edgeStyle(edgeKind.get(pair.key) ?? "standard");
-    context.strokeStyle = style.color;
-    context.lineWidth = Math.max(style.width, width / 1900);
-    context.setLineDash(style.dash.map((value) => value * Math.max(1, width / 1700)));
-    context.beginPath();
-    for (const segment of segments) {
-      context.moveTo(segment.from.x * width, segment.from.y * height);
-      context.lineTo(segment.to.x * width, segment.to.y * height);
+    for (const style of borderStyles(edges.get(pair.key))) {
+      context.strokeStyle = style.color;
+      context.lineWidth = Math.max(style.width, width / 1900);
+      context.setLineDash(style.dash.map((value) => value * Math.max(1, width / 1700)));
+      context.beginPath();
+      for (const segment of segments) {
+        context.moveTo(segment.from.x * width, segment.from.y * height);
+        context.lineTo(segment.to.x * width, segment.to.y * height);
+      }
+      context.stroke();
     }
-    context.stroke();
   }
   context.setLineDash([]);
   context.restore();
@@ -720,18 +742,14 @@ function drawProvinceMarkers(
   plane: Plane,
   width: number,
   height: number,
-  options: { labels?: boolean; markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations> },
-  ownerPaths?: Path2D[],
+  options: { labels?: boolean; selectedId?: string; markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations>; screenScale?: number },
 ) {
-  plane.provinces.forEach((province, owner) => {
-    const ownerPath = ownerPaths?.[owner];
-    if (ownerPath) {
-      context.save();
-      context.clip(ownerPath);
-    }
+  const occupied: LabelBox[] = [];
+  const badgeRadius = provinceBadgeRadius(width, options.screenScale);
+  const markerRadius = clamp(Math.min(width, height) / 270, 2.4, 7);
+  plane.provinces.forEach((province) => {
     const x = province.x * width;
     const y = province.y * height;
-    const markerRadius = clamp(Math.min(width, height) / 270, 2.4, 7);
     const badges = provinceMarkerBadges(province, options.markerAnnotations?.get(province.id));
     context.beginPath();
     context.arc(x, y, markerRadius, 0, TAU);
@@ -740,25 +758,35 @@ function drawProvinceMarkers(
     context.lineWidth = Math.max(1, width / 3200);
     context.strokeStyle = "rgba(18, 22, 23, .86)";
     context.stroke();
-    drawProvinceMarkerBadges(context, badges, x, y, markerRadius, width);
-    if (options.labels) {
-      context.font = `600 ${clamp(width / 230, 9, 18)}px ui-sans-serif, system-ui`;
-      context.textAlign = "center";
-      context.textBaseline = "top";
-      context.lineWidth = Math.max(2, width / 1400);
-      context.strokeStyle = "rgba(16, 19, 20, .82)";
-      context.fillStyle = "rgba(250, 245, 225, .94)";
-      context.strokeText(province.name, x, y + markerRadius + 3);
-      context.fillText(province.name, x, y + markerRadius + 3);
-    }
-    if (ownerPath) context.restore();
+    drawProvinceMarkerBadges(context, badges, x, y, badgeRadius, width);
+    const w = badges.length ? Math.min(4, badges.length) * (badgeRadius * 2 + 1) : markerRadius * 2;
+    const h = badges.length ? Math.ceil(badges.length / 4) * (badgeRadius * 2 + 1) : markerRadius * 2;
+    occupied.push({ x: x - w / 2, y: y - h / 2, width: w, height: h });
   });
+  if (!options.labels) return;
+  const screenScale = options.screenScale ?? 1;
+  const fontSize = clamp(width * screenScale / 230, 11, 18) / screenScale;
+  context.font = `600 ${fontSize}px ui-sans-serif, system-ui`;
+  context.textAlign = "left";
+  context.textBaseline = "top";
+  context.lineWidth = Math.max(2, width / 1400);
+  context.strokeStyle = "rgba(16, 19, 20, .92)";
+  context.fillStyle = "rgba(250, 245, 225, .98)";
+  const ordered = [...plane.provinces].sort((a, b) => Number(b.id === options.selectedId) - Number(a.id === options.selectedId));
+  for (const province of ordered) {
+    const textWidth = context.measureText?.(province.name).width ?? province.name.length * fontSize * 0.6;
+    const box = placeMapLabel(province.x * width, province.y * height, textWidth, fontSize + 2, badgeRadius * 2 + 3, width, height, occupied);
+    if (!box) continue; // Full names and all badges remain in hover/selection text.
+    occupied.push(box);
+    context.strokeText(province.name, box.x, box.y);
+    context.fillText(province.name, box.x, box.y);
+  }
 }
 
 export function provinceMarkerBadges(province: Province, annotations?: ProvinceMarkerAnnotations): ProvinceMarkerBadge[] {
   const badges: ProvinceMarkerBadge[] = [];
   if (province.start) badges.push({ kind: "generic-start", glyph: "S", label: "generic start", color: "#f5d67c" });
-  if (province.teamStart !== undefined) badges.push({ kind: "team-start", glyph: `#${province.teamStart}`, label: `team start group ${province.teamStart}`, color: "#f0bd65" });
+  if (province.teamStart !== undefined) badges.push({ kind: "team-start", glyph: "#", label: `team start group ${province.teamStart}`, color: "#f0bd65" });
   if (annotations?.specificStartNation !== undefined) badges.push({ kind: "specific-start", glyph: "N", label: `nation-specific start ${annotations.specificStartNation}`, color: "#ff9f70" });
   if (province.throne === "preferred") badges.push({ kind: "preferred-throne", glyph: "♜", label: "preferred throne", color: "#d5a8ff" });
   if (province.throne === "fixed") badges.push({ kind: "fixed-throne", glyph: "♛", label: "fixed throne", color: "#b993ff" });
@@ -775,11 +803,10 @@ function drawProvinceMarkerBadges(
   badges: readonly ProvinceMarkerBadge[],
   x: number,
   y: number,
-  markerRadius: number,
+  radius: number,
   width: number,
 ) {
   if (!badges.length) return;
-  const radius = clamp(markerRadius * 0.82, 3.2, 5.5);
   const step = radius * 2 + 1;
   const columns = Math.min(4, badges.length);
   const rows = Math.ceil(badges.length / columns);
@@ -798,7 +825,7 @@ function drawProvinceMarkerBadges(
     context.strokeStyle = "rgba(18, 22, 23, .92)";
     context.stroke();
     context.fillStyle = "#181b1c";
-    context.font = `800 ${badge.glyph.length > 1 ? Math.max(5.5, radius * 1.15) : Math.max(7, radius * 1.55)}px ui-sans-serif, system-ui`;
+    context.font = `800 ${radius * 1.65}px ui-sans-serif, system-ui`;
     context.textAlign = "center";
     context.textBaseline = "middle";
     context.fillText(badge.glyph, badgeX, badgeY + 0.2);
@@ -881,6 +908,7 @@ function drawTerrainMarks(
   detail = true,
 ) {
   const placements = planTerrainMarks(metrics, markKinds, province.id, !detail ? 0.35 : province.small ? 0.65 : province.large ? 1.25 : 1);
+  const winter = condition === "winter" ? winterPreviewStrength(plane, province) : 0;
   if (!placements.length) return;
   context.save();
   if (polygons) {
@@ -894,8 +922,8 @@ function drawTerrainMarks(
       const y = copy.y;
       const radius = Math.min(copy.width, copy.height) * 0.42;
       context.globalAlpha = copy.opacity;
-      context.strokeStyle = condition === "winter" ? "#f4f7ef" : "#c2c49b";
-      context.fillStyle = condition === "winter" ? "#b7c8bb" : "#193d29";
+      context.strokeStyle = mix("#c2c49b", "#f4f7ef", winter);
+      context.fillStyle = mix("#193d29", "#b7c8bb", winter);
       context.lineWidth = Math.max(0.45, radius * 0.18);
       if (mark === "forest") {
         context.beginPath();
@@ -917,7 +945,7 @@ function drawTerrainMarks(
         context.quadraticCurveTo(x, y - radius, x + radius, y + radius * 0.5);
         context.stroke();
       } else if (["water", "freshwater", "swamp", "deep"].includes(mark)) {
-        if (condition !== "winter") context.strokeStyle = mark === "freshwater" ? "#7be6f4" : "#9dccd9";
+        context.strokeStyle = mix(mark === "freshwater" ? "#7be6f4" : "#9dccd9", "#f4f7ef", winter);
         const rows = mark === "deep" ? 3 : mark === "freshwater" ? 2 : 1;
         for (let row = 0; row < rows; row++) {
           const waveY = y + (row - (rows - 1) / 2) * radius * 0.65;
@@ -937,8 +965,8 @@ function drawTerrainMarks(
           context.stroke();
         }
       } else if (mark === "farm") {
-        context.fillStyle = condition === "winter" ? "#d8dfc5" : "#dab568";
-        context.strokeStyle = condition === "winter" ? "#778577" : "#674d24";
+        context.fillStyle = mix("#dab568", "#d8dfc5", winter);
+        context.strokeStyle = mix("#674d24", "#778577", winter);
         context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
         for (let row = -1; row <= 1; row++) {
           context.beginPath();
@@ -956,7 +984,7 @@ function drawTerrainMarks(
         context.fill();
         context.stroke();
       } else if (mark === "kelp") {
-        context.strokeStyle = condition === "winter" ? "#d6e6bc" : "#a4c885";
+        context.strokeStyle = mix("#a4c885", "#d6e6bc", winter);
         for (let stalk = -1; stalk <= 1; stalk++) {
           const stalkX = x + stalk * radius * 0.6;
           context.beginPath();
@@ -994,18 +1022,8 @@ function drawCellPath(context: CanvasRenderingContext2D, polygons: Point[][], wi
   }
 }
 
-function edgeStyle(kind: string) {
-  if (kind === "impassable") return { color: "rgba(225, 91, 76, .9)", width: 2.2, dash: [3, 3] };
-  if (kind === "river") return { color: "rgba(83, 174, 213, .82)", width: 2, dash: [] as number[] };
-  if (kind === "bridge") return { color: "rgba(213, 188, 126, .9)", width: 2.2, dash: [5, 2] };
-  if (kind === "road") return { color: "rgba(223, 196, 122, .78)", width: 2, dash: [5, 3] };
-  if (kind === "mountain_border") return { color: "rgba(195, 129, 82, .82)", width: 2.2, dash: [2, 2] };
-  if (kind === "mountain_pass") return { color: "rgba(220, 158, 91, .9)", width: 2.2, dash: [6, 2] };
-  return { color: "rgba(20, 32, 34, .52)", width: 1.15, dash: [] as number[] };
-}
-
-function colorsForCondition(colors: [string, string], condition: PreviewCondition): [string, string] {
-  if (condition === "winter") return [mix(colors[0], "#e8eee8", 0.58), mix(colors[1], "#cdd9d5", 0.46)];
+function colorsForCondition(colors: [string, string], winter: number): [string, string] {
+  if (winter) return [mix(colors[0], "#e8eee8", 0.58 * winter), mix(colors[1], "#cdd9d5", 0.46 * winter)];
   return colors;
 }
 

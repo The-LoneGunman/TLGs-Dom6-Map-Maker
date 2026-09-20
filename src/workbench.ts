@@ -144,8 +144,8 @@ export function analyzeStarts(project: MapProject, mode: AnalysisMode = "structu
       threeStepCount: refs.filter(r => !startKeys.has(r.key) && (distances.get(r.key) ?? Infinity) <= 3).length,
       exclusive: allStarts.length <= MAX_ANALYSIS_STARTS ? exclusive : undefined,
       contested: allStarts.length <= MAX_ANALYSIS_STARTS ? region.length - exclusive : undefined,
-      knownPopulation: region.reduce((sum, r) => sum + (r.province.population ?? 0), 0),
-      unknownPopulationCount: region.filter(r => r.province.population === undefined).length,
+      knownPopulation: region.reduce((sum, r) => sum + (validPopulation(r.province) ?? 0), 0),
+      unknownPopulationCount: region.filter(r => validPopulation(r.province) === undefined).length,
       guardianProvinceCount: region.filter(r => r.province.defenders.length > 0).length,
       preferredThrones: nearby.filter(r => r.province.throne === "preferred").length,
       fixedThrones: nearby.filter(r => r.province.throne === "fixed").length,
@@ -162,6 +162,11 @@ export function analyzeStarts(project: MapProject, mode: AnalysisMode = "structu
 
 function sameTeam(a: Province, b: Province): boolean {
   return a.teamStart !== undefined && b.teamStart !== undefined && a.teamStart === b.teamStart;
+}
+
+function validPopulation(province: Province): number | undefined {
+  const value = province.population;
+  return value !== undefined && Number.isSafeInteger(value) && value >= 0 && value <= 50000 ? value : undefined;
 }
 
 function nearest(values: (number | undefined)[]): number | undefined {

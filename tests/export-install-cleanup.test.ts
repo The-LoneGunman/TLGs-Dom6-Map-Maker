@@ -8,6 +8,7 @@ import {
   zipPackageSafety,
 } from "../src/export";
 import { createDefaultProject } from "../src/generator";
+import { BUILTIN_DOM6_CATALOG, createCatalogTemplate, mergeCatalogBundles } from "../src/catalog";
 
 const obsoleteNames = (root: string, firstPlane: number) => {
   const names: string[] = [];
@@ -288,6 +289,20 @@ test("direct install accepts a new empty map folder", async () => {
   assert.equal(directory.files.has("Safety_Atlas.map"), true);
   assert.equal(directory.files.has("Safety_Atlas.d6m"), true);
   assert.equal(directory.files.has("atlas_project.json"), true);
+});
+
+test("direct install reports validate against the same custom catalog as the editor", async () => {
+  const project = smallInstallProject();
+  project.planes[0]!.provinces.find(p => !p.start)!.fort = 9000;
+  const custom = createCatalogTemplate("6.35");
+  custom.catalogVersion = "synthetic-install-catalog";
+  custom.forts = [{ id: 9000, name: "Synthetic test fort", provenanceId: custom.provenance[0]!.id }];
+  const catalog = mergeCatalogBundles(BUILTIN_DOM6_CATALOG, custom);
+  const directory = new MemoryDirectory();
+  assert.equal(await withDirectoryPicker(directory, () => installPackage(project, undefined, catalog)), "installed");
+  const report = [...directory.files].filter(([name]) => name.endsWith(".txt")).map(([, data]) => new TextDecoder().decode(data)).join("\n");
+  assert.doesNotMatch(report, /\[ERROR\].*fortification 9000/);
+  assert.match(report, /Active selector catalog:.*synthetic-install-catalog/);
 });
 
 test("direct install refuses a non-Atlas normalized-name collision before changing any file", async () => {

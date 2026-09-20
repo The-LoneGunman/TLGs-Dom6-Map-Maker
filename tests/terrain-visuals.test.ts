@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TERRAIN_FLAGS, type TerrainFlag, type TerrainKey } from "../src/domain";
+import { TERRAIN_FLAGS, type PreviewCondition, type TerrainFlag, type TerrainKey } from "../src/domain";
 import { createDefaultProject } from "../src/generator";
 import { compileMapText, encodeD6m, terrainMask, terrainPreviewKey, TERRAIN_BITS } from "../src/dom6";
 import { planeMaterialAssets, renderPlanePng, UNIVERSAL_MATERIAL_ASSETS } from "../src/MapCanvas";
 import { measurePolygonProvinceArtwork, periodicArtworkCopies } from "../src/adaptiveArtwork";
 import { planTerrainMarks } from "../src/terrainArtwork";
-import { provinceTerrainVisuals, terrainElevation, terrainVisualKey, type TerrainMarkKind } from "../src/terrainVisuals";
+import { provinceTerrainVisuals, terrainElevation, type TerrainMarkKind } from "../src/terrainVisuals";
 
 test("every effective physical flag contributes a visible feature", () => {
   const marks: Partial<Record<TerrainFlag, TerrainMarkKind>> = {
@@ -56,7 +56,7 @@ test("flag order, duplicates, removal, and preview conditions cannot leave stale
   province.terrainFlags = [];
   assert.deepEqual(provinceTerrainVisuals(province), { base: "plains", layers: ["plains"], marks: [] });
   for (const condition of ["forested", "flooded", "wasted", "farmland", "winter"] as const) {
-    const preview = provinceTerrainVisuals(province, terrainPreviewKey(terrainVisualKey(province), condition));
+    const preview = provinceTerrainVisuals(province, condition);
     assert.equal(preview.base, terrainPreviewKey("plains", condition));
     assert.deepEqual(province.terrainFlags, []);
   }
@@ -160,7 +160,7 @@ test("the shared PNG painter changes for each added flag and restores the origin
     plane.wrapX = plane.wrapY = false;
     const province = plane.provinces[0]!;
     Object.assign(province, { x: 0.5, y: 0.5, terrain: "plains", terrainFlags: [], freshwater: false });
-    const trace = async () => { calls.length = 0; return (await renderPlanePng(plane, "normal")).text(); };
+    const trace = async (condition: PreviewCondition = "normal") => { calls.length = 0; return (await renderPlanePng(plane, condition)).text(); };
     const plain = await trace();
     for (const flag of ["farm", "forest", "cave", "freshwater"] as const) {
       province.terrainFlags = [flag];
@@ -170,6 +170,13 @@ test("the shared PNG painter changes for each added flag and restores the origin
     const combined = await trace();
     assert.ok(combined.includes("#dab568"), "field blocks are painted");
     assert.ok(combined.includes("#211c1b"), "cave arches are painted");
+    assert.equal(await trace("winter"), combined, "cave terrain receives no winter snow, including its feature glyphs");
+    province.terrainFlags = ["forest"];
+    assert.notEqual(await trace("winter"), await trace(), "eligible surface land receives winter cover");
+    plane.kind = "hell";
+    plane.ownershipMode = "solid";
+    assert.equal(await trace("winter"), await trace(), "outer realms retain their normal palette and feature colors");
+    plane.kind = "surface";
     province.terrainFlags = [];
     assert.equal(await trace(), plain);
     for (const [wrapX, wrapY] of [[true, false], [false, true], [true, true]]) {

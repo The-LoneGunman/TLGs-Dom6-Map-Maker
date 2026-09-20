@@ -3,9 +3,7 @@ import {
   effectiveProvinceTerrainFlags,
   isBlockedProvince,
   isCaveProvince,
-  isCaveTerrain,
   isWaterProvince,
-  isWaterTerrain,
   nationSpecificStartFeatureConflicts,
   planeFileSuffix,
   sanitizeMapName,
@@ -32,7 +30,7 @@ import {
 } from "./generator";
 import { auditPlaneTopology, createProvinceOwnerResolver, resolvePlaneOwnershipMode } from "./geometry";
 import { BUILTIN_DOM6_CATALOG, findCatalogEntry, siteCompatibility, type Dom6CatalogBundle } from "./catalog";
-import { terrainElevation } from "./terrainVisuals";
+import { previewProvinceTerrain, terrainElevation, terrainVisualKey } from "./terrainVisuals";
 
 export const D6M_MAGIC = 898933;
 export const D6M_VERSION = 3;
@@ -1132,11 +1130,7 @@ export function estimatedD6mBytes(plane: Plane): number {
 }
 
 export function terrainPreviewKey(terrain: TerrainKey, condition: string): TerrainKey {
-  if (condition === "forested") return isWaterTerrain(terrain) ? "kelp" : isCaveTerrain(terrain) ? "caveforest" : "forest";
-  if (condition === "flooded") return isCaveTerrain(terrain) ? "caveswamp" : "sea";
-  if (condition === "wasted") return isCaveTerrain(terrain) ? "cavewaste" : "waste";
-  if (condition === "farmland") return isCaveTerrain(terrain) ? terrain : "farm";
-  return terrain;
+  return terrainVisualKey(previewProvinceTerrain({ terrain }, condition));
 }
 
 function minimumCapitalDistance(plane: Plane, width: number, height: number): number {

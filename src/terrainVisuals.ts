@@ -1,4 +1,4 @@
-import { effectiveProvinceTerrainFlags, type Province, type TerrainKey } from "./domain";
+import { effectiveProvinceTerrainFlags, type Plane, type PreviewCondition, type Province, type TerrainKey } from "./domain";
 
 type ProvinceTerrain = Pick<Province, "terrain" | "terrainFlags" | "freshwater">;
 
@@ -32,12 +32,38 @@ export interface ProvinceTerrainVisuals {
   marks: TerrainMarkKind[];
 }
 
-/** Physical flags remain visible together; a condition preview may add a cover. */
-export function provinceTerrainVisuals(province: ProvinceTerrain, displayBase = terrainVisualKey(province)): ProvinceTerrainVisuals {
-  const flags = new Set([
-    ...effectiveProvinceTerrainFlags(province),
-    ...effectiveProvinceTerrainFlags({ terrain: displayBase }),
-  ]);
+/** Preview transformations replace cover without mutating the native terrain. */
+export function previewProvinceTerrain(province: ProvinceTerrain, condition: string): ProvinceTerrain {
+  const flags = new Set(effectiveProvinceTerrainFlags(province));
+  if (flags.has("cavewall") || condition === "normal" || condition === "winter") return province;
+  if (condition === "forested") {
+    flags.delete("farm"); flags.delete("waste"); flags.add("forest");
+  } else if (condition === "flooded") {
+    flags.add("sea"); flags.delete("farm"); flags.delete("swamp"); flags.delete("waste"); flags.delete("freshwater");
+  } else if (condition === "wasted") {
+    flags.delete("forest"); flags.delete("farm"); flags.delete("swamp");
+    if (!flags.has("sea")) flags.add("waste");
+  } else if (condition === "farmland") {
+    if (flags.has("sea") || flags.has("cave")) return province;
+    flags.delete("forest"); flags.delete("swamp"); flags.delete("waste"); flags.add("farm");
+  }
+  return { terrain: "plains", terrainFlags: [...flags], freshwater: false };
+}
+
+/** Illustrative winter cover, not a simulation of dominion or temperature. */
+export function winterPreviewStrength(plane: Pick<Plane, "kind" | "variant">, province: ProvinceTerrain & Partial<Pick<Province, "warmer" | "colder">>): number {
+  const flags = effectiveProvinceTerrainFlags(province);
+  if (flags.has("cave") || flags.has("cavewall") || flags.has("sea")) return 0;
+  if (plane.kind !== "surface" && plane.kind !== "custom") return 0;
+  if (plane.kind === "custom" && ["fungal", "crystal", "volcanic", "infernal", "void", "storm"].includes(plane.variant ?? "")) return 0;
+  return province.warmer && !province.colder ? 0.35 : province.colder && !province.warmer ? 1 : 0.8;
+}
+
+/** Only the effective preview mask contributes layers and marks. */
+export function provinceTerrainVisuals(province: ProvinceTerrain, condition: PreviewCondition = "normal"): ProvinceTerrainVisuals {
+  const displayed = previewProvinceTerrain(province, condition);
+  const flags = effectiveProvinceTerrainFlags(displayed);
+  const displayBase = terrainVisualKey(displayed);
   const layers = new Set<TerrainKey>([displayBase]);
   const marks: TerrainMarkKind[] = [];
   const add = (mark: TerrainMarkKind, layer: TerrainKey) => { marks.push(mark); layers.add(layer); };

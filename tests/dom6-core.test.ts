@@ -125,7 +125,7 @@ test("terrain masks preserve Dominions 6 high bits and transformations", () => {
   assert.ok((mask & TERRAIN_BITS.glamourSites) !== 0n);
   assert.equal(terrainPreviewKey("plains", "forested"), "forest");
   assert.equal(terrainPreviewKey("sea", "forested"), "kelp");
-  assert.equal(terrainPreviewKey("cave", "flooded"), "caveswamp");
+  assert.equal(terrainPreviewKey("cave", "flooded"), "sea");
 
   province.terrain = "forest";
   province.terrainFlags = ["swamp", "freshwater"];

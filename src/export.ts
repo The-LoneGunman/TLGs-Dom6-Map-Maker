@@ -2,7 +2,7 @@ import { cloneProject, sanitizeMapName, type MapProject } from "./domain";
 import { calculateFairness } from "./generator";
 import { buildHostTopologyReport } from "./hostReport";
 import { analysisContextLines, analyzeStarts, buildStartAnalysisText } from "./workbench";
-import { BUILTIN_DOM6_CATALOG } from "./catalog";
+import { BUILTIN_DOM6_CATALOG, type Dom6CatalogBundle } from "./catalog";
 import {
   compileMapText,
   encodeD6m,
@@ -39,7 +39,7 @@ export const ZIP_MEMORY_LIMIT_PEAK_BYTES = 768 * 1024 * 1024;
 
 type ProgressCallback = (progress: ExportProgress) => void;
 
-export async function buildPackageFiles(project: MapProject, onProgress?: ProgressCallback): Promise<PackageFile[]> {
+export async function buildPackageFiles(project: MapProject, onProgress?: ProgressCallback, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG): Promise<PackageFile[]> {
   const base = sanitizeMapName(project.name);
   const encoder = new TextEncoder();
   const files: PackageFile[] = [];
@@ -48,7 +48,7 @@ export async function buildPackageFiles(project: MapProject, onProgress?: Progre
     const suffix = index === 0 ? "" : `_plane${index + 1}`;
     files.push({ name: `${base}${suffix}.map`, data: encoder.encode(compileMapText(project, index)) });
   }
-  files.push(...supportFiles(project));
+  files.push(...supportFiles(project, catalog));
 
   for (let index = 0; index < project.planes.length; index += 1) {
     const plane = project.planes[index]!;
@@ -70,10 +70,10 @@ export async function buildPackageFiles(project: MapProject, onProgress?: Progre
   return files;
 }
 
-export async function downloadPackage(project: MapProject, onProgress?: ProgressCallback) {
+export async function downloadPackage(project: MapProject, onProgress?: ProgressCallback, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG) {
   const safety = zipPackageSafety(project);
   if (safety.level === "blocked") throw new Error(safety.message);
-  const files = await buildPackageFiles(project, onProgress);
+  const files = await buildPackageFiles(project, onProgress, catalog);
   const root = sanitizeMapName(project.name);
   onProgress?.({ stage: "packaging", plane: project.planes.length, planeCount: project.planes.length, percent: 96, message: "Packing the ready-to-install map folder…" });
   const zip = createStoredZip(files.map((file) => ({ ...file, name: `${root}/${file.name}` })));
@@ -99,7 +99,7 @@ export async function removeObsoletePlaneArtifacts(
   }
 }
 
-export async function installPackage(project: MapProject, onProgress?: ProgressCallback): Promise<"installed" | "unsupported" | "cancelled"> {
+export async function installPackage(project: MapProject, onProgress?: ProgressCallback, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG): Promise<"installed" | "unsupported" | "cancelled"> {
   const picker = (window as typeof window & {
     showDirectoryPicker?: (options?: { mode?: "read" | "readwrite"; id?: string }) => Promise<FileSystemDirectoryHandle>;
   }).showDirectoryPicker;
@@ -118,7 +118,7 @@ export async function installPackage(project: MapProject, onProgress?: ProgressC
     for (const name of knownAtlasInstallTargetNames(root)) originals.set(name, await fileFingerprint(mapDirectory, name));
     const encoder = new TextEncoder();
     const transactionId = nextInstallTransactionId();
-    const support = supportFiles(project);
+    const support = supportFiles(project, catalog);
     const textArtifacts: InstallArtifact[] = project.planes.map((_, index) => {
       const suffix = index === 0 ? "" : `_plane${index + 1}`;
       return installArtifact(root, transactionId, `${root}${suffix}.map`, encoder.encode(compileMapText(project, index)));
@@ -899,10 +899,10 @@ function utf8StringBytes(value: string): number {
   return bytes;
 }
 
-function supportFiles(project: MapProject): PackageFile[] {
+function supportFiles(project: MapProject, catalog: Dom6CatalogBundle): PackageFile[] {
   const encoder = new TextEncoder();
   const fairness = calculateFairness(project);
-  const issues = validateProject(project);
+  const issues = validateProject(project, catalog);
   const report = [
     "PANTOKRATOR ATLAS — DOMINIONS 6 MAP REPORT",
     "",
@@ -922,7 +922,9 @@ function supportFiles(project: MapProject): PackageFile[] {
     "A high average does not override an export error or certify nation, economy, or combat balance.",
     ...fairness.notes.map(note => `  Score note: ${note}`),
     "",
-    buildStartAnalysisText(project, BUILTIN_DOM6_CATALOG.gameVersion),
+    `Active selector catalog: ${JSON.stringify(catalog.catalogVersion.slice(0, 256))}`,
+    "Catalog entries are lookup/validation metadata, not proof of installed game content. Custom catalogs and required mods must be supplied separately.",
+    buildStartAnalysisText(project, catalog.gameVersion.slice(0, 256)),
     "",
     "PLANES",
     ...project.planes.map((plane, index) => `  ${index + 1}. ${plane.name} — ${plane.kind}/${plane.variant ?? "default"}, ${plane.provinces.length} provinces, ${project.gates.filter((gate) => gate.endpoints.some((endpoint) => endpoint.planeId === plane.id)).length} gates`),

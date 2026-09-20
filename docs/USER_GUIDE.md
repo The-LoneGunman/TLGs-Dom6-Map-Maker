@@ -517,9 +517,13 @@ Toggles the **Many sites** terrain bit. It does not place a named magic site; us
 
 Options are Normal, Frozen/winter, Forested, Submerged, Wasted, and Farmland. These change only the editor and exported PNG preview. They do not modify terrain or create alternate files. Native D6M terrain lets Dominions render actual condition changes.
 
+These previews are illustrative, not simulations of temperature or game events. Winter cover skips water, caves, and outer realms; Warmer and Colder flags adjust cover on eligible land. Submerged adds water while retaining cave identity and turning forest cover into kelp. Forested, Wasted, and Farmland replace incompatible vegetation instead of leaving the original symbols underneath; Farmland does not turn seas or caves into fields.
+
 ### Pan, zoom, Fit, and plane switching
 
 Drag to pan, use the wheel/trackpad to zoom from 78% to 400%, and choose **Fit** to return to 100% and center the plane. Use the strip below the map to switch planes.
+
+The editor preserves the map's aspect ratio, so unused space may appear around it. Labels avoid markers and other labels; labels that cannot fit are hidden. Hover over or select a province to read its full name and start, throne, or gateway details.
 
 ## Province inspector
 
@@ -670,9 +674,9 @@ Every saved border emits `#neighbour`; its type may add `#neighbourspec`:
 | Mountain pass | 33 | Mountain border + pass |
 | Mountain border | 32 | Mountain border |
 | Impassable | 4 | Declared neighbor but blocked movement |
-| Custom | 0-255 | Preserves an imported stored value |
+| Custom | 0-255 | Editable native border bitmask |
 
-The UI does not currently expose a numeric Custom-value editor. Prefer the named types unless project JSON already contains the intended value.
+Choosing Custom starts with the existing border value (0 for Standard) and reveals a numeric editor. Combine documented bits by adding them: pass 1, river 2, impassable 4, road 8, bridge 16, and mountain 32. For example, 10 combines river and road. The preview layers the recognized styles; undocumented bits 64 and 128 receive a purple dotted indication without claiming a game effect. Use named types unless you need a combination or know the intended native value.
 
 #### Province battlefield
 
@@ -708,6 +712,8 @@ The bundled Dominions 6.35 catalog covers units, sites, population types, nation
 - **Reset custom entries:** removes device-stored additions and returns to bundled-only lookup.
 
 Custom catalogs are stored separately on the device and are not embedded game content. Importing an ID does not install a `.dm` mod or add that content to Dominions. Back up custom catalog JSON separately and enable any matching game mod when required.
+
+Imports merge in selection order. Reset cancels pending imports, and a failed save leaves the previous catalog active. Validation reports in both ready ZIPs and direct installs use the active catalog and identify its version assumptions; they do not certify custom content or include the custom catalog JSON.
 
 ## Validation and balance report
 
@@ -779,6 +785,8 @@ Atlas autosaves shortly after project changes. Wait for the saved status or choo
 - **Autosave unavailable:** no browser copy could be written; download project JSON immediately.
 
 Autosave belongs to the current browser and site address. It is not cloud synchronization, clearing browser data removes it, and it stores one current project rather than a project library. If another tab or storage copy conflicts, autosave pauses and asks whether to inspect/load the newer copy or keep the current one. **New atlas** replaces the autosave after confirmation; Undo history does not survive a reload. Keep portable project JSON backups.
+
+Loading a recovery/conflict copy preserves the displaced project in Undo during that session. If you edit the project or start another project-opening action while the copy is being read, the older request is discarded instead of replacing your newer work.
 
 If saved data cannot be opened, automatic saving pauses and **Download recovery data** preserves the original bytes. **Keep this copy** downloads that recovery backup before replacing them. Edits exceeding project limits are rejected with a persistent message; the previous project stays intact. Unfinished guardian groups can still be saved and reopened, but must be completed before playable export.
 
