@@ -1,0 +1,2163 @@
+{
+  "format": "pantokrator-atlas/population-recruitment",
+  "formatVersion": 1,
+  "gameVersion": "6.37",
+  "evidenceDate": "2026-09-21",
+  "purpose": "Static default recruitment membership evidence, not initial-army templates or a combat-balance model.",
+  "executable": {
+    "filename": "Dominions6.exe",
+    "platform": "Windows x64",
+    "bytes": 76009984,
+    "sha256": "d77cd364fe447e85e564cdd9460fcb5591f7e0b2089d6e58e9d2f2d907ee294c"
+  },
+  "provenance": {
+    "membership": "Read-only extraction of the exact installed executable identified above; eight separately observed native recruitment controls.",
+    "catalog": {
+      "filename": "BaseU.csv",
+      "bytes": 2504944,
+      "sha256": "185675d8906b87dc94070d52776e19cfefec4d2efcee9b6e8084aeba059e4ec5",
+      "revision": "c30c6c14e18ab284415d599b81579af9b3070112",
+      "source": "https://github.com/larzm42/dom6inspector/blob/c30c6c14e18ab284415d599b81579af9b3070112/gamedata/BaseU.csv",
+      "license": "GPL-3.0",
+      "licenseFile": "LICENSE.dom6inspector.txt"
+    },
+    "monsterLayoutReference": "https://github.com/larzm42/dom6utils/blob/fcb98596a4c092be2c8e8f0b5aae7fa4592d3eab/src/dom6utils/Starts.java",
+    "monsterNameEncodingReference": "https://github.com/larzm42/dom6utils/blob/fcb98596a4c092be2c8e8f0b5aae7fa4592d3eab/src/dom6utils/MonsterStatIndexer.java",
+    "note": "No executable bytes, game art, descriptions or third-party implementation are included. The population-table layout was independently identified from native controls; the referenced extractor does not export this table."
+  },
+  "layout": {
+    "fileOffset": "0x3091c50",
+    "recordBytes": 168,
+    "signedInt32Slots": 42,
+    "byteOrder": "little-endian",
+    "indexRule": "fileOffset + populationId * recordBytes",
+    "troopCommanderSeparator": -2,
+    "listTerminator": -1,
+    "trailingPadding": 0,
+    "initializedIndexes": [
+      0,
+      106
+    ],
+    "publishedPopulationIndexes": [
+      25,
+      106
+    ],
+    "zeroReservedIndexes": [
+      107,
+      249
+    ],
+    "monsterNameBase": "0x32ee3f8",
+    "monsterRecordBytes": 888,
+    "monsterIndexRule": "base + (unitId - 1) * recordBytes"
+  },
+  "scope": {
+    "nativeControlEra": 2,
+    "nativeControlMods": "none",
+    "nativeControlNation": 60,
+    "eraEvidence": "One population-indexed default table was identified. No era field or alternate era block was identified in these records. Runtime era, terrain, nation and mod overrides are not ruled out.",
+    "roleEvidence": "Recruitment categories and order come from positions before and after -2, not names, leadership fields or national recruitment.",
+    "excludedEvidence": "The separate 68-byte attribute/PD candidate is not used. Initial-army counts and post-capture PD are not extracted.",
+    "emptyVsUnknown": "Population106 is a delimited empty roster corroborated natively. All-zero reserved rows107-249 are not published as empty rosters.",
+    "templateBoundary": "Verify habitat, leadership, intended era and actual native initial-army export before promoting any defense template; membership alone does not choose commanders, counts or difficulty."
+  },
+  "validation": {
+    "populationRows": 82,
+    "exactInstalledAndCatalogIdentities": 175,
+    "strictChecks": "Exact version, lengths and hashes; one separator and terminator; positive resolved IDs; unique IDs within each role; zero trailing padding; reserved bounds; exact installed/catalog names; native controls.",
+    "bothCategories": [
+      75
+    ],
+    "nativeControls": [
+      {
+        "poptype": 44,
+        "troopIds": [
+          447
+        ],
+        "commanderIds": [],
+        "terrain": "dry Cave",
+        "method": "native-role-list-and-unique-name",
+        "notes": "Troop only; no recruitable commander observed. No numeric-ID panel claimed."
+      },
+      {
+        "poptype": 65,
+        "troopIds": [
+          974,
+          975
+        ],
+        "commanderIds": [
+          976
+        ],
+        "terrain": "Sea, not Cave",
+        "method": "native-role-order-and-exact-equipment",
+        "notes": "Ichtyid with Net/Stone Spear; armored Ichtyid Warrior; Ichtyid Lord with Bone Trident. No numeric-ID panel or exact rendered-stat-total claim."
+      },
+      {
+        "poptype": 81,
+        "troopIds": [
+          1465
+        ],
+        "commanderIds": [
+          1463
+        ],
+        "terrain": "dry Cave",
+        "method": "native-numeric-ID-panels",
+        "notes": "Both numeric IDs observed in the earlier r21 control."
+      },
+      {
+        "poptype": 84,
+        "troopIds": [
+          1615
+        ],
+        "commanderIds": [
+          1616
+        ],
+        "terrain": "dry Cave",
+        "method": "native-unique-names-and-attributes",
+        "notes": "Unique Caveman/Caveman Champion names and commander leadership 10. No numeric-ID panel claimed."
+      },
+      {
+        "poptype": 89,
+        "troopIds": [
+          1749,
+          1758,
+          1756
+        ],
+        "commanderIds": [
+          1750
+        ],
+        "terrain": "Plain",
+        "method": "native-role-order-and-exact-equipment",
+        "notes": "Militia, Slinger and Warrior distinguished by Bronze Spear, Sling/Bronze Dagger and Bronze Axe; Champion has Bronze Sword/Javelin. No numeric-ID panel claimed."
+      },
+      {
+        "poptype": 93,
+        "troopIds": [
+          2504
+        ],
+        "commanderIds": [
+          2505
+        ],
+        "terrain": "dry Cave",
+        "method": "native-disambiguating-attributes",
+        "notes": "Camazotz variant distinguished by ordinary/magic leadership 50/50, MR13 and Death1; not a name-only match. No numeric-ID panel claimed."
+      },
+      {
+        "poptype": 94,
+        "troopIds": [
+          2510
+        ],
+        "commanderIds": [
+          2511
+        ],
+        "terrain": "dry Cave",
+        "method": "native-unique-names-and-attributes",
+        "notes": "Unique Lava-born/Lava-born Commander names and commander leadership 50. No numeric-ID panel claimed."
+      },
+      {
+        "poptype": 106,
+        "troopIds": [],
+        "commanderIds": [],
+        "terrain": "dry Cave",
+        "method": "native-empty-role-lists",
+        "notes": "Neither commanders nor troops observed; distinct from missing data."
+      }
+    ]
+  },
+  "populations": [
+    {
+      "poptype": 25,
+      "troopIds": [
+        139,
+        140
+      ],
+      "commanderIds": [
+        141
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 4,
+      "fileOffset": "0x3092cb8"
+    },
+    {
+      "poptype": 26,
+      "troopIds": [
+        137
+      ],
+      "commanderIds": [
+        136
+      ],
+      "separatorSlot": 1,
+      "terminatorSlot": 3,
+      "fileOffset": "0x3092d60"
+    },
+    {
+      "poptype": 27,
+      "troopIds": [
+        30,
+        17,
+        38
+      ],
+      "commanderIds": [
+        34,
+        240
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 6,
+      "fileOffset": "0x3092e08"
+    },
+    {
+      "poptype": 28,
+      "troopIds": [
+        18,
+        33,
+        39
+      ],
+      "commanderIds": [
+        35,
+        240
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 6,
+      "fileOffset": "0x3092eb0"
+    },
+    {
+      "poptype": 29,
+      "troopIds": [
+        31,
+        32,
+        40
+      ],
+      "commanderIds": [
+        426,
+        36,
+        240
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 7,
+      "fileOffset": "0x3092f58"
+    },
+    {
+      "poptype": 30,
+      "troopIds": [
+        30,
+        55,
+        22
+      ],
+      "commanderIds": [
+        23,
+        240
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 6,
+      "fileOffset": "0x3093000"
+    },
+    {
+      "poptype": 31,
+      "troopIds": [
+        176
+      ],
+      "commanderIds": [
+        406
+      ],
+      "separatorSlot": 1,
+      "terminatorSlot": 3,
+      "fileOffset": "0x30930a8"
+    },
+    {
+      "poptype": 32,
+      "troopIds": [
+        29,
+        39,
+        47
+      ],
+      "commanderIds": [
+        35,
+        240
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 6,
+      "fileOffset": "0x3093150"
+    },
+    {
+      "poptype": 33,
+      "troopIds": [
+        29,
+        40,
+        48
+      ],
+      "commanderIds": [
+        36,
+        240
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 6,
+      "fileOffset": "0x30931f8"
+    },
+    {
+      "poptype": 34,
+      "troopIds": [
+        205
+      ],
+      "commanderIds": [
+        252
+      ],
+      "separatorSlot": 1,
+      "terminatorSlot": 3,
+      "fileOffset": "0x30932a0"
+    },
+    {
+      "poptype": 35,
+      "troopIds": [
+        50
+      ],
+      "commanderIds": [
+        34
+      ],
+      "separatorSlot": 1,
+      "terminatorSlot": 3,
+      "fileOffset": "0x3093348"
+    },
+    {
+      "poptype": 36,
+      "troopIds": [
+        423
+      ],
+      "commanderIds": [
+        1514
+      ],
+      "separatorSlot": 1,
+      "terminatorSlot": 3,
+      "fileOffset": "0x30933f0"
+    },
+    {
+      "poptype": 37,
+      "troopIds": [
+        125,
+        126
+      ],
+      "commanderIds": [
+        105
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 4,
+      "fileOffset": "0x3093498"
+    },
+    {
+      "poptype": 38,
+      "troopIds": [
+        483,
+        271,
+        273
+      ],
+      "commanderIds": [
+        272
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 5,
+      "fileOffset": "0x3093540"
+    },
+    {
+      "poptype": 39,
+      "troopIds": [
+        18,
+        33,
+        29
+      ],
+      "commanderIds": [
+        426,
+        34,
+        240
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 7,
+      "fileOffset": "0x30935e8"
+    },
+    {
+      "poptype": 40,
+      "troopIds": [
+        348,
+        367
+      ],
+      "commanderIds": [
+        347,
+        346
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 5,
+      "fileOffset": "0x3093690"
+    },
+    {
+      "poptype": 41,
+      "troopIds": [
+        351,
+        612
+      ],
+      "commanderIds": [
+        350,
+        349
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 5,
+      "fileOffset": "0x3093738"
+    },
+    {
+      "poptype": 42,
+      "troopIds": [
+        354,
+        370
+      ],
+      "commanderIds": [
+        353,
+        352
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 5,
+      "fileOffset": "0x30937e0"
+    },
+    {
+      "poptype": 43,
+      "troopIds": [
+        357,
+        369
+      ],
+      "commanderIds": [
+        356,
+        355
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 5,
+      "fileOffset": "0x3093888"
+    },
+    {
+      "poptype": 44,
+      "troopIds": [
+        447
+      ],
+      "commanderIds": [],
+      "separatorSlot": 1,
+      "terminatorSlot": 2,
+      "fileOffset": "0x3093930"
+    },
+    {
+      "poptype": 45,
+      "troopIds": [
+        175,
+        577,
+        545
+      ],
+      "commanderIds": [
+        406
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 5,
+      "fileOffset": "0x30939d8"
+    },
+    {
+      "poptype": 46,
+      "troopIds": [
+        574,
+        573
+      ],
+      "commanderIds": [
+        576,
+        575
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 5,
+      "fileOffset": "0x3093a80"
+    },
+    {
+      "poptype": 47,
+      "troopIds": [
+        49,
+        21
+      ],
+      "commanderIds": [
+        426,
+        44,
+        240
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 6,
+      "fileOffset": "0x3093b28"
+    },
+    {
+      "poptype": 48,
+      "troopIds": [
+        30,
+        28,
+        38
+      ],
+      "commanderIds": [
+        34,
+        240
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 6,
+      "fileOffset": "0x3093bd0"
+    },
+    {
+      "poptype": 49,
+      "troopIds": [
+        18,
+        28,
+        39
+      ],
+      "commanderIds": [
+        35,
+        240
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 6,
+      "fileOffset": "0x3093c78"
+    },
+    {
+      "poptype": 50,
+      "troopIds": [
+        31,
+        29,
+        40
+      ],
+      "commanderIds": [
+        426,
+        36,
+        240
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 7,
+      "fileOffset": "0x3093d20"
+    },
+    {
+      "poptype": 51,
+      "troopIds": [
+        30,
+        24,
+        20
+      ],
+      "commanderIds": [
+        46,
+        240
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 6,
+      "fileOffset": "0x3093dc8"
+    },
+    {
+      "poptype": 52,
+      "troopIds": [
+        18,
+        25,
+        19
+      ],
+      "commanderIds": [
+        45,
+        240
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 6,
+      "fileOffset": "0x3093e70"
+    },
+    {
+      "poptype": 53,
+      "troopIds": [
+        31,
+        26,
+        21
+      ],
+      "commanderIds": [
+        426,
+        44,
+        240
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 7,
+      "fileOffset": "0x3093f18"
+    },
+    {
+      "poptype": 54,
+      "troopIds": [
+        38,
+        20
+      ],
+      "commanderIds": [
+        46,
+        240
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 5,
+      "fileOffset": "0x3093fc0"
+    },
+    {
+      "poptype": 55,
+      "troopIds": [
+        39,
+        19
+      ],
+      "commanderIds": [
+        45,
+        240
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 5,
+      "fileOffset": "0x3094068"
+    },
+    {
+      "poptype": 56,
+      "troopIds": [
+        40,
+        21
+      ],
+      "commanderIds": [
+        426,
+        44,
+        240
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 6,
+      "fileOffset": "0x3094110"
+    },
+    {
+      "poptype": 57,
+      "troopIds": [
+        110,
+        206
+      ],
+      "commanderIds": [
+        207
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 4,
+      "fileOffset": "0x30941b8"
+    },
+    {
+      "poptype": 58,
+      "troopIds": [
+        29,
+        40,
+        49
+      ],
+      "commanderIds": [
+        36,
+        240
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 6,
+      "fileOffset": "0x3094260"
+    },
+    {
+      "poptype": 59,
+      "troopIds": [
+        30,
+        28,
+        17
+      ],
+      "commanderIds": [
+        34,
+        240
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 6,
+      "fileOffset": "0x3094308"
+    },
+    {
+      "poptype": 60,
+      "troopIds": [
+        18,
+        29,
+        33
+      ],
+      "commanderIds": [
+        35,
+        240
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 6,
+      "fileOffset": "0x30943b0"
+    },
+    {
+      "poptype": 61,
+      "troopIds": [
+        541,
+        282,
+        518
+      ],
+      "commanderIds": [
+        283
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 5,
+      "fileOffset": "0x3094458"
+    },
+    {
+      "poptype": 62,
+      "troopIds": [
+        1595,
+        1594
+      ],
+      "commanderIds": [
+        1598
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 4,
+      "fileOffset": "0x3094500"
+    },
+    {
+      "poptype": 63,
+      "troopIds": [
+        176,
+        174,
+        175
+      ],
+      "commanderIds": [
+        406
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 5,
+      "fileOffset": "0x30945a8"
+    },
+    {
+      "poptype": 64,
+      "troopIds": [
+        175,
+        577
+      ],
+      "commanderIds": [
+        406
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 4,
+      "fileOffset": "0x3094650"
+    },
+    {
+      "poptype": 65,
+      "troopIds": [
+        974,
+        975
+      ],
+      "commanderIds": [
+        976
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 4,
+      "fileOffset": "0x30946f8"
+    },
+    {
+      "poptype": 66,
+      "troopIds": [
+        541,
+        282,
+        1085
+      ],
+      "commanderIds": [
+        283
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 5,
+      "fileOffset": "0x30947a0"
+    },
+    {
+      "poptype": 67,
+      "troopIds": [
+        541,
+        282,
+        1085
+      ],
+      "commanderIds": [
+        283,
+        913,
+        323
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 7,
+      "fileOffset": "0x3094848"
+    },
+    {
+      "poptype": 68,
+      "troopIds": [
+        50,
+        38,
+        150
+      ],
+      "commanderIds": [
+        34,
+        240
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 6,
+      "fileOffset": "0x30948f0"
+    },
+    {
+      "poptype": 69,
+      "troopIds": [
+        1001
+      ],
+      "commanderIds": [
+        1002
+      ],
+      "separatorSlot": 1,
+      "terminatorSlot": 3,
+      "fileOffset": "0x3094998"
+    },
+    {
+      "poptype": 70,
+      "troopIds": [
+        541,
+        282,
+        1085
+      ],
+      "commanderIds": [
+        283,
+        913,
+        1010
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 7,
+      "fileOffset": "0x3094a40"
+    },
+    {
+      "poptype": 71,
+      "troopIds": [
+        518,
+        1037,
+        1086
+      ],
+      "commanderIds": [
+        519
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 5,
+      "fileOffset": "0x3094ae8"
+    },
+    {
+      "poptype": 72,
+      "troopIds": [
+        1065
+      ],
+      "commanderIds": [
+        1067
+      ],
+      "separatorSlot": 1,
+      "terminatorSlot": 3,
+      "fileOffset": "0x3094b90"
+    },
+    {
+      "poptype": 73,
+      "troopIds": [
+        175,
+        577,
+        1060
+      ],
+      "commanderIds": [
+        406
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 5,
+      "fileOffset": "0x3094c38"
+    },
+    {
+      "poptype": 74,
+      "troopIds": [
+        29,
+        26,
+        1187
+      ],
+      "commanderIds": [
+        46,
+        240
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 6,
+      "fileOffset": "0x3094ce0"
+    },
+    {
+      "poptype": 75,
+      "troopIds": [
+        483,
+        271,
+        273,
+        1196
+      ],
+      "commanderIds": [
+        272,
+        1196,
+        1195,
+        1198
+      ],
+      "separatorSlot": 4,
+      "terminatorSlot": 9,
+      "fileOffset": "0x3094d88"
+    },
+    {
+      "poptype": 76,
+      "troopIds": [
+        483
+      ],
+      "commanderIds": [
+        1195,
+        1198
+      ],
+      "separatorSlot": 1,
+      "terminatorSlot": 4,
+      "fileOffset": "0x3094e30"
+    },
+    {
+      "poptype": 77,
+      "troopIds": [
+        1118,
+        1121,
+        1122
+      ],
+      "commanderIds": [
+        1127
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 5,
+      "fileOffset": "0x3094ed8"
+    },
+    {
+      "poptype": 78,
+      "troopIds": [
+        123,
+        124
+      ],
+      "commanderIds": [
+        1596
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 4,
+      "fileOffset": "0x3094f80"
+    },
+    {
+      "poptype": 79,
+      "troopIds": [
+        1592,
+        1593
+      ],
+      "commanderIds": [
+        1597
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 4,
+      "fileOffset": "0x3095028"
+    },
+    {
+      "poptype": 80,
+      "troopIds": [
+        1601,
+        1600
+      ],
+      "commanderIds": [
+        1602
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 4,
+      "fileOffset": "0x30950d0"
+    },
+    {
+      "poptype": 81,
+      "troopIds": [
+        1465
+      ],
+      "commanderIds": [
+        1463
+      ],
+      "separatorSlot": 1,
+      "terminatorSlot": 3,
+      "fileOffset": "0x3095178"
+    },
+    {
+      "poptype": 82,
+      "troopIds": [
+        1610,
+        1611
+      ],
+      "commanderIds": [
+        1612
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 4,
+      "fileOffset": "0x3095220"
+    },
+    {
+      "poptype": 83,
+      "troopIds": [
+        1613
+      ],
+      "commanderIds": [
+        1614
+      ],
+      "separatorSlot": 1,
+      "terminatorSlot": 3,
+      "fileOffset": "0x30952c8"
+    },
+    {
+      "poptype": 84,
+      "troopIds": [
+        1615
+      ],
+      "commanderIds": [
+        1616
+      ],
+      "separatorSlot": 1,
+      "terminatorSlot": 3,
+      "fileOffset": "0x3095370"
+    },
+    {
+      "poptype": 85,
+      "troopIds": [
+        1550
+      ],
+      "commanderIds": [
+        1531
+      ],
+      "separatorSlot": 1,
+      "terminatorSlot": 3,
+      "fileOffset": "0x3095418"
+    },
+    {
+      "poptype": 86,
+      "troopIds": [
+        1394
+      ],
+      "commanderIds": [
+        1845
+      ],
+      "separatorSlot": 1,
+      "terminatorSlot": 3,
+      "fileOffset": "0x30954c0"
+    },
+    {
+      "poptype": 87,
+      "troopIds": [
+        1394,
+        1395
+      ],
+      "commanderIds": [
+        1845
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 4,
+      "fileOffset": "0x3095568"
+    },
+    {
+      "poptype": 88,
+      "troopIds": [
+        1836
+      ],
+      "commanderIds": [
+        1609
+      ],
+      "separatorSlot": 1,
+      "terminatorSlot": 3,
+      "fileOffset": "0x3095610"
+    },
+    {
+      "poptype": 89,
+      "troopIds": [
+        1749,
+        1758,
+        1756
+      ],
+      "commanderIds": [
+        1750
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 5,
+      "fileOffset": "0x30956b8"
+    },
+    {
+      "poptype": 90,
+      "troopIds": [
+        2382
+      ],
+      "commanderIds": [
+        406
+      ],
+      "separatorSlot": 1,
+      "terminatorSlot": 3,
+      "fileOffset": "0x3095760"
+    },
+    {
+      "poptype": 91,
+      "troopIds": [
+        2383
+      ],
+      "commanderIds": [
+        406
+      ],
+      "separatorSlot": 1,
+      "terminatorSlot": 3,
+      "fileOffset": "0x3095808"
+    },
+    {
+      "poptype": 92,
+      "troopIds": [
+        2383,
+        545
+      ],
+      "commanderIds": [
+        406
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 4,
+      "fileOffset": "0x30958b0"
+    },
+    {
+      "poptype": 93,
+      "troopIds": [
+        2504
+      ],
+      "commanderIds": [
+        2505
+      ],
+      "separatorSlot": 1,
+      "terminatorSlot": 3,
+      "fileOffset": "0x3095958"
+    },
+    {
+      "poptype": 94,
+      "troopIds": [
+        2510
+      ],
+      "commanderIds": [
+        2511
+      ],
+      "separatorSlot": 1,
+      "terminatorSlot": 3,
+      "fileOffset": "0x3095a00"
+    },
+    {
+      "poptype": 95,
+      "troopIds": [
+        974
+      ],
+      "commanderIds": [
+        2804
+      ],
+      "separatorSlot": 1,
+      "terminatorSlot": 3,
+      "fileOffset": "0x3095aa8"
+    },
+    {
+      "poptype": 96,
+      "troopIds": [
+        2817,
+        2818
+      ],
+      "commanderIds": [
+        2819,
+        2820
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 5,
+      "fileOffset": "0x3095b50"
+    },
+    {
+      "poptype": 97,
+      "troopIds": [
+        2902,
+        2903,
+        2904
+      ],
+      "commanderIds": [
+        2905,
+        2906
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 6,
+      "fileOffset": "0x3095bf8"
+    },
+    {
+      "poptype": 98,
+      "troopIds": [
+        3089
+      ],
+      "commanderIds": [
+        3093
+      ],
+      "separatorSlot": 1,
+      "terminatorSlot": 3,
+      "fileOffset": "0x3095ca0"
+    },
+    {
+      "poptype": 99,
+      "troopIds": [
+        3183,
+        3184,
+        50
+      ],
+      "commanderIds": [
+        3182
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 5,
+      "fileOffset": "0x3095d48"
+    },
+    {
+      "poptype": 100,
+      "troopIds": [
+        3185,
+        50
+      ],
+      "commanderIds": [
+        3186
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 4,
+      "fileOffset": "0x3095df0"
+    },
+    {
+      "poptype": 101,
+      "troopIds": [
+        3187,
+        3185,
+        17
+      ],
+      "commanderIds": [
+        3186
+      ],
+      "separatorSlot": 3,
+      "terminatorSlot": 5,
+      "fileOffset": "0x3095e98"
+    },
+    {
+      "poptype": 102,
+      "troopIds": [
+        3188,
+        50
+      ],
+      "commanderIds": [
+        3186
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 4,
+      "fileOffset": "0x3095f40"
+    },
+    {
+      "poptype": 103,
+      "troopIds": [
+        3276,
+        3277
+      ],
+      "commanderIds": [
+        3278,
+        3279
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 5,
+      "fileOffset": "0x3095fe8"
+    },
+    {
+      "poptype": 104,
+      "troopIds": [
+        3689,
+        3836,
+        3837,
+        3838
+      ],
+      "commanderIds": [
+        3839
+      ],
+      "separatorSlot": 4,
+      "terminatorSlot": 6,
+      "fileOffset": "0x3096090"
+    },
+    {
+      "poptype": 105,
+      "troopIds": [
+        1489,
+        1472
+      ],
+      "commanderIds": [
+        1638
+      ],
+      "separatorSlot": 2,
+      "terminatorSlot": 4,
+      "fileOffset": "0x3096138"
+    },
+    {
+      "poptype": 106,
+      "troopIds": [],
+      "commanderIds": [],
+      "separatorSlot": 0,
+      "terminatorSlot": 1,
+      "fileOffset": "0x30961e0"
+    }
+  ],
+  "identities": [
+    {
+      "id": 17,
+      "name": "Archer",
+      "monsterFileOffset": "0x32f1b78"
+    },
+    {
+      "id": 18,
+      "name": "Militia",
+      "monsterFileOffset": "0x32f1ef0"
+    },
+    {
+      "id": 19,
+      "name": "Heavy Cavalry",
+      "monsterFileOffset": "0x32f2268"
+    },
+    {
+      "id": 20,
+      "name": "Heavy Cavalry",
+      "monsterFileOffset": "0x32f25e0"
+    },
+    {
+      "id": 21,
+      "name": "Heavy Cavalry",
+      "monsterFileOffset": "0x32f2958"
+    },
+    {
+      "id": 22,
+      "name": "Knight",
+      "monsterFileOffset": "0x32f2cd0"
+    },
+    {
+      "id": 23,
+      "name": "Knight Commander",
+      "monsterFileOffset": "0x32f3048"
+    },
+    {
+      "id": 24,
+      "name": "Light Cavalry",
+      "monsterFileOffset": "0x32f33c0"
+    },
+    {
+      "id": 25,
+      "name": "Light Cavalry",
+      "monsterFileOffset": "0x32f3738"
+    },
+    {
+      "id": 26,
+      "name": "Light Cavalry",
+      "monsterFileOffset": "0x32f3ab0"
+    },
+    {
+      "id": 28,
+      "name": "Light Infantry",
+      "monsterFileOffset": "0x32f41a0"
+    },
+    {
+      "id": 29,
+      "name": "Light Infantry",
+      "monsterFileOffset": "0x32f4518"
+    },
+    {
+      "id": 30,
+      "name": "Militia",
+      "monsterFileOffset": "0x32f4890"
+    },
+    {
+      "id": 31,
+      "name": "Militia",
+      "monsterFileOffset": "0x32f4c08"
+    },
+    {
+      "id": 32,
+      "name": "Archer",
+      "monsterFileOffset": "0x32f4f80"
+    },
+    {
+      "id": 33,
+      "name": "Archer",
+      "monsterFileOffset": "0x32f52f8"
+    },
+    {
+      "id": 34,
+      "name": "Commander",
+      "monsterFileOffset": "0x32f5670"
+    },
+    {
+      "id": 35,
+      "name": "Commander",
+      "monsterFileOffset": "0x32f59e8"
+    },
+    {
+      "id": 36,
+      "name": "Commander",
+      "monsterFileOffset": "0x32f5d60"
+    },
+    {
+      "id": 38,
+      "name": "Heavy Infantry",
+      "monsterFileOffset": "0x32f6450"
+    },
+    {
+      "id": 39,
+      "name": "Heavy Infantry",
+      "monsterFileOffset": "0x32f67c8"
+    },
+    {
+      "id": 40,
+      "name": "Heavy Infantry",
+      "monsterFileOffset": "0x32f6b40"
+    },
+    {
+      "id": 44,
+      "name": "Mounted Commander",
+      "monsterFileOffset": "0x32f7920"
+    },
+    {
+      "id": 45,
+      "name": "Mounted Commander",
+      "monsterFileOffset": "0x32f7c98"
+    },
+    {
+      "id": 46,
+      "name": "Mounted Commander",
+      "monsterFileOffset": "0x32f8010"
+    },
+    {
+      "id": 47,
+      "name": "Crossbowman",
+      "monsterFileOffset": "0x32f8388"
+    },
+    {
+      "id": 48,
+      "name": "Crossbowman",
+      "monsterFileOffset": "0x32f8700"
+    },
+    {
+      "id": 49,
+      "name": "Crossbowman",
+      "monsterFileOffset": "0x32f8a78"
+    },
+    {
+      "id": 50,
+      "name": "Slinger",
+      "monsterFileOffset": "0x32f8df0"
+    },
+    {
+      "id": 55,
+      "name": "Longbowman",
+      "monsterFileOffset": "0x32f9f48"
+    },
+    {
+      "id": 105,
+      "name": "Woodhenge Druid",
+      "monsterFileOffset": "0x3304cb8"
+    },
+    {
+      "id": 110,
+      "name": "Atlantian Militia",
+      "monsterFileOffset": "0x3305e10"
+    },
+    {
+      "id": 123,
+      "name": "Wolf Tribe Archer",
+      "monsterFileOffset": "0x3308b28"
+    },
+    {
+      "id": 124,
+      "name": "Wolf Tribe Warrior",
+      "monsterFileOffset": "0x3308ea0"
+    },
+    {
+      "id": 125,
+      "name": "Woodsman Blowpipe",
+      "monsterFileOffset": "0x3309218"
+    },
+    {
+      "id": 126,
+      "name": "Woodsman",
+      "monsterFileOffset": "0x3309590"
+    },
+    {
+      "id": 136,
+      "name": "Horse Tribe Chief",
+      "monsterFileOffset": "0x330b840"
+    },
+    {
+      "id": 137,
+      "name": "Horse Tribe Cavalry",
+      "monsterFileOffset": "0x330bbb8"
+    },
+    {
+      "id": 139,
+      "name": "Barbarian",
+      "monsterFileOffset": "0x330c2a8"
+    },
+    {
+      "id": 140,
+      "name": "Barbarian",
+      "monsterFileOffset": "0x330c620"
+    },
+    {
+      "id": 141,
+      "name": "Barbarian Chief",
+      "monsterFileOffset": "0x330c998"
+    },
+    {
+      "id": 150,
+      "name": "Elephant Rider",
+      "monsterFileOffset": "0x330e8d0"
+    },
+    {
+      "id": 174,
+      "name": "Triton",
+      "monsterFileOffset": "0x3313c10"
+    },
+    {
+      "id": 175,
+      "name": "Triton Guard",
+      "monsterFileOffset": "0x3313f88"
+    },
+    {
+      "id": 176,
+      "name": "Triton",
+      "monsterFileOffset": "0x3314300"
+    },
+    {
+      "id": 205,
+      "name": "Raptor",
+      "monsterFileOffset": "0x331a798"
+    },
+    {
+      "id": 206,
+      "name": "Shambler",
+      "monsterFileOffset": "0x331ab10"
+    },
+    {
+      "id": 207,
+      "name": "Shambler Chief",
+      "monsterFileOffset": "0x331ae88"
+    },
+    {
+      "id": 240,
+      "name": "Priest",
+      "monsterFileOffset": "0x3322100"
+    },
+    {
+      "id": 252,
+      "name": "Harab Seraph",
+      "monsterFileOffset": "0x3324aa0"
+    },
+    {
+      "id": 271,
+      "name": "Burgmeister Guard",
+      "monsterFileOffset": "0x3328c88"
+    },
+    {
+      "id": 272,
+      "name": "Hoburg Champion",
+      "monsterFileOffset": "0x3329000"
+    },
+    {
+      "id": 273,
+      "name": "Hoburg Crossbow",
+      "monsterFileOffset": "0x3329378"
+    },
+    {
+      "id": 282,
+      "name": "Wolf Rider",
+      "monsterFileOffset": "0x332b2b0"
+    },
+    {
+      "id": 283,
+      "name": "Chief",
+      "monsterFileOffset": "0x332b628"
+    },
+    {
+      "id": 323,
+      "name": "Dwarven Smith",
+      "monsterFileOffset": "0x33340e8"
+    },
+    {
+      "id": 346,
+      "name": "Crystal Sorceress",
+      "monsterFileOffset": "0x33390b0"
+    },
+    {
+      "id": 347,
+      "name": "Crystal Priestess",
+      "monsterFileOffset": "0x3339428"
+    },
+    {
+      "id": 348,
+      "name": "Amazon",
+      "monsterFileOffset": "0x33397a0"
+    },
+    {
+      "id": 349,
+      "name": "Garnet Sorceress",
+      "monsterFileOffset": "0x3339b18"
+    },
+    {
+      "id": 350,
+      "name": "Garnet Priestess",
+      "monsterFileOffset": "0x3339e90"
+    },
+    {
+      "id": 351,
+      "name": "Amazon",
+      "monsterFileOffset": "0x333a208"
+    },
+    {
+      "id": 352,
+      "name": "Jade Sorceress",
+      "monsterFileOffset": "0x333a580"
+    },
+    {
+      "id": 353,
+      "name": "Jade Priestess",
+      "monsterFileOffset": "0x333a8f8"
+    },
+    {
+      "id": 354,
+      "name": "Amazon",
+      "monsterFileOffset": "0x333ac70"
+    },
+    {
+      "id": 355,
+      "name": "Onyx Sorceress",
+      "monsterFileOffset": "0x333afe8"
+    },
+    {
+      "id": 356,
+      "name": "Onyx Priestess",
+      "monsterFileOffset": "0x333b360"
+    },
+    {
+      "id": 357,
+      "name": "Amazon",
+      "monsterFileOffset": "0x333b6d8"
+    },
+    {
+      "id": 367,
+      "name": "Pegasus Rider",
+      "monsterFileOffset": "0x333d988"
+    },
+    {
+      "id": 369,
+      "name": "Nightmare Rider",
+      "monsterFileOffset": "0x333e078"
+    },
+    {
+      "id": 370,
+      "name": "Jade Maiden",
+      "monsterFileOffset": "0x333e3f0"
+    },
+    {
+      "id": 406,
+      "name": "Triton Commander",
+      "monsterFileOffset": "0x33460d0"
+    },
+    {
+      "id": 423,
+      "name": "Lizard Warrior",
+      "monsterFileOffset": "0x3349bc8"
+    },
+    {
+      "id": 426,
+      "name": "Scout",
+      "monsterFileOffset": "0x334a630"
+    },
+    {
+      "id": 447,
+      "name": "Troglodyte",
+      "monsterFileOffset": "0x334ef08"
+    },
+    {
+      "id": 483,
+      "name": "Hoburg Militia",
+      "monsterFileOffset": "0x3356be8"
+    },
+    {
+      "id": 518,
+      "name": "Troll",
+      "monsterFileOffset": "0x335e550"
+    },
+    {
+      "id": 519,
+      "name": "Troll King",
+      "monsterFileOffset": "0x335e8c8"
+    },
+    {
+      "id": 541,
+      "name": "Vaetti",
+      "monsterFileOffset": "0x3363518"
+    },
+    {
+      "id": 545,
+      "name": "Shark Knight",
+      "monsterFileOffset": "0x33642f8"
+    },
+    {
+      "id": 573,
+      "name": "Amber Clan Guard",
+      "monsterFileOffset": "0x336a418"
+    },
+    {
+      "id": 574,
+      "name": "Amber Clan Triton",
+      "monsterFileOffset": "0x336a790"
+    },
+    {
+      "id": 575,
+      "name": "Amber Clan Mage",
+      "monsterFileOffset": "0x336ab08"
+    },
+    {
+      "id": 576,
+      "name": "Amber Clan Priest",
+      "monsterFileOffset": "0x336ae80"
+    },
+    {
+      "id": 577,
+      "name": "Triton Trooper",
+      "monsterFileOffset": "0x336b1f8"
+    },
+    {
+      "id": 612,
+      "name": "Gryphon Rider",
+      "monsterFileOffset": "0x3372b60"
+    },
+    {
+      "id": 913,
+      "name": "Vaetti Hag",
+      "monsterFileOffset": "0x33b3f78"
+    },
+    {
+      "id": 974,
+      "name": "Ichtyid",
+      "monsterFileOffset": "0x33c1310"
+    },
+    {
+      "id": 975,
+      "name": "Ichtyid Warrior",
+      "monsterFileOffset": "0x33c1688"
+    },
+    {
+      "id": 976,
+      "name": "Ichtyid Lord",
+      "monsterFileOffset": "0x33c1a00"
+    },
+    {
+      "id": 1001,
+      "name": "Asmeg",
+      "monsterFileOffset": "0x33c70b8"
+    },
+    {
+      "id": 1002,
+      "name": "Asmeg Jarl",
+      "monsterFileOffset": "0x33c7430"
+    },
+    {
+      "id": 1010,
+      "name": "Svartalf",
+      "monsterFileOffset": "0x33c8ff0"
+    },
+    {
+      "id": 1037,
+      "name": "War Troll",
+      "monsterFileOffset": "0x33ced98"
+    },
+    {
+      "id": 1060,
+      "name": "Triton Knight",
+      "monsterFileOffset": "0x33d3d60"
+    },
+    {
+      "id": 1065,
+      "name": "Merman",
+      "monsterFileOffset": "0x33d4eb8"
+    },
+    {
+      "id": 1067,
+      "name": "Merman Captain",
+      "monsterFileOffset": "0x33d55a8"
+    },
+    {
+      "id": 1085,
+      "name": "Moose Rider",
+      "monsterFileOffset": "0x33d9418"
+    },
+    {
+      "id": 1086,
+      "name": "Troll Moose Knight",
+      "monsterFileOffset": "0x33d9790"
+    },
+    {
+      "id": 1118,
+      "name": "Markata",
+      "monsterFileOffset": "0x33e0690"
+    },
+    {
+      "id": 1121,
+      "name": "Atavi Archer",
+      "monsterFileOffset": "0x33e10f8"
+    },
+    {
+      "id": 1122,
+      "name": "Atavi Infantry",
+      "monsterFileOffset": "0x33e1470"
+    },
+    {
+      "id": 1127,
+      "name": "Atavi Chieftain",
+      "monsterFileOffset": "0x33e25c8"
+    },
+    {
+      "id": 1187,
+      "name": "Cataphract",
+      "monsterFileOffset": "0x33ef5e8"
+    },
+    {
+      "id": 1195,
+      "name": "Hoburg Priest",
+      "monsterFileOffset": "0x33f11a8"
+    },
+    {
+      "id": 1196,
+      "name": "Hog Knight",
+      "monsterFileOffset": "0x33f1520"
+    },
+    {
+      "id": 1198,
+      "name": "Horticulturist",
+      "monsterFileOffset": "0x33f1c10"
+    },
+    {
+      "id": 1394,
+      "name": "Bakemono-Sho",
+      "monsterFileOffset": "0x341c3f0"
+    },
+    {
+      "id": 1395,
+      "name": "Bakemono Archer",
+      "monsterFileOffset": "0x341c768"
+    },
+    {
+      "id": 1463,
+      "name": "Pale One Commander",
+      "monsterFileOffset": "0x342b348"
+    },
+    {
+      "id": 1465,
+      "name": "Pale One",
+      "monsterFileOffset": "0x342ba38"
+    },
+    {
+      "id": 1472,
+      "name": "Pale One Soldier",
+      "monsterFileOffset": "0x342d280"
+    },
+    {
+      "id": 1489,
+      "name": "Wet One",
+      "monsterFileOffset": "0x3430d78"
+    },
+    {
+      "id": 1514,
+      "name": "Lizard Shaman",
+      "monsterFileOffset": "0x3436430"
+    },
+    {
+      "id": 1531,
+      "name": "Kappa Chief",
+      "monsterFileOffset": "0x3439f28"
+    },
+    {
+      "id": 1550,
+      "name": "Kappa",
+      "monsterFileOffset": "0x343e110"
+    },
+    {
+      "id": 1592,
+      "name": "Bear Tribe Warrior",
+      "monsterFileOffset": "0x34472c0"
+    },
+    {
+      "id": 1593,
+      "name": "Bear Tribe Warrior",
+      "monsterFileOffset": "0x3447638"
+    },
+    {
+      "id": 1594,
+      "name": "Deer Tribe Warrior",
+      "monsterFileOffset": "0x34479b0"
+    },
+    {
+      "id": 1595,
+      "name": "Deer Tribe Archer",
+      "monsterFileOffset": "0x3447d28"
+    },
+    {
+      "id": 1596,
+      "name": "Wolf Tribe Shaman",
+      "monsterFileOffset": "0x34480a0"
+    },
+    {
+      "id": 1597,
+      "name": "Bear Tribe Shaman",
+      "monsterFileOffset": "0x3448418"
+    },
+    {
+      "id": 1598,
+      "name": "Deer Tribe Shaman",
+      "monsterFileOffset": "0x3448790"
+    },
+    {
+      "id": 1600,
+      "name": "Lion Tribe Warrior",
+      "monsterFileOffset": "0x3448e80"
+    },
+    {
+      "id": 1601,
+      "name": "Lion Tribe Archer",
+      "monsterFileOffset": "0x34491f8"
+    },
+    {
+      "id": 1602,
+      "name": "Lion Tribe Witch Doctor",
+      "monsterFileOffset": "0x3449570"
+    },
+    {
+      "id": 1609,
+      "name": "Demon Priest",
+      "monsterFileOffset": "0x344adb8"
+    },
+    {
+      "id": 1610,
+      "name": "Jaguar Tribe Slinger",
+      "monsterFileOffset": "0x344b130"
+    },
+    {
+      "id": 1611,
+      "name": "Jaguar Tribe Warrior",
+      "monsterFileOffset": "0x344b4a8"
+    },
+    {
+      "id": 1612,
+      "name": "Jaguar Tribe Priest",
+      "monsterFileOffset": "0x344b820"
+    },
+    {
+      "id": 1613,
+      "name": "Toad Tribe Warrior",
+      "monsterFileOffset": "0x344bb98"
+    },
+    {
+      "id": 1614,
+      "name": "Toad Tribe Shaman",
+      "monsterFileOffset": "0x344bf10"
+    },
+    {
+      "id": 1615,
+      "name": "Caveman",
+      "monsterFileOffset": "0x344c288"
+    },
+    {
+      "id": 1616,
+      "name": "Caveman Champion",
+      "monsterFileOffset": "0x344c600"
+    },
+    {
+      "id": 1638,
+      "name": "Wet One Captain",
+      "monsterFileOffset": "0x3451250"
+    },
+    {
+      "id": 1749,
+      "name": "Fir Bolg Militia",
+      "monsterFileOffset": "0x3469358"
+    },
+    {
+      "id": 1750,
+      "name": "Fir Bolg Champion",
+      "monsterFileOffset": "0x34696d0"
+    },
+    {
+      "id": 1756,
+      "name": "Fir Bolg Warrior",
+      "monsterFileOffset": "0x346aba0"
+    },
+    {
+      "id": 1758,
+      "name": "Fir Bolg Slinger",
+      "monsterFileOffset": "0x346b290"
+    },
+    {
+      "id": 1836,
+      "name": "Ko-Oni",
+      "monsterFileOffset": "0x347c120"
+    },
+    {
+      "id": 1845,
+      "name": "Bakemono Chief",
+      "monsterFileOffset": "0x347e058"
+    },
+    {
+      "id": 2382,
+      "name": "Turtle Tribe Triton",
+      "monsterFileOffset": "0x34f2710"
+    },
+    {
+      "id": 2383,
+      "name": "Shark Tribe Triton",
+      "monsterFileOffset": "0x34f2a88"
+    },
+    {
+      "id": 2504,
+      "name": "Zotz",
+      "monsterFileOffset": "0x350ce40"
+    },
+    {
+      "id": 2505,
+      "name": "Camazotz",
+      "monsterFileOffset": "0x350d1b8"
+    },
+    {
+      "id": 2510,
+      "name": "Lava-born",
+      "monsterFileOffset": "0x350e310"
+    },
+    {
+      "id": 2511,
+      "name": "Lava-born Commander",
+      "monsterFileOffset": "0x350e688"
+    },
+    {
+      "id": 2804,
+      "name": "Ichtyid Shaman",
+      "monsterFileOffset": "0x354dee0"
+    },
+    {
+      "id": 2817,
+      "name": "Bone Tribe Hunter",
+      "monsterFileOffset": "0x3550bf8"
+    },
+    {
+      "id": 2818,
+      "name": "Bone Tribe Beast Hunter",
+      "monsterFileOffset": "0x3550f70"
+    },
+    {
+      "id": 2819,
+      "name": "Bone Tribe Head Hunter",
+      "monsterFileOffset": "0x35512e8"
+    },
+    {
+      "id": 2820,
+      "name": "Bone Reader",
+      "monsterFileOffset": "0x3551660"
+    },
+    {
+      "id": 2902,
+      "name": "Merrow Militia",
+      "monsterFileOffset": "0x35632d0"
+    },
+    {
+      "id": 2903,
+      "name": "Merrow",
+      "monsterFileOffset": "0x3563648"
+    },
+    {
+      "id": 2904,
+      "name": "Merrow",
+      "monsterFileOffset": "0x35639c0"
+    },
+    {
+      "id": 2905,
+      "name": "Merrow Chieftain",
+      "monsterFileOffset": "0x3563d38"
+    },
+    {
+      "id": 2906,
+      "name": "Merrow Druid",
+      "monsterFileOffset": "0x35640b0"
+    },
+    {
+      "id": 3089,
+      "name": "Kulullu",
+      "monsterFileOffset": "0x358bb78"
+    },
+    {
+      "id": 3093,
+      "name": "Kulullu Commander",
+      "monsterFileOffset": "0x358c958"
+    },
+    {
+      "id": 3182,
+      "name": "Commander",
+      "monsterFileOffset": "0x359fe10"
+    },
+    {
+      "id": 3183,
+      "name": "Ekdromos",
+      "monsterFileOffset": "0x35a0188"
+    },
+    {
+      "id": 3184,
+      "name": "Hoplite",
+      "monsterFileOffset": "0x35a0500"
+    },
+    {
+      "id": 3185,
+      "name": "Heavy Infantry",
+      "monsterFileOffset": "0x35a0878"
+    },
+    {
+      "id": 3186,
+      "name": "Commander",
+      "monsterFileOffset": "0x35a0bf0"
+    },
+    {
+      "id": 3187,
+      "name": "Heavy Cavalry",
+      "monsterFileOffset": "0x35a0f68"
+    },
+    {
+      "id": 3188,
+      "name": "Heavy Infantry",
+      "monsterFileOffset": "0x35a12e0"
+    },
+    {
+      "id": 3276,
+      "name": "Cynocephalian Hunter",
+      "monsterFileOffset": "0x35b4420"
+    },
+    {
+      "id": 3277,
+      "name": "Cynocephalian Warrior",
+      "monsterFileOffset": "0x35b4798"
+    },
+    {
+      "id": 3278,
+      "name": "Cynocephalian Chieftain",
+      "monsterFileOffset": "0x35b4b10"
+    },
+    {
+      "id": 3279,
+      "name": "Cynocephalian Shaman",
+      "monsterFileOffset": "0x35b4e88"
+    },
+    {
+      "id": 3689,
+      "name": "Bekryde Hunter",
+      "monsterFileOffset": "0x360dcb8"
+    },
+    {
+      "id": 3836,
+      "name": "Bekryde",
+      "monsterFileOffset": "0x362daa0"
+    },
+    {
+      "id": 3837,
+      "name": "Bekryde",
+      "monsterFileOffset": "0x362de18"
+    },
+    {
+      "id": 3838,
+      "name": "Bekryde Warrior",
+      "monsterFileOffset": "0x362e190"
+    },
+    {
+      "id": 3839,
+      "name": "Bekryde Champion",
+      "monsterFileOffset": "0x362e508"
+    }
+  ]
+}

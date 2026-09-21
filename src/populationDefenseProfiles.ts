@@ -1,12 +1,13 @@
 import type { VerifiedPopulationDefenseProfile } from "./populationDefenders";
+import nativeBatchV3 from "./catalog/data/population-defense-6.37-v3.json";
 
 /** Revisions are immutable: saved maps must not silently adopt new army templates. */
 // v1 was exposed with an empty registry. Do not add armies to that saved revision.
-export const POPULATION_DEFENSE_PROFILE_REVISION = "dom6-6.37-native-2026-09-21-v2";
+export const POPULATION_DEFENSE_PROFILE_REVISION = "dom6-6.37-native-2026-09-21-v3";
 
-/** Only independently observed native recruitment rosters belong in this registry. */
+/** Membership and native army acceptance are documented for every released revision. */
 export const VERIFIED_POPULATION_DEFENSE_PROFILES: readonly VerifiedPopulationDefenseProfile[] = [{
-  revision: POPULATION_DEFENSE_PROFILE_REVISION,
+  revision: "dom6-6.37-native-2026-09-21-v2",
   poptype: { id: 81, name: "Pale Ones", provenanceId: "illwinter-map-manual-6.26" },
   gameVersion: "6.37",
   mods: "",
@@ -26,4 +27,4 @@ export const VERIFIED_POPULATION_DEFENSE_PROFILES: readonly VerifiedPopulationDe
       count: 15,
     }],
   }],
-}];
+}, ...nativeBatchV3 as VerifiedPopulationDefenseProfile[]];

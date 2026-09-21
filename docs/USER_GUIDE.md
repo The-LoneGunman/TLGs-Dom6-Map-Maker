@@ -2,9 +2,9 @@
 
 Pantokrator Atlas is a local-first map maker for Dominions 6. It generates deterministic, multiplayer-oriented atlases with one to eight planes and exports native `.map` and `.d6m` files that Dominions can load directly.
 
-This guide describes the current `main` source, including **Iterate, plane generation preferences, expanded analysis, native inspection, player ZIPs, and guardian fixtures**. These controls are available through [source installation](../README.md#develop-from-source), but have not yet been deployed to the hosted app or included in a Windows release. Check [Versions and documentation](../README.md#versions-and-documentation) before looking for a missing control. Current-source Dominions playtesting remains incomplete; see the [verification record](IMPLEMENTATION_ROUND_2026-09-20.md).
+This guide describes the **0.1.5 source**, including **Iterate, plane generation preferences, expanded analysis, native inspection, player ZIPs, guardian fixtures, underground visual polish, and population-matched initial defenders**. The hosted GUI and Windows releases can contain older builds. Check [Versions and documentation](../README.md#versions-and-documentation) before looking for a missing control; a normal source clone selects the default branch, not an unmerged candidate.
 
-The September 21 development checkout additionally includes underground visual polish, a pinned 6.37 selector catalog, and [population-matched initial defenders](#population-matched-initial-defenders). Those additions are not yet merged into `main` or published; their current coverage and checks are recorded [separately](UNDERGROUND_POLISH_2026-09-21.md).
+At the September 21 review, 0.1.5 is being prepared for release and is not yet merged or published. The [release verification record](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/RELEASE_VERIFICATION_0.1.5.md) separates completed tests from remaining checks and delivery. Native testing covers specific map-loading, defender-template and guardian-capture cases; it does not certify every seasonal visual, PD roster or multiplayer matchup. Supplemental evidence and catalog links open GitHub and require internet access; the installed Windows edition bundles this guide and the README for offline use.
 
 ## Contents
 
@@ -366,14 +366,16 @@ The in-game plane name. Untouched generated names can update to a suitable uniqu
 | Great cavern | Broader and more connected underground vaults with crystal-oriented defaults. |
 | Cloud realm | Sparse aerial islands and routes with Air/Glamour themes. |
 | Air plane | Stronger aerial, storm, and Astral themes. |
-| Underworld | Sparse death realm, undead/spectral populations and guardians, and a connected River Styx dividing two dry banks with one or two crossings. |
+| Underworld | Sparse death realm, undead/spectral guardians, cave-appropriate vanilla recruitment, and a connected River Styx dividing two dry banks with one or two crossings. |
 | Infernal realm | Hot Waste/Highland cave-family realm with Fire, Death, Blood, demons, and strong special defenders. |
 | Abyss | Hostile void realm with Death/Astral themes, horrors/demons, branching corridors, and sparse ownerless space. |
 | Dream realm | Glamour/Astral/Nature terrain with fay and magical defenders. |
 | Elemental | Fire, Air, Water, and Earth extremes with themed elementals. |
 | Custom | Neutral solid overland profile for manual combinations; variants can supply special themes. |
 
-Surface and ordinary Custom default to full province ownership. Other archetypes use sparse chambers, junctions, routes, and native owner-zero negative space. Special bonus realms receive substantially stronger initial guardian groups than most Surface variants and Cave/Great Cavern, and use themed population types. See [Guardian groups](#guardian-groups) for Oceanic Surface and Custom-variant exceptions. Persistent post-capture PD still follows Dominions' nation/poptype rules.
+Surface and ordinary Custom default to full province ownership. Other archetypes use sparse chambers, junctions, routes, and native owner-zero negative space. Cave, Great Cavern, Underworld, Infernal and Abyss shapes use irregular chamber contours, softly curved passages where clearance permits, and smoother native elevation. Styx water routes and explicit bridge crossings retain their controlled geometry. These visual updates can change an older project's rendered appearance without changing its authored movement links.
+
+Special bonus realms receive substantially stronger initial guardian groups than most Surface variants and Cave/Great Cavern, and use themed population types. See [Guardian groups](#guardian-groups) for Oceanic Surface and Custom-variant exceptions. Persistent post-capture PD still follows Dominions' nation/poptype rules.
 
 ### Terrain variant
 
@@ -500,13 +502,15 @@ Playable nation IDs must be safe integers 5 or greater. Unknown IDs require matc
 
 In **Host & scenario**, enable **Match ordinary defenders to recruitment population** to replace eligible ordinary initial armies at export. The option is off by default. Both manually assigned and generated population types use the same rule; changing a province's population type updates its preview immediately without regenerating the map.
 
-The first supported template is **Pale Ones (population type 81)**: one **Pale One Commander #1463** and **15 Pale Ones #1465**, in a **dry Cave**, for **unmodded Dominions 6.37, Middle Age**. Declare that host patch and era explicitly; neither is auto-detected. Other populations, eras, patches, mods, underwater provinces and non-cave terrain remain unsupported and keep Dominions' native initial armies. The coverage panel lists matched, preserved, excluded and unsupported provinces so partial coverage is visible.
+The current **v3** revision supports **76 population types**, including 41 of the 45 types used by the generator, for **unmodded Dominions 6.37, Middle Age**. Declare the host patch and era explicitly; neither is auto-detected. Each template lists its tested land/water and Cave requirements under **Verified template scope**. For example, Cavemen use one Caveman Champion and eight Cavemen; Pale Ones use one Pale One Commander and fifteen Pale Ones in dry Cave terrain. The coverage panel lists matched, preserved, excluded and unsupported provinces so partial coverage is visible.
+
+Onyx Amazons #43, Troglodytes #44, Mermen #72, Ko-Oni #88, Wet Ones #105 and Nexus #106 remain unsupported. Missing commanders, empty recruitment lists and unresolved mount/shape behavior are not filled with guessed armies. Other eras, patches, mods and unsupported terrain also retain native defenders.
 
 Existing custom or generated guardian groups always take priority and remain unchanged. Starts and every directly connected neighbor, including gateways, cannot receive automatic armies. Locks, explicit owners, blocked provinces and thrones are also excluded. Raw directives anywhere in the atlas suppress all automatic templates because those commands can select or change other provinces.
 
 Inspect the read-only **Initial-defender preview** in the selected province's inspector to see its resulting commander and squads. This option does not change recruitable units, create game content, modify replenishing post-capture PD, or guarantee equal combat difficulty. Counts are fixed template choices, not the game's independent-strength formula.
 
-Saved projects pin a template revision. The earlier empty v1 revision stays unsupported; use **Use current verified profiles** explicitly to adopt v2, then review coverage. No saved map silently adopts different armies during an update. [Evidence and verification scope](research/POPULATION_RECRUITMENT_EVIDENCE_2026-09-21.md) are available for maintainers.
+Saved projects pin a template revision. The earlier empty v1 remains empty, and v2 retains its single Pale One template. Use **Use current verified profiles** explicitly to adopt v3, then review coverage. No saved map silently adopts different armies during an update. [Evidence, counts and verification limits](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md) are available for maintainers. Native creation and hosting were checked; exact final troop counts and combat-equivalent difficulty are not claimed.
 
 ## Iterate tab
 
@@ -544,7 +548,7 @@ Content-only rerolls use the **Content / candidate seed** and selected provinces
 
 **Balanced FFA**, **Continental rivalry**, **Naval geography**, and **Strategic frontiers** provide starting settings, not guaranteed balanced maps. They do not choose nations or change the player/start allocation for you. Preview and apply, review the generation plan, then Generate.
 
-**Download settings recipe** saves generation settings, plane configuration/preferences, and declared analysis assumptions. The world seed is optional and excluded by default. Open a recipe file or paste its JSON to preview it; the limit is 256 KiB. Imports match plane configurations by order, preserve existing plane names/content, stage missing planes, and refuse to delete extra existing planes. Changes to archetype, dimensions, or wrapping can update current ownership presentation/borders; layout locks still apply. Full generation follows only when you request it.
+**Download settings recipe** saves generation settings, plane configuration/preferences, declared host patch/era/mod assumptions, and any pinned population-defender policy. The world seed is optional and excluded by default. Open a recipe file or paste its JSON to preview it; the limit is 256 KiB. Imports match plane configurations by order, preserve existing plane names/content, stage missing planes, and refuse to delete extra existing planes. Older recipes that omit host assumptions or the defender policy leave those current settings unchanged. Changes to archetype, dimensions, or wrapping can update current ownership presentation/borders; layout locks still apply. Full generation follows only when you request it.
 
 A recipe is not a map backup: it omits authored provinces, actual gateways, field locks, and saved selections. Use **Editable project JSON** for an exact atlas copy.
 
@@ -795,7 +799,7 @@ Use the official map manual. Rare scenario commands such as `#god`, `#dominionst
 
 ## Catalog manager
 
-The development checkout's bundled Dominions 6.37 catalog covers units, sites, population types, nations, and forts. See the [catalog coverage and provenance notes](CONTENT_CATALOG.md) for its pinned source and exact IDs. It does not automatically track later game updates. Pickers search names, aliases, tags, and numeric IDs. Older published builds may still use the 6.35 snapshot.
+The 0.1.5 source bundles a pinned Dominions 6.37 selector catalog covering units, sites, population types, nations, and forts. See the [catalog coverage and provenance notes](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/CONTENT_CATALOG.md) for its source and exact IDs. It does not automatically track later game updates. Pickers search names, aliases, tags, and numeric IDs. Older published builds may still use the 6.35 snapshot. The separate recruitment-membership table is evidence for roster identities, not a claim that every population has an accepted automatic defender template.
 
 - **Sources & license:** shows data provenance.
 - **Import verified JSON:** accepts up to 8 MiB of UTF-8 JSON and merges a schema-valid catalog with bundled entries. Custom entries override matching IDs for lookup/display. The label does not independently authenticate user-supplied data; use a source you trust.
@@ -868,7 +872,7 @@ Analysis is capped at 64 start locations for responsiveness. Larger imported sta
 
 ### Patch and mod assumptions
 
-Under **Game patch and mod assumptions**, record the intended game patch and mod names/versions. These are user-declared notes, not auto-detected compatibility. They are saved in project JSON and the host-facing reports; editing them never changes geography or applies nation compensation.
+Under **Game patch and mod assumptions**, record the intended game patch, era and mod names/versions. These are user declarations, not auto-detected compatibility or settings applied to Dominions. They are saved in project JSON and host-facing reports. Editing them never changes geography or applies nation compensation; if population-matched defenders are enabled, the declarations also control which templates are eligible at export.
 
 A missing patch, a mismatch with the selector catalog, or declared mods is explicitly unverified. Even an exact catalog-version match certifies neither nation movement nor combat balance. The model identifier (`structural-inspector-2`) versions these structural assumptions independently of game patches. Reassess nation-specific expectations after any game or mod update.
 
@@ -904,7 +908,7 @@ The header buttons keep up to 30 project snapshots. A new edit clears Redo. Undo
 
 ### Editable project JSON
 
-Projects saved by the current source version can contain optional analysis requirements, generation-input snapshots, per-plane preferences, locks, and saved selections. It opens older schema-v1 projects without inventing a generation baseline; older app versions may reject the new fields. Keep a pre-upgrade backup if you need to return to an older app.
+Projects saved by the current source version can contain optional analysis requirements, host-era declarations, pinned population-defender policies, generation-input snapshots, per-plane preferences, locks, and saved selections. It opens older schema-v1 projects without inventing a generation baseline or upgrading their defender revision; older app versions may reject the new fields. Keep a pre-upgrade backup if you need to return to an older app.
 
 Choose **Install / export -> Editable project JSON** for a portable backup named `<map-name>.atlas.json`. Host packages and direct installs also include `atlas_project.json`; player ZIPs deliberately do not.
 
@@ -926,8 +930,8 @@ A host package (**Download ready ZIP** or **Install directly**) contains:
 - `_plane2` through `_plane8` `.map` and `.d6m` files as needed.
 - `INSTALL.txt`.
 - `atlas_project.json`.
-- `balance_report.txt`: legacy score, validation, both per-start structural models, and unverified patch/mod assumptions/requirements. Treat this as host-facing analysis.
-- `host_settings.txt`: intended host setup and the same declared patch/mod notes.
+- `balance_report.txt`: legacy score, validation, both per-start structural models, declared patch/era/mod assumptions and requirements, plus enabled population-defender coverage. Treat this as host-facing analysis.
+- `host_settings.txt`: intended host setup, the same patch/era/mod declarations, and enabled population-defender revision/coverage notes.
 - `host_topology.txt` — a host-only spoiler dossier listing every plane, local/global province number, start/throne marker, connection, border type, and gateway endpoint. Do not distribute it to players.
 
 The first plane uses the normalized map name with no suffix. Later plane display names do not change the `_planeN` file convention.
@@ -1007,6 +1011,9 @@ Validation, replacement-confirmation, and export dialogs trap focus. Escape clos
 | Nation requirement is unassigned/unverified | Assign exactly one nation-specific start, or review/reconfirm the request after changing patch/mod declarations. Reconfirmation is not independent verification of the request. |
 | External map will not open as an editable project | Open project accepts Atlas JSON only. Use Iterate's read-only native inspection for `.map`/`.d6m`; arbitrary native raster geometry cannot yet be imported losslessly. |
 | Guardian fixture could not be prepared | No safe encounter province may fit, or the source/fixture has export errors. The source atlas remains unchanged; review the reported error. Any target-media adaptation is separately disclosed in the fixture description. |
+| Population-matched defenders remain unsupported | Declare the actual host patch and era, then check the population, terrain and mod scope in **Verified template scope**. Unsupported contexts keep native armies; catalog imports alone do not verify them. |
+| An older project still offers only Pale Ones or no automatic templates | Its saved v2 or v1 revision is intentionally pinned. Review coverage and explicitly choose **Use current verified profiles** to adopt v3; toggling the option off/on does not upgrade it. |
+| A supported population has no automatic army | Check the status in **Initial-defender preview**. Custom guardians, start protection, locks, owners, blocked terrain, thrones or raw directives can exclude it. Existing custom groups take priority. |
 | Compatibility blocker / playable export unavailable | Open Validate and resolve every red Error. Warnings and fairness alone do not block export. |
 | Scale-aware spacing below preferred | The hard three-step floor was retained but the larger preferred target did not fit. Increase provinces/player, simplify start categories, change wrapping, or generate again. |
 | Start connection counts vary | Identical exits could not fit without breaking harder safety rules. Lower the connection target or enlarge the core realms. |
@@ -1040,7 +1047,7 @@ Validation, replacement-confirmation, and export dialogs trap focus. Escape clos
 
 ## Dominions engine boundaries
 
-The earlier repair pass passed automated and browser checks but did not establish current-patch in-game behavior. See the [implementation-round record](IMPLEMENTATION_ROUND_2026-09-20.md) for the exact scope of subsequent checks. A successful map load, structural seed evaluation, or prepared guardian fixture is not evidence of tested combat balance, post-capture defence, or a full multiplayer game.
+Current-source native checks include loading and visual inspection of all eight planes, [161 accepted population-template terrain cases](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md), and one [generated Inferno battle/capture followed by recruitment and PD inspection](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/research/NATIVE_GUARDIAN_CAPTURE_2026-09-21.md). See [release verification](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/RELEASE_VERIFICATION_0.1.5.md) for the current scope and remaining checks. These observations do not establish every seasonal visual, nation/population PD combination, calibrated guardian difficulty or a full multiplayer game.
 
 Native map data and Atlas's preview have different roles:
 

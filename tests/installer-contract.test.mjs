@@ -49,6 +49,9 @@ test("installed launcher prefers the bundled private Node runtime", async () => 
 
 test("Inno Setup contract is per-user, uninstallable, and creates useful shortcuts", async () => {
   const script = await readFile(path.join(repositoryRoot, "installer", "PantokratorAtlas.iss"), "utf8");
+  const metadata = JSON.parse(await readFile(path.join(repositoryRoot, "package.json"), "utf8"));
+  assert.equal(script.match(/#define AppVersion "([^"]+)"/)?.[1], metadata.version,
+    "Direct installer builds must use the same default version as the application");
   assert.match(script, /PrivilegesRequired=lowest/);
   assert.match(script, /DefaultDirName=\{localappdata\}\\Programs\\Pantokrator Atlas/);
   assert.match(script, /ArchitecturesAllowed=x64compatible/);

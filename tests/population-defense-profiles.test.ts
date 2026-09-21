@@ -59,7 +59,7 @@ function disabled(project: MapProject) {
 }
 
 test("the first real v2 profile pins the observed MA dry-cave roster and exact catalog identities", () => {
-  assert.equal(POPULATION_DEFENSE_PROFILE_REVISION, revision);
+  assert.equal(POPULATION_DEFENSE_PROFILE_REVISION, "dom6-6.37-native-2026-09-21-v3");
   const rows = VERIFIED_POPULATION_DEFENSE_PROFILES.filter(p => p.revision === revision);
   assert.equal(rows.length, 1, "an immutable revision must not silently acquire additional army templates");
   const profile = rows[0]!;

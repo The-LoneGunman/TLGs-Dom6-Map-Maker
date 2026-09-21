@@ -1,0 +1,5513 @@
+{
+  "schema": "atlas-native-population-batch-evidence/v1",
+  "gameVersion": "6.37",
+  "era": 2,
+  "mods": "",
+  "evidenceDate": "2026-09-21",
+  "source": {
+    "manifest": "tmp/population-batch-armies-Nw6MnS/maps/Atlas_PopBatch_12b54585_71c33a996e/initial-army-batch-manifest.json",
+    "candidateSha256": "12b54585a3f31c82f68136f3371c7cf5f7a93a584e528202f8842ead19ff047a",
+    "manifestSha256": "80cf8fee3f5e1b0c4ff297cd25816c3ce61339c2ada82e1c50c6e1d190421e57",
+    "mapSha256": "f8a71a1228edc7fc19d4a95ae7f95d6bb7575782daf38b0624e79f6d6d52d599",
+    "createLogSha256": "0cce2c9b1711c5faadb18ed584cf12a29e97d26d04657df00a0feca7a357b6a3",
+    "hostLogSha256": "6acfa606468ec15f21b5ab3e894a82e3e6f2cfabbd344045dd797f60229d383e",
+    "createBytes": 1864473,
+    "hostBytes": 313081,
+    "followupLogSha256": "d973029e4bf2c7daa2d35b281ed9393af8d7537e7b4496d31fb87bb9817c9499",
+    "followupLogBytes": 138951,
+    "logsCompleteMarkersObserved": true,
+    "createStderrBytes": 0,
+    "hostStderrBytes": 0
+  },
+  "counts": {
+    "profiles": 77,
+    "cases": 163,
+    "emittedExact": 163,
+    "nativeSmokePassed": 163,
+    "positiveHpSameInstanceSameProvinceAfterLeadershipStage": 163,
+    "commanderSurvivedFirstFullTurnBySecondHostObservation": 163,
+    "mountedCases": 50,
+    "mountedSquads": 64,
+    "caseFailures": 0,
+    "finalPostTurnCensusVerified": 0
+  },
+  "cases": [
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Barbarian",
+          "unit": 139,
+          "loggedK": 8,
+          "creationLine": 16260
+        },
+        {
+          "count": 7,
+          "loggedName": "Barbarian",
+          "unit": 140,
+          "loggedK": 7,
+          "creationLine": 16261
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 15,
+      "creationLine": 16257,
+      "secondHostLine": 2646,
+      "poptype": 25,
+      "instance": 3762,
+      "firstHostHp": 15,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 1,
+      "commander": 141,
+      "firstHostLine": 2675
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Barbarian",
+          "unit": 139,
+          "loggedK": 8,
+          "creationLine": 16368
+        },
+        {
+          "count": 7,
+          "loggedName": "Barbarian",
+          "unit": 140,
+          "loggedK": 7,
+          "creationLine": 16369
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 15,
+      "creationLine": 16365,
+      "secondHostLine": 2647,
+      "poptype": 25,
+      "instance": 13456,
+      "firstHostHp": 15,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 2,
+      "commander": 141,
+      "firstHostLine": 2676
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Armored Steppe Horse",
+          "unit": 137,
+          "loggedK": 30,
+          "creationLine": 16498
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 16495,
+      "secondHostLine": 2670,
+      "poptype": 26,
+      "instance": 13472,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 3,
+      "commander": 136,
+      "firstHostLine": 2699
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Armored Steppe Horse",
+          "unit": 137,
+          "loggedK": 30,
+          "creationLine": 16601
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 16598,
+      "secondHostLine": 2671,
+      "poptype": 26,
+      "instance": 13504,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 4,
+      "commander": 136,
+      "firstHostLine": 2700
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 30,
+          "loggedK": 5,
+          "creationLine": 16784
+        },
+        {
+          "count": 5,
+          "loggedName": "Archer",
+          "unit": 17,
+          "loggedK": 5,
+          "creationLine": 16785
+        },
+        {
+          "count": 5,
+          "loggedName": "Heavy Infantry",
+          "unit": 38,
+          "loggedK": 5,
+          "creationLine": 16786
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 16781,
+      "secondHostLine": 2672,
+      "poptype": 27,
+      "instance": 14286,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 5,
+      "commander": 34,
+      "firstHostLine": 2701
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 30,
+          "loggedK": 5,
+          "creationLine": 16850
+        },
+        {
+          "count": 5,
+          "loggedName": "Archer",
+          "unit": 17,
+          "loggedK": 5,
+          "creationLine": 16851
+        },
+        {
+          "count": 5,
+          "loggedName": "Heavy Infantry",
+          "unit": 38,
+          "loggedK": 5,
+          "creationLine": 16852
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 16847,
+      "secondHostLine": 2673,
+      "poptype": 27,
+      "instance": 14302,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 6,
+      "commander": 34,
+      "firstHostLine": 2702
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 18,
+          "loggedK": 5,
+          "creationLine": 17175
+        },
+        {
+          "count": 5,
+          "loggedName": "Archer",
+          "unit": 33,
+          "loggedK": 5,
+          "creationLine": 17176
+        },
+        {
+          "count": 5,
+          "loggedName": "Heavy Infantry",
+          "unit": 39,
+          "loggedK": 5,
+          "creationLine": 17177
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 17172,
+      "secondHostLine": 2674,
+      "poptype": 28,
+      "instance": 14318,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 7,
+      "commander": 35,
+      "firstHostLine": 2703
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 18,
+          "loggedK": 5,
+          "creationLine": 17247
+        },
+        {
+          "count": 5,
+          "loggedName": "Archer",
+          "unit": 33,
+          "loggedK": 5,
+          "creationLine": 17248
+        },
+        {
+          "count": 5,
+          "loggedName": "Heavy Infantry",
+          "unit": 39,
+          "loggedK": 5,
+          "creationLine": 17249
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 17244,
+      "secondHostLine": 2675,
+      "poptype": 28,
+      "instance": 14334,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 8,
+      "commander": 35,
+      "firstHostLine": 2704
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 31,
+          "loggedK": 5,
+          "creationLine": 17349
+        },
+        {
+          "count": 5,
+          "loggedName": "Archer",
+          "unit": 32,
+          "loggedK": 5,
+          "creationLine": 17350
+        },
+        {
+          "count": 5,
+          "loggedName": "Heavy Infantry",
+          "unit": 40,
+          "loggedK": 5,
+          "creationLine": 17351
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 17346,
+      "secondHostLine": 2676,
+      "poptype": 29,
+      "instance": 14350,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 9,
+      "commander": 36,
+      "firstHostLine": 2705
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 31,
+          "loggedK": 5,
+          "creationLine": 17393
+        },
+        {
+          "count": 5,
+          "loggedName": "Archer",
+          "unit": 32,
+          "loggedK": 5,
+          "creationLine": 17394
+        },
+        {
+          "count": 5,
+          "loggedName": "Heavy Infantry",
+          "unit": 40,
+          "loggedK": 5,
+          "creationLine": 17395
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 17390,
+      "secondHostLine": 2677,
+      "poptype": 29,
+      "instance": 14366,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 10,
+      "commander": 36,
+      "firstHostLine": 2706
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 30,
+          "loggedK": 5,
+          "creationLine": 17520
+        },
+        {
+          "count": 5,
+          "loggedName": "Longbowman",
+          "unit": 55,
+          "loggedK": 5,
+          "creationLine": 17521
+        },
+        {
+          "count": 5,
+          "loggedName": "Destrier",
+          "unit": 22,
+          "loggedK": 10,
+          "creationLine": 17522
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 17517,
+      "secondHostLine": 2678,
+      "poptype": 30,
+      "instance": 14382,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 11,
+      "commander": 23,
+      "firstHostLine": 2707
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 30,
+          "loggedK": 5,
+          "creationLine": 17615
+        },
+        {
+          "count": 5,
+          "loggedName": "Longbowman",
+          "unit": 55,
+          "loggedK": 5,
+          "creationLine": 17616
+        },
+        {
+          "count": 5,
+          "loggedName": "Destrier",
+          "unit": 22,
+          "loggedK": 10,
+          "creationLine": 17617
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 17612,
+      "secondHostLine": 2679,
+      "poptype": 30,
+      "instance": 14404,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 12,
+      "commander": 23,
+      "firstHostLine": 2708
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Triton",
+          "unit": 176,
+          "loggedK": 15,
+          "creationLine": 17720
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 17717,
+      "secondHostLine": 2680,
+      "poptype": 31,
+      "instance": 14426,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 13,
+      "commander": 406,
+      "firstHostLine": 2709
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Triton",
+          "unit": 176,
+          "loggedK": 15,
+          "creationLine": 17819
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 17816,
+      "secondHostLine": 2681,
+      "poptype": 31,
+      "instance": 14442,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 14,
+      "commander": 406,
+      "firstHostLine": 2710
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Light Infantry",
+          "unit": 29,
+          "loggedK": 5,
+          "creationLine": 17939
+        },
+        {
+          "count": 5,
+          "loggedName": "Heavy Infantry",
+          "unit": 39,
+          "loggedK": 5,
+          "creationLine": 17940
+        },
+        {
+          "count": 5,
+          "loggedName": "Crossbowman",
+          "unit": 47,
+          "loggedK": 5,
+          "creationLine": 17941
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 17936,
+      "secondHostLine": 2682,
+      "poptype": 32,
+      "instance": 14458,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 15,
+      "commander": 35,
+      "firstHostLine": 2711
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Light Infantry",
+          "unit": 29,
+          "loggedK": 5,
+          "creationLine": 18066
+        },
+        {
+          "count": 5,
+          "loggedName": "Heavy Infantry",
+          "unit": 39,
+          "loggedK": 5,
+          "creationLine": 18067
+        },
+        {
+          "count": 5,
+          "loggedName": "Crossbowman",
+          "unit": 47,
+          "loggedK": 5,
+          "creationLine": 18068
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 18063,
+      "secondHostLine": 2683,
+      "poptype": 32,
+      "instance": 14474,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 16,
+      "commander": 35,
+      "firstHostLine": 2712
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Light Infantry",
+          "unit": 29,
+          "loggedK": 5,
+          "creationLine": 18239
+        },
+        {
+          "count": 5,
+          "loggedName": "Heavy Infantry",
+          "unit": 40,
+          "loggedK": 5,
+          "creationLine": 18240
+        },
+        {
+          "count": 5,
+          "loggedName": "Crossbowman",
+          "unit": 48,
+          "loggedK": 5,
+          "creationLine": 18241
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 18236,
+      "secondHostLine": 2684,
+      "poptype": 33,
+      "instance": 14490,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 17,
+      "commander": 36,
+      "firstHostLine": 2713
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Light Infantry",
+          "unit": 29,
+          "loggedK": 5,
+          "creationLine": 18336
+        },
+        {
+          "count": 5,
+          "loggedName": "Heavy Infantry",
+          "unit": 40,
+          "loggedK": 5,
+          "creationLine": 18337
+        },
+        {
+          "count": 5,
+          "loggedName": "Crossbowman",
+          "unit": 48,
+          "loggedK": 5,
+          "creationLine": 18338
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 18333,
+      "secondHostLine": 2685,
+      "poptype": 33,
+      "instance": 14506,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 18,
+      "commander": 36,
+      "firstHostLine": 2714
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Raptor",
+          "unit": 205,
+          "loggedK": 15,
+          "creationLine": 18444
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 9,
+      "creationLine": 18438,
+      "secondHostLine": 2686,
+      "poptype": 34,
+      "instance": 14522,
+      "firstHostHp": 9,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 19,
+      "commander": 252,
+      "firstHostLine": 2715
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Raptor",
+          "unit": 205,
+          "loggedK": 15,
+          "creationLine": 18582
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 9,
+      "creationLine": 18576,
+      "secondHostLine": 2687,
+      "poptype": 34,
+      "instance": 14538,
+      "firstHostHp": 9,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 20,
+      "commander": 252,
+      "firstHostLine": 2716
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Slinger",
+          "unit": 50,
+          "loggedK": 15,
+          "creationLine": 18778
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 18775,
+      "secondHostLine": 2688,
+      "poptype": 35,
+      "instance": 14554,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 21,
+      "commander": 34,
+      "firstHostLine": 2717
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Slinger",
+          "unit": 50,
+          "loggedK": 15,
+          "creationLine": 18830
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 18827,
+      "secondHostLine": 2689,
+      "poptype": 35,
+      "instance": 14570,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 22,
+      "commander": 34,
+      "firstHostLine": 2718
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Lizard Warrior",
+          "unit": 423,
+          "loggedK": 8,
+          "creationLine": 18986
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 13,
+      "creationLine": 18979,
+      "secondHostLine": 2690,
+      "poptype": 36,
+      "instance": 14586,
+      "firstHostHp": 13,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 23,
+      "commander": 1514,
+      "firstHostLine": 2719
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Lizard Warrior",
+          "unit": 423,
+          "loggedK": 8,
+          "creationLine": 19078
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 13,
+      "creationLine": 19071,
+      "secondHostLine": 2691,
+      "poptype": 36,
+      "instance": 14595,
+      "firstHostHp": 13,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 24,
+      "commander": 1514,
+      "firstHostLine": 2720
+    },
+    {
+      "squads": [
+        {
+          "count": 4,
+          "loggedName": "Woodsman Blowpipe",
+          "unit": 125,
+          "loggedK": 4,
+          "creationLine": 19230
+        },
+        {
+          "count": 4,
+          "loggedName": "Woodsman",
+          "unit": 126,
+          "loggedK": 4,
+          "creationLine": 19231
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 9,
+      "creationLine": 19223,
+      "secondHostLine": 2692,
+      "poptype": 37,
+      "instance": 14604,
+      "firstHostHp": 9,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 25,
+      "commander": 105,
+      "firstHostLine": 2721
+    },
+    {
+      "squads": [
+        {
+          "count": 4,
+          "loggedName": "Woodsman Blowpipe",
+          "unit": 125,
+          "loggedK": 4,
+          "creationLine": 19295
+        },
+        {
+          "count": 4,
+          "loggedName": "Woodsman",
+          "unit": 126,
+          "loggedK": 4,
+          "creationLine": 19296
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 9,
+      "creationLine": 19288,
+      "secondHostLine": 2693,
+      "poptype": 37,
+      "instance": 14613,
+      "firstHostHp": 9,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 26,
+      "commander": 105,
+      "firstHostLine": 2722
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Hoburg Militia",
+          "unit": 483,
+          "loggedK": 5,
+          "creationLine": 19677
+        },
+        {
+          "count": 5,
+          "loggedName": "Burgmeister Guard",
+          "unit": 271,
+          "loggedK": 5,
+          "creationLine": 19678
+        },
+        {
+          "count": 5,
+          "loggedName": "Hoburg Crossbow",
+          "unit": 273,
+          "loggedK": 5,
+          "creationLine": 19679
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 6,
+      "creationLine": 19674,
+      "secondHostLine": 2694,
+      "poptype": 38,
+      "instance": 14622,
+      "firstHostHp": 6,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 27,
+      "commander": 272,
+      "firstHostLine": 2723
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Hoburg Militia",
+          "unit": 483,
+          "loggedK": 5,
+          "creationLine": 19739
+        },
+        {
+          "count": 5,
+          "loggedName": "Burgmeister Guard",
+          "unit": 271,
+          "loggedK": 5,
+          "creationLine": 19740
+        },
+        {
+          "count": 5,
+          "loggedName": "Hoburg Crossbow",
+          "unit": 273,
+          "loggedK": 5,
+          "creationLine": 19741
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 6,
+      "creationLine": 19736,
+      "secondHostLine": 2695,
+      "poptype": 38,
+      "instance": 14638,
+      "firstHostHp": 6,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 28,
+      "commander": 272,
+      "firstHostLine": 2724
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 18,
+          "loggedK": 5,
+          "creationLine": 19979
+        },
+        {
+          "count": 5,
+          "loggedName": "Archer",
+          "unit": 33,
+          "loggedK": 5,
+          "creationLine": 19980
+        },
+        {
+          "count": 5,
+          "loggedName": "Light Infantry",
+          "unit": 29,
+          "loggedK": 5,
+          "creationLine": 19981
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 19976,
+      "secondHostLine": 2696,
+      "poptype": 39,
+      "instance": 14654,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 29,
+      "commander": 34,
+      "firstHostLine": 2725
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 18,
+          "loggedK": 5,
+          "creationLine": 20053
+        },
+        {
+          "count": 5,
+          "loggedName": "Archer",
+          "unit": 33,
+          "loggedK": 5,
+          "creationLine": 20054
+        },
+        {
+          "count": 5,
+          "loggedName": "Light Infantry",
+          "unit": 29,
+          "loggedK": 5,
+          "creationLine": 20055
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 20050,
+      "secondHostLine": 2697,
+      "poptype": 39,
+      "instance": 14670,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 30,
+      "commander": 34,
+      "firstHostLine": 2726
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Amazon",
+          "unit": 348,
+          "loggedK": 8,
+          "creationLine": 20246
+        },
+        {
+          "count": 7,
+          "loggedName": "Pegasus",
+          "unit": 367,
+          "loggedK": 14,
+          "creationLine": 20247
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 20239,
+      "secondHostLine": 2698,
+      "poptype": 40,
+      "instance": 14686,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 31,
+      "commander": 347,
+      "firstHostLine": 2727
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Amazon",
+          "unit": 348,
+          "loggedK": 8,
+          "creationLine": 20321
+        },
+        {
+          "count": 7,
+          "loggedName": "Pegasus",
+          "unit": 367,
+          "loggedK": 14,
+          "creationLine": 20322
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 20314,
+      "secondHostLine": 2699,
+      "poptype": 40,
+      "instance": 14709,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 32,
+      "commander": 347,
+      "firstHostLine": 2728
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Amazon",
+          "unit": 351,
+          "loggedK": 8,
+          "creationLine": 20412
+        },
+        {
+          "count": 7,
+          "loggedName": "Sacred Gryphon",
+          "unit": 612,
+          "loggedK": 14,
+          "creationLine": 20413
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 20405,
+      "secondHostLine": 2700,
+      "poptype": 41,
+      "instance": 14732,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 33,
+      "commander": 350,
+      "firstHostLine": 2729
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Amazon",
+          "unit": 351,
+          "loggedK": 8,
+          "creationLine": 20538
+        },
+        {
+          "count": 7,
+          "loggedName": "Sacred Gryphon",
+          "unit": 612,
+          "loggedK": 14,
+          "creationLine": 20539
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 20531,
+      "secondHostLine": 2701,
+      "poptype": 41,
+      "instance": 14755,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 34,
+      "commander": 350,
+      "firstHostLine": 2730
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Amazon",
+          "unit": 354,
+          "loggedK": 8,
+          "creationLine": 20702
+        },
+        {
+          "count": 7,
+          "loggedName": "Jade Lizard",
+          "unit": 370,
+          "loggedK": 14,
+          "creationLine": 20703
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 20695,
+      "secondHostLine": 2702,
+      "poptype": 42,
+      "instance": 14778,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 35,
+      "commander": 353,
+      "firstHostLine": 2731
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Amazon",
+          "unit": 354,
+          "loggedK": 8,
+          "creationLine": 20912
+        },
+        {
+          "count": 7,
+          "loggedName": "Jade Lizard",
+          "unit": 370,
+          "loggedK": 14,
+          "creationLine": 20913
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 20905,
+      "secondHostLine": 2703,
+      "poptype": 42,
+      "instance": 14801,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 36,
+      "commander": 353,
+      "firstHostLine": 2732
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Amazon",
+          "unit": 357,
+          "loggedK": 8,
+          "creationLine": 21044
+        },
+        {
+          "count": 7,
+          "loggedName": "Nightmare",
+          "unit": 369,
+          "loggedK": 14,
+          "creationLine": 21045
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 21037,
+      "secondHostLine": 2704,
+      "poptype": 43,
+      "instance": 14824,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": true,
+      "province": 37,
+      "commander": 356,
+      "firstHostLine": 2733
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Amazon",
+          "unit": 357,
+          "loggedK": 8,
+          "creationLine": 21236
+        },
+        {
+          "count": 7,
+          "loggedName": "Nightmare",
+          "unit": 369,
+          "loggedK": 14,
+          "creationLine": 21237
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 21229,
+      "secondHostLine": 2705,
+      "poptype": 43,
+      "instance": 14847,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": true,
+      "province": 38,
+      "commander": 356,
+      "firstHostLine": 2734
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Triton Guard",
+          "unit": 175,
+          "loggedK": 5,
+          "creationLine": 21322
+        },
+        {
+          "count": 5,
+          "loggedName": "Triton Trooper",
+          "unit": 577,
+          "loggedK": 5,
+          "creationLine": 21323
+        },
+        {
+          "count": 5,
+          "loggedName": "Shark",
+          "unit": 545,
+          "loggedK": 10,
+          "creationLine": 21324
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 21319,
+      "secondHostLine": 2706,
+      "poptype": 45,
+      "instance": 14870,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 39,
+      "commander": 406,
+      "firstHostLine": 2735
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Triton Guard",
+          "unit": 175,
+          "loggedK": 5,
+          "creationLine": 21360
+        },
+        {
+          "count": 5,
+          "loggedName": "Triton Trooper",
+          "unit": 577,
+          "loggedK": 5,
+          "creationLine": 21361
+        },
+        {
+          "count": 5,
+          "loggedName": "Shark",
+          "unit": 545,
+          "loggedK": 10,
+          "creationLine": 21362
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 21357,
+      "secondHostLine": 2707,
+      "poptype": 45,
+      "instance": 14891,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 40,
+      "commander": 406,
+      "firstHostLine": 2736
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Amber Clan Triton",
+          "unit": 574,
+          "loggedK": 8,
+          "creationLine": 21444
+        },
+        {
+          "count": 7,
+          "loggedName": "Amber Clan Guard",
+          "unit": 573,
+          "loggedK": 7,
+          "creationLine": 21445
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 13,
+      "creationLine": 21437,
+      "secondHostLine": 2708,
+      "poptype": 46,
+      "instance": 14912,
+      "firstHostHp": 13,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 41,
+      "commander": 576,
+      "firstHostLine": 2737
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Amber Clan Triton",
+          "unit": 574,
+          "loggedK": 8,
+          "creationLine": 21516
+        },
+        {
+          "count": 7,
+          "loggedName": "Amber Clan Guard",
+          "unit": 573,
+          "loggedK": 7,
+          "creationLine": 21517
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 13,
+      "creationLine": 21509,
+      "secondHostLine": 2709,
+      "poptype": 46,
+      "instance": 14928,
+      "firstHostHp": 13,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 42,
+      "commander": 576,
+      "firstHostLine": 2738
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Crossbowman",
+          "unit": 49,
+          "loggedK": 8,
+          "creationLine": 21596
+        },
+        {
+          "count": 7,
+          "loggedName": "Destrier",
+          "unit": 21,
+          "loggedK": 14,
+          "creationLine": 21597
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 21593,
+      "secondHostLine": 2710,
+      "poptype": 47,
+      "instance": 14944,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 43,
+      "commander": 44,
+      "firstHostLine": 2739
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Crossbowman",
+          "unit": 49,
+          "loggedK": 8,
+          "creationLine": 21754
+        },
+        {
+          "count": 7,
+          "loggedName": "Destrier",
+          "unit": 21,
+          "loggedK": 14,
+          "creationLine": 21755
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 21751,
+      "secondHostLine": 2711,
+      "poptype": 47,
+      "instance": 14968,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 44,
+      "commander": 44,
+      "firstHostLine": 2740
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 30,
+          "loggedK": 5,
+          "creationLine": 21896
+        },
+        {
+          "count": 5,
+          "loggedName": "Light Infantry",
+          "unit": 28,
+          "loggedK": 5,
+          "creationLine": 21897
+        },
+        {
+          "count": 5,
+          "loggedName": "Heavy Infantry",
+          "unit": 38,
+          "loggedK": 5,
+          "creationLine": 21898
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 21893,
+      "secondHostLine": 2712,
+      "poptype": 48,
+      "instance": 14992,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 45,
+      "commander": 34,
+      "firstHostLine": 2741
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 30,
+          "loggedK": 5,
+          "creationLine": 21972
+        },
+        {
+          "count": 5,
+          "loggedName": "Light Infantry",
+          "unit": 28,
+          "loggedK": 5,
+          "creationLine": 21973
+        },
+        {
+          "count": 5,
+          "loggedName": "Heavy Infantry",
+          "unit": 38,
+          "loggedK": 5,
+          "creationLine": 21974
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 21969,
+      "secondHostLine": 2713,
+      "poptype": 48,
+      "instance": 15008,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 46,
+      "commander": 34,
+      "firstHostLine": 2742
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 18,
+          "loggedK": 5,
+          "creationLine": 22260
+        },
+        {
+          "count": 5,
+          "loggedName": "Light Infantry",
+          "unit": 28,
+          "loggedK": 5,
+          "creationLine": 22261
+        },
+        {
+          "count": 5,
+          "loggedName": "Heavy Infantry",
+          "unit": 39,
+          "loggedK": 5,
+          "creationLine": 22262
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 22257,
+      "secondHostLine": 2714,
+      "poptype": 49,
+      "instance": 15024,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 51,
+      "commander": 35,
+      "firstHostLine": 2743
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 18,
+          "loggedK": 5,
+          "creationLine": 22322
+        },
+        {
+          "count": 5,
+          "loggedName": "Light Infantry",
+          "unit": 28,
+          "loggedK": 5,
+          "creationLine": 22323
+        },
+        {
+          "count": 5,
+          "loggedName": "Heavy Infantry",
+          "unit": 39,
+          "loggedK": 5,
+          "creationLine": 22324
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 22319,
+      "secondHostLine": 2715,
+      "poptype": 49,
+      "instance": 15040,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 52,
+      "commander": 35,
+      "firstHostLine": 2744
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 31,
+          "loggedK": 5,
+          "creationLine": 22424
+        },
+        {
+          "count": 5,
+          "loggedName": "Light Infantry",
+          "unit": 29,
+          "loggedK": 5,
+          "creationLine": 22425
+        },
+        {
+          "count": 5,
+          "loggedName": "Heavy Infantry",
+          "unit": 40,
+          "loggedK": 5,
+          "creationLine": 22426
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 22421,
+      "secondHostLine": 2716,
+      "poptype": 50,
+      "instance": 15056,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 53,
+      "commander": 36,
+      "firstHostLine": 2745
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 31,
+          "loggedK": 5,
+          "creationLine": 22591
+        },
+        {
+          "count": 5,
+          "loggedName": "Light Infantry",
+          "unit": 29,
+          "loggedK": 5,
+          "creationLine": 22592
+        },
+        {
+          "count": 5,
+          "loggedName": "Heavy Infantry",
+          "unit": 40,
+          "loggedK": 5,
+          "creationLine": 22593
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 22588,
+      "secondHostLine": 2717,
+      "poptype": 50,
+      "instance": 15072,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 54,
+      "commander": 36,
+      "firstHostLine": 2746
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 30,
+          "loggedK": 5,
+          "creationLine": 22851
+        },
+        {
+          "count": 5,
+          "loggedName": "Riding Horse",
+          "unit": 24,
+          "loggedK": 10,
+          "creationLine": 22852
+        },
+        {
+          "count": 5,
+          "loggedName": "War Horse",
+          "unit": 20,
+          "loggedK": 10,
+          "creationLine": 22853
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 22847,
+      "secondHostLine": 2718,
+      "poptype": 51,
+      "instance": 15088,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 55,
+      "commander": 46,
+      "firstHostLine": 2747
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 30,
+          "loggedK": 5,
+          "creationLine": 22904
+        },
+        {
+          "count": 5,
+          "loggedName": "Riding Horse",
+          "unit": 24,
+          "loggedK": 10,
+          "creationLine": 22905
+        },
+        {
+          "count": 5,
+          "loggedName": "War Horse",
+          "unit": 20,
+          "loggedK": 10,
+          "creationLine": 22906
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 22900,
+      "secondHostLine": 2719,
+      "poptype": 51,
+      "instance": 15115,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 56,
+      "commander": 46,
+      "firstHostLine": 2748
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 18,
+          "loggedK": 5,
+          "creationLine": 23161
+        },
+        {
+          "count": 5,
+          "loggedName": "Riding Horse",
+          "unit": 25,
+          "loggedK": 10,
+          "creationLine": 23162
+        },
+        {
+          "count": 5,
+          "loggedName": "Cataphracted War Horse",
+          "unit": 19,
+          "loggedK": 10,
+          "creationLine": 23163
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 23158,
+      "secondHostLine": 2720,
+      "poptype": 52,
+      "instance": 15142,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 57,
+      "commander": 45,
+      "firstHostLine": 2749
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 18,
+          "loggedK": 5,
+          "creationLine": 23328
+        },
+        {
+          "count": 5,
+          "loggedName": "Riding Horse",
+          "unit": 25,
+          "loggedK": 10,
+          "creationLine": 23329
+        },
+        {
+          "count": 5,
+          "loggedName": "Cataphracted War Horse",
+          "unit": 19,
+          "loggedK": 10,
+          "creationLine": 23330
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 23325,
+      "secondHostLine": 2721,
+      "poptype": 52,
+      "instance": 15169,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 58,
+      "commander": 45,
+      "firstHostLine": 2750
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 31,
+          "loggedK": 5,
+          "creationLine": 23432
+        },
+        {
+          "count": 5,
+          "loggedName": "Riding Horse",
+          "unit": 26,
+          "loggedK": 10,
+          "creationLine": 23433
+        },
+        {
+          "count": 5,
+          "loggedName": "Destrier",
+          "unit": 21,
+          "loggedK": 10,
+          "creationLine": 23434
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 23429,
+      "secondHostLine": 2722,
+      "poptype": 53,
+      "instance": 15196,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 59,
+      "commander": 44,
+      "firstHostLine": 2751
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 31,
+          "loggedK": 5,
+          "creationLine": 23564
+        },
+        {
+          "count": 5,
+          "loggedName": "Riding Horse",
+          "unit": 26,
+          "loggedK": 10,
+          "creationLine": 23565
+        },
+        {
+          "count": 5,
+          "loggedName": "Destrier",
+          "unit": 21,
+          "loggedK": 10,
+          "creationLine": 23566
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 23561,
+      "secondHostLine": 2723,
+      "poptype": 53,
+      "instance": 15223,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 60,
+      "commander": 44,
+      "firstHostLine": 2752
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Heavy Infantry",
+          "unit": 38,
+          "loggedK": 8,
+          "creationLine": 23715
+        },
+        {
+          "count": 7,
+          "loggedName": "War Horse",
+          "unit": 20,
+          "loggedK": 14,
+          "creationLine": 23716
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 23711,
+      "secondHostLine": 2724,
+      "poptype": 54,
+      "instance": 15250,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 61,
+      "commander": 46,
+      "firstHostLine": 2753
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Heavy Infantry",
+          "unit": 38,
+          "loggedK": 8,
+          "creationLine": 23757
+        },
+        {
+          "count": 7,
+          "loggedName": "War Horse",
+          "unit": 20,
+          "loggedK": 14,
+          "creationLine": 23758
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 23753,
+      "secondHostLine": 2725,
+      "poptype": 54,
+      "instance": 15274,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 62,
+      "commander": 46,
+      "firstHostLine": 2754
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Heavy Infantry",
+          "unit": 39,
+          "loggedK": 8,
+          "creationLine": 24171
+        },
+        {
+          "count": 7,
+          "loggedName": "Cataphracted War Horse",
+          "unit": 19,
+          "loggedK": 14,
+          "creationLine": 24172
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 24168,
+      "secondHostLine": 2726,
+      "poptype": 55,
+      "instance": 15298,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 63,
+      "commander": 45,
+      "firstHostLine": 2755
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Heavy Infantry",
+          "unit": 39,
+          "loggedK": 8,
+          "creationLine": 24299
+        },
+        {
+          "count": 7,
+          "loggedName": "Cataphracted War Horse",
+          "unit": 19,
+          "loggedK": 14,
+          "creationLine": 24300
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 24296,
+      "secondHostLine": 2727,
+      "poptype": 55,
+      "instance": 15322,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 64,
+      "commander": 45,
+      "firstHostLine": 2756
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Heavy Infantry",
+          "unit": 40,
+          "loggedK": 8,
+          "creationLine": 24416
+        },
+        {
+          "count": 7,
+          "loggedName": "Destrier",
+          "unit": 21,
+          "loggedK": 14,
+          "creationLine": 24417
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 24413,
+      "secondHostLine": 2728,
+      "poptype": 56,
+      "instance": 15346,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 69,
+      "commander": 44,
+      "firstHostLine": 2757
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Heavy Infantry",
+          "unit": 40,
+          "loggedK": 8,
+          "creationLine": 24524
+        },
+        {
+          "count": 7,
+          "loggedName": "Destrier",
+          "unit": 21,
+          "loggedK": 14,
+          "creationLine": 24525
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 24521,
+      "secondHostLine": 2729,
+      "poptype": 56,
+      "instance": 15370,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 70,
+      "commander": 44,
+      "firstHostLine": 2758
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Atlantian Militia",
+          "unit": 110,
+          "loggedK": 8,
+          "creationLine": 24630
+        },
+        {
+          "count": 7,
+          "loggedName": "Shambler",
+          "unit": 206,
+          "loggedK": 7,
+          "creationLine": 24631
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 22,
+      "creationLine": 24627,
+      "secondHostLine": 2730,
+      "poptype": 57,
+      "instance": 15394,
+      "firstHostHp": 22,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 71,
+      "commander": 207,
+      "firstHostLine": 2759
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Atlantian Militia",
+          "unit": 110,
+          "loggedK": 8,
+          "creationLine": 24733
+        },
+        {
+          "count": 7,
+          "loggedName": "Shambler",
+          "unit": 206,
+          "loggedK": 7,
+          "creationLine": 24734
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 22,
+      "creationLine": 24730,
+      "secondHostLine": 2731,
+      "poptype": 57,
+      "instance": 15410,
+      "firstHostHp": 22,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 72,
+      "commander": 207,
+      "firstHostLine": 2760
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Atlantian Militia",
+          "unit": 110,
+          "loggedK": 8,
+          "creationLine": 24776
+        },
+        {
+          "count": 7,
+          "loggedName": "Shambler",
+          "unit": 206,
+          "loggedK": 7,
+          "creationLine": 24777
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 22,
+      "creationLine": 24773,
+      "secondHostLine": 2732,
+      "poptype": 57,
+      "instance": 15426,
+      "firstHostHp": 22,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 73,
+      "commander": 207,
+      "firstHostLine": 2761
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Atlantian Militia",
+          "unit": 110,
+          "loggedK": 8,
+          "creationLine": 24900
+        },
+        {
+          "count": 7,
+          "loggedName": "Shambler",
+          "unit": 206,
+          "loggedK": 7,
+          "creationLine": 24901
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 22,
+      "creationLine": 24897,
+      "secondHostLine": 2733,
+      "poptype": 57,
+      "instance": 15442,
+      "firstHostHp": 22,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 74,
+      "commander": 207,
+      "firstHostLine": 2762
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Light Infantry",
+          "unit": 29,
+          "loggedK": 5,
+          "creationLine": 25480
+        },
+        {
+          "count": 5,
+          "loggedName": "Heavy Infantry",
+          "unit": 40,
+          "loggedK": 5,
+          "creationLine": 25481
+        },
+        {
+          "count": 5,
+          "loggedName": "Crossbowman",
+          "unit": 49,
+          "loggedK": 5,
+          "creationLine": 25482
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 25477,
+      "secondHostLine": 2734,
+      "poptype": 58,
+      "instance": 15458,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 75,
+      "commander": 36,
+      "firstHostLine": 2763
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Light Infantry",
+          "unit": 29,
+          "loggedK": 5,
+          "creationLine": 25564
+        },
+        {
+          "count": 5,
+          "loggedName": "Heavy Infantry",
+          "unit": 40,
+          "loggedK": 5,
+          "creationLine": 25565
+        },
+        {
+          "count": 5,
+          "loggedName": "Crossbowman",
+          "unit": 49,
+          "loggedK": 5,
+          "creationLine": 25566
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 25561,
+      "secondHostLine": 2735,
+      "poptype": 58,
+      "instance": 15474,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 76,
+      "commander": 36,
+      "firstHostLine": 2764
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 30,
+          "loggedK": 5,
+          "creationLine": 25873
+        },
+        {
+          "count": 5,
+          "loggedName": "Light Infantry",
+          "unit": 28,
+          "loggedK": 5,
+          "creationLine": 25874
+        },
+        {
+          "count": 5,
+          "loggedName": "Archer",
+          "unit": 17,
+          "loggedK": 5,
+          "creationLine": 25875
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 25870,
+      "secondHostLine": 2736,
+      "poptype": 59,
+      "instance": 15490,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 77,
+      "commander": 34,
+      "firstHostLine": 2765
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 30,
+          "loggedK": 5,
+          "creationLine": 26004
+        },
+        {
+          "count": 5,
+          "loggedName": "Light Infantry",
+          "unit": 28,
+          "loggedK": 5,
+          "creationLine": 26005
+        },
+        {
+          "count": 5,
+          "loggedName": "Archer",
+          "unit": 17,
+          "loggedK": 5,
+          "creationLine": 26006
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 26001,
+      "secondHostLine": 2737,
+      "poptype": 59,
+      "instance": 15506,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 78,
+      "commander": 34,
+      "firstHostLine": 2766
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 18,
+          "loggedK": 5,
+          "creationLine": 26234
+        },
+        {
+          "count": 5,
+          "loggedName": "Light Infantry",
+          "unit": 29,
+          "loggedK": 5,
+          "creationLine": 26235
+        },
+        {
+          "count": 5,
+          "loggedName": "Archer",
+          "unit": 33,
+          "loggedK": 5,
+          "creationLine": 26236
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 26231,
+      "secondHostLine": 2738,
+      "poptype": 60,
+      "instance": 15522,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 79,
+      "commander": 35,
+      "firstHostLine": 2767
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Militia",
+          "unit": 18,
+          "loggedK": 5,
+          "creationLine": 26272
+        },
+        {
+          "count": 5,
+          "loggedName": "Light Infantry",
+          "unit": 29,
+          "loggedK": 5,
+          "creationLine": 26273
+        },
+        {
+          "count": 5,
+          "loggedName": "Archer",
+          "unit": 33,
+          "loggedK": 5,
+          "creationLine": 26274
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 26269,
+      "secondHostLine": 2739,
+      "poptype": 60,
+      "instance": 15538,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 80,
+      "commander": 35,
+      "firstHostLine": 2768
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Vaetti",
+          "unit": 541,
+          "loggedK": 5,
+          "creationLine": 26317
+        },
+        {
+          "count": 5,
+          "loggedName": "Wolf",
+          "unit": 282,
+          "loggedK": 10,
+          "creationLine": 26318
+        },
+        {
+          "count": 5,
+          "loggedName": "Troll",
+          "unit": 518,
+          "loggedK": 5,
+          "creationLine": 26319
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 26313,
+      "secondHostLine": 2740,
+      "poptype": 61,
+      "instance": 15554,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 81,
+      "commander": 283,
+      "firstHostLine": 2769
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Vaetti",
+          "unit": 541,
+          "loggedK": 5,
+          "creationLine": 26455
+        },
+        {
+          "count": 5,
+          "loggedName": "Wolf",
+          "unit": 282,
+          "loggedK": 10,
+          "creationLine": 26456
+        },
+        {
+          "count": 5,
+          "loggedName": "Troll",
+          "unit": 518,
+          "loggedK": 5,
+          "creationLine": 26457
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 26451,
+      "secondHostLine": 2741,
+      "poptype": 61,
+      "instance": 15576,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 87,
+      "commander": 283,
+      "firstHostLine": 2770
+    },
+    {
+      "squads": [
+        {
+          "count": 4,
+          "loggedName": "Deer Tribe Archer",
+          "unit": 1595,
+          "loggedK": 4,
+          "creationLine": 26569
+        },
+        {
+          "count": 4,
+          "loggedName": "Deer Tribe Warrior",
+          "unit": 1594,
+          "loggedK": 4,
+          "creationLine": 26570
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 26562,
+      "secondHostLine": 2742,
+      "poptype": 62,
+      "instance": 15598,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 88,
+      "commander": 1598,
+      "firstHostLine": 2771
+    },
+    {
+      "squads": [
+        {
+          "count": 4,
+          "loggedName": "Deer Tribe Archer",
+          "unit": 1595,
+          "loggedK": 4,
+          "creationLine": 26637
+        },
+        {
+          "count": 4,
+          "loggedName": "Deer Tribe Warrior",
+          "unit": 1594,
+          "loggedK": 4,
+          "creationLine": 26638
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 26630,
+      "secondHostLine": 2743,
+      "poptype": 62,
+      "instance": 15607,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 89,
+      "commander": 1598,
+      "firstHostLine": 2772
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Triton",
+          "unit": 176,
+          "loggedK": 5,
+          "creationLine": 26721
+        },
+        {
+          "count": 5,
+          "loggedName": "Triton",
+          "unit": 174,
+          "loggedK": 5,
+          "creationLine": 26722
+        },
+        {
+          "count": 5,
+          "loggedName": "Triton Guard",
+          "unit": 175,
+          "loggedK": 5,
+          "creationLine": 26723
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 26718,
+      "secondHostLine": 2744,
+      "poptype": 63,
+      "instance": 15616,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 90,
+      "commander": 406,
+      "firstHostLine": 2773
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Triton",
+          "unit": 176,
+          "loggedK": 5,
+          "creationLine": 26799
+        },
+        {
+          "count": 5,
+          "loggedName": "Triton",
+          "unit": 174,
+          "loggedK": 5,
+          "creationLine": 26800
+        },
+        {
+          "count": 5,
+          "loggedName": "Triton Guard",
+          "unit": 175,
+          "loggedK": 5,
+          "creationLine": 26801
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 26796,
+      "secondHostLine": 2745,
+      "poptype": 63,
+      "instance": 15632,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 91,
+      "commander": 406,
+      "firstHostLine": 2774
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Triton Guard",
+          "unit": 175,
+          "loggedK": 8,
+          "creationLine": 26885
+        },
+        {
+          "count": 7,
+          "loggedName": "Triton Trooper",
+          "unit": 577,
+          "loggedK": 7,
+          "creationLine": 26886
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 26882,
+      "secondHostLine": 2746,
+      "poptype": 64,
+      "instance": 15648,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 92,
+      "commander": 406,
+      "firstHostLine": 2775
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Triton Guard",
+          "unit": 175,
+          "loggedK": 8,
+          "creationLine": 26997
+        },
+        {
+          "count": 7,
+          "loggedName": "Triton Trooper",
+          "unit": 577,
+          "loggedK": 7,
+          "creationLine": 26998
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 26994,
+      "secondHostLine": 2747,
+      "poptype": 64,
+      "instance": 15664,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 93,
+      "commander": 406,
+      "firstHostLine": 2776
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Ichtyid",
+          "unit": 974,
+          "loggedK": 8,
+          "creationLine": 27240
+        },
+        {
+          "count": 7,
+          "loggedName": "Ichtyid Warrior",
+          "unit": 975,
+          "loggedK": 7,
+          "creationLine": 27241
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 18,
+      "creationLine": 27237,
+      "secondHostLine": 2748,
+      "poptype": 65,
+      "instance": 15680,
+      "firstHostHp": 18,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 94,
+      "commander": 976,
+      "firstHostLine": 2777
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Ichtyid",
+          "unit": 974,
+          "loggedK": 8,
+          "creationLine": 27287
+        },
+        {
+          "count": 7,
+          "loggedName": "Ichtyid Warrior",
+          "unit": 975,
+          "loggedK": 7,
+          "creationLine": 27288
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 18,
+      "creationLine": 27284,
+      "secondHostLine": 2749,
+      "poptype": 65,
+      "instance": 15696,
+      "firstHostHp": 18,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 95,
+      "commander": 976,
+      "firstHostLine": 2778
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Ichtyid",
+          "unit": 974,
+          "loggedK": 8,
+          "creationLine": 27393
+        },
+        {
+          "count": 7,
+          "loggedName": "Ichtyid Warrior",
+          "unit": 975,
+          "loggedK": 7,
+          "creationLine": 27394
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 18,
+      "creationLine": 27390,
+      "secondHostLine": 2750,
+      "poptype": 65,
+      "instance": 15712,
+      "firstHostHp": 18,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 96,
+      "commander": 976,
+      "firstHostLine": 2779
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Ichtyid",
+          "unit": 974,
+          "loggedK": 8,
+          "creationLine": 27424
+        },
+        {
+          "count": 7,
+          "loggedName": "Ichtyid Warrior",
+          "unit": 975,
+          "loggedK": 7,
+          "creationLine": 27425
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 18,
+      "creationLine": 27421,
+      "secondHostLine": 2751,
+      "poptype": 65,
+      "instance": 15728,
+      "firstHostHp": 18,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 97,
+      "commander": 976,
+      "firstHostLine": 2780
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Vaetti",
+          "unit": 541,
+          "loggedK": 5,
+          "creationLine": 27561
+        },
+        {
+          "count": 5,
+          "loggedName": "Wolf",
+          "unit": 282,
+          "loggedK": 10,
+          "creationLine": 27562
+        },
+        {
+          "count": 5,
+          "loggedName": "Moose",
+          "unit": 1085,
+          "loggedK": 15,
+          "creationLine": 27563
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 27557,
+      "secondHostLine": 2752,
+      "poptype": 66,
+      "instance": 15744,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 98,
+      "commander": 283,
+      "firstHostLine": 2781
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Vaetti",
+          "unit": 541,
+          "loggedK": 5,
+          "creationLine": 27768
+        },
+        {
+          "count": 5,
+          "loggedName": "Wolf",
+          "unit": 282,
+          "loggedK": 10,
+          "creationLine": 27769
+        },
+        {
+          "count": 5,
+          "loggedName": "Moose",
+          "unit": 1085,
+          "loggedK": 15,
+          "creationLine": 27770
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 27764,
+      "secondHostLine": 2753,
+      "poptype": 66,
+      "instance": 15776,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 99,
+      "commander": 283,
+      "firstHostLine": 2782
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Vaetti",
+          "unit": 541,
+          "loggedK": 5,
+          "creationLine": 27940
+        },
+        {
+          "count": 5,
+          "loggedName": "Wolf",
+          "unit": 282,
+          "loggedK": 10,
+          "creationLine": 27941
+        },
+        {
+          "count": 5,
+          "loggedName": "Moose",
+          "unit": 1085,
+          "loggedK": 15,
+          "creationLine": 27942
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 27936,
+      "secondHostLine": 2754,
+      "poptype": 67,
+      "instance": 15808,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 104,
+      "commander": 283,
+      "firstHostLine": 2783
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Vaetti",
+          "unit": 541,
+          "loggedK": 5,
+          "creationLine": 28027
+        },
+        {
+          "count": 5,
+          "loggedName": "Wolf",
+          "unit": 282,
+          "loggedK": 10,
+          "creationLine": 28028
+        },
+        {
+          "count": 5,
+          "loggedName": "Moose",
+          "unit": 1085,
+          "loggedK": 15,
+          "creationLine": 28029
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 28023,
+      "secondHostLine": 2755,
+      "poptype": 67,
+      "instance": 15840,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 105,
+      "commander": 283,
+      "firstHostLine": 2784
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Slinger",
+          "unit": 50,
+          "loggedK": 5,
+          "creationLine": 28509
+        },
+        {
+          "count": 5,
+          "loggedName": "Heavy Infantry",
+          "unit": 38,
+          "loggedK": 5,
+          "creationLine": 28510
+        },
+        {
+          "count": 5,
+          "loggedName": "War Elephant",
+          "unit": 150,
+          "loggedK": 20,
+          "creationLine": 28511
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 28506,
+      "secondHostLine": 2756,
+      "poptype": 68,
+      "instance": 15872,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 106,
+      "commander": 34,
+      "firstHostLine": 2785
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Slinger",
+          "unit": 50,
+          "loggedK": 5,
+          "creationLine": 28600
+        },
+        {
+          "count": 5,
+          "loggedName": "Heavy Infantry",
+          "unit": 38,
+          "loggedK": 5,
+          "creationLine": 28601
+        },
+        {
+          "count": 5,
+          "loggedName": "War Elephant",
+          "unit": 150,
+          "loggedK": 20,
+          "creationLine": 28602
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 28597,
+      "secondHostLine": 2757,
+      "poptype": 68,
+      "instance": 15903,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 107,
+      "commander": 34,
+      "firstHostLine": 2786
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Asmeg",
+          "unit": 1001,
+          "loggedK": 15,
+          "creationLine": 28742
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 23,
+      "creationLine": 28735,
+      "secondHostLine": 2758,
+      "poptype": 69,
+      "instance": 15934,
+      "firstHostHp": 23,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 108,
+      "commander": 1002,
+      "firstHostLine": 2787
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Asmeg",
+          "unit": 1001,
+          "loggedK": 15,
+          "creationLine": 29124
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 23,
+      "creationLine": 29117,
+      "secondHostLine": 2759,
+      "poptype": 69,
+      "instance": 15950,
+      "firstHostHp": 23,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 109,
+      "commander": 1002,
+      "firstHostLine": 2788
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Vaetti",
+          "unit": 541,
+          "loggedK": 5,
+          "creationLine": 29268
+        },
+        {
+          "count": 5,
+          "loggedName": "Wolf",
+          "unit": 282,
+          "loggedK": 10,
+          "creationLine": 29269
+        },
+        {
+          "count": 5,
+          "loggedName": "Moose",
+          "unit": 1085,
+          "loggedK": 15,
+          "creationLine": 29270
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 29264,
+      "secondHostLine": 2760,
+      "poptype": 70,
+      "instance": 15966,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 110,
+      "commander": 283,
+      "firstHostLine": 2789
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Vaetti",
+          "unit": 541,
+          "loggedK": 5,
+          "creationLine": 29339
+        },
+        {
+          "count": 5,
+          "loggedName": "Wolf",
+          "unit": 282,
+          "loggedK": 10,
+          "creationLine": 29340
+        },
+        {
+          "count": 5,
+          "loggedName": "Moose",
+          "unit": 1085,
+          "loggedK": 15,
+          "creationLine": 29341
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 29335,
+      "secondHostLine": 2761,
+      "poptype": 70,
+      "instance": 15998,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 111,
+      "commander": 283,
+      "firstHostLine": 2790
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Troll",
+          "unit": 518,
+          "loggedK": 5,
+          "creationLine": 29950
+        },
+        {
+          "count": 5,
+          "loggedName": "War Troll",
+          "unit": 1037,
+          "loggedK": 5,
+          "creationLine": 29951
+        },
+        {
+          "count": 5,
+          "loggedName": "Armored Moose",
+          "unit": 1086,
+          "loggedK": 10,
+          "creationLine": 29952
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 42,
+      "creationLine": 29944,
+      "secondHostLine": 2762,
+      "poptype": 71,
+      "instance": 16030,
+      "firstHostHp": 42,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 112,
+      "commander": 519,
+      "firstHostLine": 2791
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Troll",
+          "unit": 518,
+          "loggedK": 5,
+          "creationLine": 30101
+        },
+        {
+          "count": 5,
+          "loggedName": "War Troll",
+          "unit": 1037,
+          "loggedK": 5,
+          "creationLine": 30102
+        },
+        {
+          "count": 5,
+          "loggedName": "Armored Moose",
+          "unit": 1086,
+          "loggedK": 10,
+          "creationLine": 30103
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 42,
+      "creationLine": 30095,
+      "secondHostLine": 2763,
+      "poptype": 71,
+      "instance": 16051,
+      "firstHostHp": 42,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 113,
+      "commander": 519,
+      "firstHostLine": 2792
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Triton Guard",
+          "unit": 175,
+          "loggedK": 5,
+          "creationLine": 30125
+        },
+        {
+          "count": 5,
+          "loggedName": "Triton Trooper",
+          "unit": 577,
+          "loggedK": 5,
+          "creationLine": 30126
+        },
+        {
+          "count": 5,
+          "loggedName": "Hippocampus",
+          "unit": 1060,
+          "loggedK": 10,
+          "creationLine": 30127
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 30122,
+      "secondHostLine": 2764,
+      "poptype": 73,
+      "instance": 16072,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 114,
+      "commander": 406,
+      "firstHostLine": 2793
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Triton Guard",
+          "unit": 175,
+          "loggedK": 5,
+          "creationLine": 30206
+        },
+        {
+          "count": 5,
+          "loggedName": "Triton Trooper",
+          "unit": 577,
+          "loggedK": 5,
+          "creationLine": 30207
+        },
+        {
+          "count": 5,
+          "loggedName": "Hippocampus",
+          "unit": 1060,
+          "loggedK": 10,
+          "creationLine": 30208
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 30203,
+      "secondHostLine": 2765,
+      "poptype": 73,
+      "instance": 16093,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 115,
+      "commander": 406,
+      "firstHostLine": 2794
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Light Infantry",
+          "unit": 29,
+          "loggedK": 5,
+          "creationLine": 30354
+        },
+        {
+          "count": 5,
+          "loggedName": "Riding Horse",
+          "unit": 26,
+          "loggedK": 10,
+          "creationLine": 30355
+        },
+        {
+          "count": 5,
+          "loggedName": "Cataphracted War Horse",
+          "unit": 1187,
+          "loggedK": 10,
+          "creationLine": 30356
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 30350,
+      "secondHostLine": 2766,
+      "poptype": 74,
+      "instance": 16114,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 116,
+      "commander": 46,
+      "firstHostLine": 2795
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Light Infantry",
+          "unit": 29,
+          "loggedK": 5,
+          "creationLine": 30458
+        },
+        {
+          "count": 5,
+          "loggedName": "Riding Horse",
+          "unit": 26,
+          "loggedK": 10,
+          "creationLine": 30459
+        },
+        {
+          "count": 5,
+          "loggedName": "Cataphracted War Horse",
+          "unit": 1187,
+          "loggedK": 10,
+          "creationLine": 30460
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 30454,
+      "secondHostLine": 2767,
+      "poptype": 74,
+      "instance": 16141,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 117,
+      "commander": 46,
+      "firstHostLine": 2796
+    },
+    {
+      "squads": [
+        {
+          "count": 4,
+          "loggedName": "Hoburg Militia",
+          "unit": 483,
+          "loggedK": 4,
+          "creationLine": 30622
+        },
+        {
+          "count": 4,
+          "loggedName": "Burgmeister Guard",
+          "unit": 271,
+          "loggedK": 4,
+          "creationLine": 30623
+        },
+        {
+          "count": 4,
+          "loggedName": "Hoburg Crossbow",
+          "unit": 273,
+          "loggedK": 4,
+          "creationLine": 30624
+        },
+        {
+          "count": 3,
+          "loggedName": "War Hog",
+          "unit": 1196,
+          "loggedK": 6,
+          "creationLine": 30625
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 6,
+      "creationLine": 30619,
+      "secondHostLine": 2768,
+      "poptype": 75,
+      "instance": 16168,
+      "firstHostHp": 6,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 118,
+      "commander": 272,
+      "firstHostLine": 2797
+    },
+    {
+      "squads": [
+        {
+          "count": 4,
+          "loggedName": "Hoburg Militia",
+          "unit": 483,
+          "loggedK": 4,
+          "creationLine": 30643
+        },
+        {
+          "count": 4,
+          "loggedName": "Burgmeister Guard",
+          "unit": 271,
+          "loggedK": 4,
+          "creationLine": 30644
+        },
+        {
+          "count": 4,
+          "loggedName": "Hoburg Crossbow",
+          "unit": 273,
+          "loggedK": 4,
+          "creationLine": 30645
+        },
+        {
+          "count": 3,
+          "loggedName": "War Hog",
+          "unit": 1196,
+          "loggedK": 6,
+          "creationLine": 30646
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 6,
+      "creationLine": 30640,
+      "secondHostLine": 2769,
+      "poptype": 75,
+      "instance": 16187,
+      "firstHostHp": 6,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 119,
+      "commander": 272,
+      "firstHostLine": 2798
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Hoburg Militia",
+          "unit": 483,
+          "loggedK": 15,
+          "creationLine": 30862
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 5,
+      "creationLine": 30856,
+      "secondHostLine": 2770,
+      "poptype": 76,
+      "instance": 16206,
+      "firstHostHp": 5,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 122,
+      "commander": 1198,
+      "firstHostLine": 2799
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Hoburg Militia",
+          "unit": 483,
+          "loggedK": 15,
+          "creationLine": 31219
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 5,
+      "creationLine": 31213,
+      "secondHostLine": 2771,
+      "poptype": 76,
+      "instance": 16222,
+      "firstHostHp": 5,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 123,
+      "commander": 1198,
+      "firstHostLine": 2800
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Markata",
+          "unit": 1118,
+          "loggedK": 5,
+          "creationLine": 31612
+        },
+        {
+          "count": 5,
+          "loggedName": "Atavi Archer",
+          "unit": 1121,
+          "loggedK": 5,
+          "creationLine": 31613
+        },
+        {
+          "count": 5,
+          "loggedName": "Atavi Infantry",
+          "unit": 1122,
+          "loggedK": 5,
+          "creationLine": 31614
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 31608,
+      "secondHostLine": 2772,
+      "poptype": 77,
+      "instance": 16238,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 124,
+      "commander": 1127,
+      "firstHostLine": 2801
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Markata",
+          "unit": 1118,
+          "loggedK": 5,
+          "creationLine": 31714
+        },
+        {
+          "count": 5,
+          "loggedName": "Atavi Archer",
+          "unit": 1121,
+          "loggedK": 5,
+          "creationLine": 31715
+        },
+        {
+          "count": 5,
+          "loggedName": "Atavi Infantry",
+          "unit": 1122,
+          "loggedK": 5,
+          "creationLine": 31716
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 31710,
+      "secondHostLine": 2773,
+      "poptype": 77,
+      "instance": 16254,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 125,
+      "commander": 1127,
+      "firstHostLine": 2802
+    },
+    {
+      "squads": [
+        {
+          "count": 4,
+          "loggedName": "Wolf Tribe Archer",
+          "unit": 123,
+          "loggedK": 4,
+          "creationLine": 32189
+        },
+        {
+          "count": 4,
+          "loggedName": "Wolf Tribe Warrior",
+          "unit": 124,
+          "loggedK": 4,
+          "creationLine": 32190
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 32182,
+      "secondHostLine": 2774,
+      "poptype": 78,
+      "instance": 16270,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 126,
+      "commander": 1596,
+      "firstHostLine": 2803
+    },
+    {
+      "squads": [
+        {
+          "count": 4,
+          "loggedName": "Wolf Tribe Archer",
+          "unit": 123,
+          "loggedK": 4,
+          "creationLine": 32393
+        },
+        {
+          "count": 4,
+          "loggedName": "Wolf Tribe Warrior",
+          "unit": 124,
+          "loggedK": 4,
+          "creationLine": 32394
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 32386,
+      "secondHostLine": 2775,
+      "poptype": 78,
+      "instance": 16279,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 127,
+      "commander": 1596,
+      "firstHostLine": 2804
+    },
+    {
+      "squads": [
+        {
+          "count": 4,
+          "loggedName": "Bear Tribe Warrior",
+          "unit": 1592,
+          "loggedK": 4,
+          "creationLine": 32526
+        },
+        {
+          "count": 4,
+          "loggedName": "Bear Tribe Warrior",
+          "unit": 1593,
+          "loggedK": 4,
+          "creationLine": 32527
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 32519,
+      "secondHostLine": 2776,
+      "poptype": 79,
+      "instance": 16288,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 128,
+      "commander": 1597,
+      "firstHostLine": 2805
+    },
+    {
+      "squads": [
+        {
+          "count": 4,
+          "loggedName": "Bear Tribe Warrior",
+          "unit": 1592,
+          "loggedK": 4,
+          "creationLine": 32577
+        },
+        {
+          "count": 4,
+          "loggedName": "Bear Tribe Warrior",
+          "unit": 1593,
+          "loggedK": 4,
+          "creationLine": 32578
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 32570,
+      "secondHostLine": 2777,
+      "poptype": 79,
+      "instance": 16297,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 129,
+      "commander": 1597,
+      "firstHostLine": 2806
+    },
+    {
+      "squads": [
+        {
+          "count": 4,
+          "loggedName": "Lion Tribe Archer",
+          "unit": 1601,
+          "loggedK": 4,
+          "creationLine": 32696
+        },
+        {
+          "count": 4,
+          "loggedName": "Lion Tribe Warrior",
+          "unit": 1600,
+          "loggedK": 4,
+          "creationLine": 32697
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 32690,
+      "secondHostLine": 2778,
+      "poptype": 80,
+      "instance": 16306,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 130,
+      "commander": 1602,
+      "firstHostLine": 2807
+    },
+    {
+      "squads": [
+        {
+          "count": 4,
+          "loggedName": "Lion Tribe Archer",
+          "unit": 1601,
+          "loggedK": 4,
+          "creationLine": 32803
+        },
+        {
+          "count": 4,
+          "loggedName": "Lion Tribe Warrior",
+          "unit": 1600,
+          "loggedK": 4,
+          "creationLine": 32804
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 32797,
+      "secondHostLine": 2779,
+      "poptype": 80,
+      "instance": 16315,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 131,
+      "commander": 1602,
+      "firstHostLine": 2808
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Pale One",
+          "unit": 1465,
+          "loggedK": 15,
+          "creationLine": 32929
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 22,
+      "creationLine": 32926,
+      "secondHostLine": 2780,
+      "poptype": 81,
+      "instance": 16324,
+      "firstHostHp": 22,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 132,
+      "commander": 1463,
+      "firstHostLine": 2809
+    },
+    {
+      "squads": [
+        {
+          "count": 4,
+          "loggedName": "Jaguar Tribe Slinger",
+          "unit": 1610,
+          "loggedK": 4,
+          "creationLine": 33069
+        },
+        {
+          "count": 4,
+          "loggedName": "Jaguar Tribe Warrior",
+          "unit": 1611,
+          "loggedK": 4,
+          "creationLine": 33070
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 33062,
+      "secondHostLine": 2781,
+      "poptype": 82,
+      "instance": 16340,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 133,
+      "commander": 1612,
+      "firstHostLine": 2810
+    },
+    {
+      "squads": [
+        {
+          "count": 4,
+          "loggedName": "Jaguar Tribe Slinger",
+          "unit": 1610,
+          "loggedK": 4,
+          "creationLine": 33231
+        },
+        {
+          "count": 4,
+          "loggedName": "Jaguar Tribe Warrior",
+          "unit": 1611,
+          "loggedK": 4,
+          "creationLine": 33232
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 10,
+      "creationLine": 33224,
+      "secondHostLine": 2782,
+      "poptype": 82,
+      "instance": 16349,
+      "firstHostHp": 10,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 134,
+      "commander": 1612,
+      "firstHostLine": 2811
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Toad Tribe Warrior",
+          "unit": 1613,
+          "loggedK": 15,
+          "creationLine": 33326
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 33324,
+      "secondHostLine": 2783,
+      "poptype": 83,
+      "instance": 16358,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 135,
+      "commander": 1614,
+      "firstHostLine": 2812
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Toad Tribe Warrior",
+          "unit": 1613,
+          "loggedK": 15,
+          "creationLine": 33472
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 33470,
+      "secondHostLine": 2784,
+      "poptype": 83,
+      "instance": 16374,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 136,
+      "commander": 1614,
+      "firstHostLine": 2813
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Toad Tribe Warrior",
+          "unit": 1613,
+          "loggedK": 15,
+          "creationLine": 33491
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 33489,
+      "secondHostLine": 2785,
+      "poptype": 83,
+      "instance": 16390,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 137,
+      "commander": 1614,
+      "firstHostLine": 2814
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Toad Tribe Warrior",
+          "unit": 1613,
+          "loggedK": 15,
+          "creationLine": 33559
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 33557,
+      "secondHostLine": 2786,
+      "poptype": 83,
+      "instance": 16406,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 138,
+      "commander": 1614,
+      "firstHostLine": 2815
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Caveman",
+          "unit": 1615,
+          "loggedK": 8,
+          "creationLine": 33754
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 26,
+      "creationLine": 33751,
+      "secondHostLine": 2787,
+      "poptype": 84,
+      "instance": 16422,
+      "firstHostHp": 26,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 139,
+      "commander": 1616,
+      "firstHostLine": 2816
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Kappa",
+          "unit": 1550,
+          "loggedK": 15,
+          "creationLine": 34104
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 23,
+      "creationLine": 34100,
+      "secondHostLine": 2788,
+      "poptype": 85,
+      "instance": 16431,
+      "firstHostHp": 23,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 140,
+      "commander": 1531,
+      "firstHostLine": 2817
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Kappa",
+          "unit": 1550,
+          "loggedK": 15,
+          "creationLine": 34199
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 23,
+      "creationLine": 34195,
+      "secondHostLine": 2789,
+      "poptype": 85,
+      "instance": 16447,
+      "firstHostHp": 23,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 141,
+      "commander": 1531,
+      "firstHostLine": 2818
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Kappa",
+          "unit": 1550,
+          "loggedK": 15,
+          "creationLine": 34261
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 23,
+      "creationLine": 34257,
+      "secondHostLine": 2790,
+      "poptype": 85,
+      "instance": 16463,
+      "firstHostHp": 23,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 142,
+      "commander": 1531,
+      "firstHostLine": 2819
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Kappa",
+          "unit": 1550,
+          "loggedK": 15,
+          "creationLine": 34343
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 23,
+      "creationLine": 34339,
+      "secondHostLine": 2791,
+      "poptype": 85,
+      "instance": 16479,
+      "firstHostHp": 23,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 143,
+      "commander": 1531,
+      "firstHostLine": 2820
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Bakemono-Sho",
+          "unit": 1394,
+          "loggedK": 15,
+          "creationLine": 34714
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 34711,
+      "secondHostLine": 2792,
+      "poptype": 86,
+      "instance": 16495,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 144,
+      "commander": 1845,
+      "firstHostLine": 2821
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Bakemono-Sho",
+          "unit": 1394,
+          "loggedK": 15,
+          "creationLine": 34828
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 34825,
+      "secondHostLine": 2793,
+      "poptype": 86,
+      "instance": 16511,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 145,
+      "commander": 1845,
+      "firstHostLine": 2822
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Bakemono-Sho",
+          "unit": 1394,
+          "loggedK": 8,
+          "creationLine": 34952
+        },
+        {
+          "count": 7,
+          "loggedName": "Bakemono Archer",
+          "unit": 1395,
+          "loggedK": 7,
+          "creationLine": 34953
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 34949,
+      "secondHostLine": 2794,
+      "poptype": 87,
+      "instance": 16527,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 146,
+      "commander": 1845,
+      "firstHostLine": 2823
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Bakemono-Sho",
+          "unit": 1394,
+          "loggedK": 8,
+          "creationLine": 35005
+        },
+        {
+          "count": 7,
+          "loggedName": "Bakemono Archer",
+          "unit": 1395,
+          "loggedK": 7,
+          "creationLine": 35006
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 35002,
+      "secondHostLine": 2795,
+      "poptype": 87,
+      "instance": 16543,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 150,
+      "commander": 1845,
+      "firstHostLine": 2824
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Fir Bolg Militia",
+          "unit": 1749,
+          "loggedK": 5,
+          "creationLine": 35505
+        },
+        {
+          "count": 5,
+          "loggedName": "Fir Bolg Slinger",
+          "unit": 1758,
+          "loggedK": 5,
+          "creationLine": 35506
+        },
+        {
+          "count": 5,
+          "loggedName": "Fir Bolg Warrior",
+          "unit": 1756,
+          "loggedK": 5,
+          "creationLine": 35507
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 13,
+      "creationLine": 35501,
+      "secondHostLine": 2796,
+      "poptype": 89,
+      "instance": 16559,
+      "firstHostHp": 13,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 151,
+      "commander": 1750,
+      "firstHostLine": 2825
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Fir Bolg Militia",
+          "unit": 1749,
+          "loggedK": 5,
+          "creationLine": 35629
+        },
+        {
+          "count": 5,
+          "loggedName": "Fir Bolg Slinger",
+          "unit": 1758,
+          "loggedK": 5,
+          "creationLine": 35630
+        },
+        {
+          "count": 5,
+          "loggedName": "Fir Bolg Warrior",
+          "unit": 1756,
+          "loggedK": 5,
+          "creationLine": 35631
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 13,
+      "creationLine": 35625,
+      "secondHostLine": 2797,
+      "poptype": 89,
+      "instance": 16575,
+      "firstHostHp": 13,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 152,
+      "commander": 1750,
+      "firstHostLine": 2826
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Turtle Tribe Triton",
+          "unit": 2382,
+          "loggedK": 15,
+          "creationLine": 35661
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 35658,
+      "secondHostLine": 2798,
+      "poptype": 90,
+      "instance": 16591,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 153,
+      "commander": 406,
+      "firstHostLine": 2827
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Turtle Tribe Triton",
+          "unit": 2382,
+          "loggedK": 15,
+          "creationLine": 35782
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 35779,
+      "secondHostLine": 2799,
+      "poptype": 90,
+      "instance": 16607,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 154,
+      "commander": 406,
+      "firstHostLine": 2828
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Shark Tribe Triton",
+          "unit": 2383,
+          "loggedK": 15,
+          "creationLine": 35855
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 35852,
+      "secondHostLine": 2800,
+      "poptype": 91,
+      "instance": 16623,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 155,
+      "commander": 406,
+      "firstHostLine": 2829
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Shark Tribe Triton",
+          "unit": 2383,
+          "loggedK": 15,
+          "creationLine": 36054
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 36051,
+      "secondHostLine": 2801,
+      "poptype": 91,
+      "instance": 16639,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 156,
+      "commander": 406,
+      "firstHostLine": 2830
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Shark Tribe Triton",
+          "unit": 2383,
+          "loggedK": 8,
+          "creationLine": 36100
+        },
+        {
+          "count": 7,
+          "loggedName": "Shark",
+          "unit": 545,
+          "loggedK": 14,
+          "creationLine": 36101
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 36097,
+      "secondHostLine": 2802,
+      "poptype": 92,
+      "instance": 16655,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 157,
+      "commander": 406,
+      "firstHostLine": 2831
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Shark Tribe Triton",
+          "unit": 2383,
+          "loggedK": 8,
+          "creationLine": 36222
+        },
+        {
+          "count": 7,
+          "loggedName": "Shark",
+          "unit": 545,
+          "loggedK": 14,
+          "creationLine": 36223
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 12,
+      "creationLine": 36219,
+      "secondHostLine": 2803,
+      "poptype": 92,
+      "instance": 16678,
+      "firstHostHp": 12,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 158,
+      "commander": 406,
+      "firstHostLine": 2832
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Zotz",
+          "unit": 2504,
+          "loggedK": 15,
+          "creationLine": 36280
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 7,
+      "creationLine": 36274,
+      "secondHostLine": 2804,
+      "poptype": 93,
+      "instance": 16701,
+      "firstHostHp": 7,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 159,
+      "commander": 2505,
+      "firstHostLine": 2833
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Lava-born",
+          "unit": 2510,
+          "loggedK": 15,
+          "creationLine": 36381
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 15,
+      "creationLine": 36378,
+      "secondHostLine": 2805,
+      "poptype": 94,
+      "instance": 16717,
+      "firstHostHp": 15,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 160,
+      "commander": 2511,
+      "firstHostLine": 2834
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Lava-born",
+          "unit": 2510,
+          "loggedK": 15,
+          "creationLine": 36465
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 15,
+      "creationLine": 36462,
+      "secondHostLine": 2806,
+      "poptype": 94,
+      "instance": 16733,
+      "firstHostHp": 15,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 161,
+      "commander": 2511,
+      "firstHostLine": 2835
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Ichtyid",
+          "unit": 974,
+          "loggedK": 8,
+          "creationLine": 36630
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 15,
+      "creationLine": 36623,
+      "secondHostLine": 2807,
+      "poptype": 95,
+      "instance": 16749,
+      "firstHostHp": 15,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 162,
+      "commander": 2804,
+      "firstHostLine": 2836
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Ichtyid",
+          "unit": 974,
+          "loggedK": 8,
+          "creationLine": 36678
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 15,
+      "creationLine": 36671,
+      "secondHostLine": 2808,
+      "poptype": 95,
+      "instance": 16758,
+      "firstHostHp": 15,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 163,
+      "commander": 2804,
+      "firstHostLine": 2837
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Ichtyid",
+          "unit": 974,
+          "loggedK": 8,
+          "creationLine": 36799
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 15,
+      "creationLine": 36792,
+      "secondHostLine": 2809,
+      "poptype": 95,
+      "instance": 16767,
+      "firstHostHp": 15,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 169,
+      "commander": 2804,
+      "firstHostLine": 2838
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Ichtyid",
+          "unit": 974,
+          "loggedK": 8,
+          "creationLine": 36900
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 15,
+      "creationLine": 36893,
+      "secondHostLine": 2810,
+      "poptype": 95,
+      "instance": 16776,
+      "firstHostHp": 15,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 170,
+      "commander": 2804,
+      "firstHostLine": 2839
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Bone Tribe Hunter",
+          "unit": 2817,
+          "loggedK": 8,
+          "creationLine": 37019
+        },
+        {
+          "count": 7,
+          "loggedName": "Bone Tribe Beast Hunter",
+          "unit": 2818,
+          "loggedK": 7,
+          "creationLine": 37020
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 14,
+      "creationLine": 37016,
+      "secondHostLine": 2811,
+      "poptype": 96,
+      "instance": 16785,
+      "firstHostHp": 14,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 171,
+      "commander": 2819,
+      "firstHostLine": 2840
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Bone Tribe Hunter",
+          "unit": 2817,
+          "loggedK": 8,
+          "creationLine": 37106
+        },
+        {
+          "count": 7,
+          "loggedName": "Bone Tribe Beast Hunter",
+          "unit": 2818,
+          "loggedK": 7,
+          "creationLine": 37107
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 14,
+      "creationLine": 37103,
+      "secondHostLine": 2812,
+      "poptype": 96,
+      "instance": 16801,
+      "firstHostHp": 14,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 172,
+      "commander": 2819,
+      "firstHostLine": 2841
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Merrow Militia",
+          "unit": 2902,
+          "loggedK": 5,
+          "creationLine": 37202
+        },
+        {
+          "count": 5,
+          "loggedName": "Merrow",
+          "unit": 2903,
+          "loggedK": 5,
+          "creationLine": 37203
+        },
+        {
+          "count": 5,
+          "loggedName": "Merrow",
+          "unit": 2904,
+          "loggedK": 5,
+          "creationLine": 37204
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 15,
+      "creationLine": 37199,
+      "secondHostLine": 2813,
+      "poptype": 97,
+      "instance": 16817,
+      "firstHostHp": 15,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 173,
+      "commander": 2905,
+      "firstHostLine": 2842
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Merrow Militia",
+          "unit": 2902,
+          "loggedK": 5,
+          "creationLine": 37315
+        },
+        {
+          "count": 5,
+          "loggedName": "Merrow",
+          "unit": 2903,
+          "loggedK": 5,
+          "creationLine": 37316
+        },
+        {
+          "count": 5,
+          "loggedName": "Merrow",
+          "unit": 2904,
+          "loggedK": 5,
+          "creationLine": 37317
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 15,
+      "creationLine": 37312,
+      "secondHostLine": 2814,
+      "poptype": 97,
+      "instance": 16833,
+      "firstHostHp": 15,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 174,
+      "commander": 2905,
+      "firstHostLine": 2843
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Merrow Militia",
+          "unit": 2902,
+          "loggedK": 5,
+          "creationLine": 37420
+        },
+        {
+          "count": 5,
+          "loggedName": "Merrow",
+          "unit": 2903,
+          "loggedK": 5,
+          "creationLine": 37421
+        },
+        {
+          "count": 5,
+          "loggedName": "Merrow",
+          "unit": 2904,
+          "loggedK": 5,
+          "creationLine": 37422
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 15,
+      "creationLine": 37417,
+      "secondHostLine": 2815,
+      "poptype": 97,
+      "instance": 16849,
+      "firstHostHp": 15,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 175,
+      "commander": 2905,
+      "firstHostLine": 2844
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Merrow Militia",
+          "unit": 2902,
+          "loggedK": 5,
+          "creationLine": 37993
+        },
+        {
+          "count": 5,
+          "loggedName": "Merrow",
+          "unit": 2903,
+          "loggedK": 5,
+          "creationLine": 37994
+        },
+        {
+          "count": 5,
+          "loggedName": "Merrow",
+          "unit": 2904,
+          "loggedK": 5,
+          "creationLine": 37995
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 15,
+      "creationLine": 37990,
+      "secondHostLine": 2816,
+      "poptype": 97,
+      "instance": 16865,
+      "firstHostHp": 15,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 176,
+      "commander": 2905,
+      "firstHostLine": 2845
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Kulullu",
+          "unit": 3089,
+          "loggedK": 15,
+          "creationLine": 38097
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 31,
+      "creationLine": 38093,
+      "secondHostLine": 2817,
+      "poptype": 98,
+      "instance": 16881,
+      "firstHostHp": 31,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 177,
+      "commander": 3093,
+      "firstHostLine": 2846
+    },
+    {
+      "squads": [
+        {
+          "count": 15,
+          "loggedName": "Kulullu",
+          "unit": 3089,
+          "loggedK": 15,
+          "creationLine": 38193
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 31,
+      "creationLine": 38189,
+      "secondHostLine": 2818,
+      "poptype": 98,
+      "instance": 16897,
+      "firstHostHp": 31,
+      "survivedFirstTurn": true,
+      "medium": "water",
+      "held": false,
+      "province": 178,
+      "commander": 3093,
+      "firstHostLine": 2847
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Ekdromos",
+          "unit": 3183,
+          "loggedK": 5,
+          "creationLine": 38350
+        },
+        {
+          "count": 5,
+          "loggedName": "Hoplite",
+          "unit": 3184,
+          "loggedK": 5,
+          "creationLine": 38351
+        },
+        {
+          "count": 5,
+          "loggedName": "Slinger",
+          "unit": 50,
+          "loggedK": 5,
+          "creationLine": 38352
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 38347,
+      "secondHostLine": 2819,
+      "poptype": 99,
+      "instance": 16913,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 179,
+      "commander": 3182,
+      "firstHostLine": 2848
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "Ekdromos",
+          "unit": 3183,
+          "loggedK": 5,
+          "creationLine": 38508
+        },
+        {
+          "count": 5,
+          "loggedName": "Hoplite",
+          "unit": 3184,
+          "loggedK": 5,
+          "creationLine": 38509
+        },
+        {
+          "count": 5,
+          "loggedName": "Slinger",
+          "unit": 50,
+          "loggedK": 5,
+          "creationLine": 38510
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 38505,
+      "secondHostLine": 2820,
+      "poptype": 99,
+      "instance": 16929,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 180,
+      "commander": 3182,
+      "firstHostLine": 2849
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Heavy Infantry",
+          "unit": 3185,
+          "loggedK": 8,
+          "creationLine": 38620
+        },
+        {
+          "count": 7,
+          "loggedName": "Slinger",
+          "unit": 50,
+          "loggedK": 7,
+          "creationLine": 38621
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 38617,
+      "secondHostLine": 2821,
+      "poptype": 100,
+      "instance": 16945,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 181,
+      "commander": 3186,
+      "firstHostLine": 2850
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Heavy Infantry",
+          "unit": 3185,
+          "loggedK": 8,
+          "creationLine": 38800
+        },
+        {
+          "count": 7,
+          "loggedName": "Slinger",
+          "unit": 50,
+          "loggedK": 7,
+          "creationLine": 38801
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 38797,
+      "secondHostLine": 2822,
+      "poptype": 100,
+      "instance": 16961,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 187,
+      "commander": 3186,
+      "firstHostLine": 2851
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "War Horse",
+          "unit": 3187,
+          "loggedK": 10,
+          "creationLine": 38938
+        },
+        {
+          "count": 5,
+          "loggedName": "Heavy Infantry",
+          "unit": 3185,
+          "loggedK": 5,
+          "creationLine": 38939
+        },
+        {
+          "count": 5,
+          "loggedName": "Archer",
+          "unit": 17,
+          "loggedK": 5,
+          "creationLine": 38940
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 38935,
+      "secondHostLine": 2823,
+      "poptype": 101,
+      "instance": 16977,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 188,
+      "commander": 3186,
+      "firstHostLine": 2852
+    },
+    {
+      "squads": [
+        {
+          "count": 5,
+          "loggedName": "War Horse",
+          "unit": 3187,
+          "loggedK": 10,
+          "creationLine": 39033
+        },
+        {
+          "count": 5,
+          "loggedName": "Heavy Infantry",
+          "unit": 3185,
+          "loggedK": 5,
+          "creationLine": 39034
+        },
+        {
+          "count": 5,
+          "loggedName": "Archer",
+          "unit": 17,
+          "loggedK": 5,
+          "creationLine": 39035
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 39030,
+      "secondHostLine": 2824,
+      "poptype": 101,
+      "instance": 16998,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 189,
+      "commander": 3186,
+      "firstHostLine": 2853
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Heavy Infantry",
+          "unit": 3188,
+          "loggedK": 8,
+          "creationLine": 39261
+        },
+        {
+          "count": 7,
+          "loggedName": "Slinger",
+          "unit": 50,
+          "loggedK": 7,
+          "creationLine": 39262
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 39258,
+      "secondHostLine": 2825,
+      "poptype": 102,
+      "instance": 17019,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 190,
+      "commander": 3186,
+      "firstHostLine": 2854
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Heavy Infantry",
+          "unit": 3188,
+          "loggedK": 8,
+          "creationLine": 39461
+        },
+        {
+          "count": 7,
+          "loggedName": "Slinger",
+          "unit": 50,
+          "loggedK": 7,
+          "creationLine": 39462
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 11,
+      "creationLine": 39458,
+      "secondHostLine": 2826,
+      "poptype": 102,
+      "instance": 17035,
+      "firstHostHp": 11,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 191,
+      "commander": 3186,
+      "firstHostLine": 2855
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Cynocephalian Hunter",
+          "unit": 3276,
+          "loggedK": 8,
+          "creationLine": 39741
+        },
+        {
+          "count": 7,
+          "loggedName": "Cynocephalian Warrior",
+          "unit": 3277,
+          "loggedK": 7,
+          "creationLine": 39742
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 22,
+      "creationLine": 39738,
+      "secondHostLine": 2827,
+      "poptype": 103,
+      "instance": 17051,
+      "firstHostHp": 22,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 192,
+      "commander": 3278,
+      "firstHostLine": 2856
+    },
+    {
+      "squads": [
+        {
+          "count": 8,
+          "loggedName": "Cynocephalian Hunter",
+          "unit": 3276,
+          "loggedK": 8,
+          "creationLine": 39810
+        },
+        {
+          "count": 7,
+          "loggedName": "Cynocephalian Warrior",
+          "unit": 3277,
+          "loggedK": 7,
+          "creationLine": 39811
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 22,
+      "creationLine": 39807,
+      "secondHostLine": 2828,
+      "poptype": 103,
+      "instance": 17067,
+      "firstHostHp": 22,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 193,
+      "commander": 3278,
+      "firstHostLine": 2857
+    },
+    {
+      "squads": [
+        {
+          "count": 4,
+          "loggedName": "Bekryde Hunter",
+          "unit": 3689,
+          "loggedK": 4,
+          "creationLine": 40043
+        },
+        {
+          "count": 4,
+          "loggedName": "Bekryde",
+          "unit": 3836,
+          "loggedK": 4,
+          "creationLine": 40044
+        },
+        {
+          "count": 4,
+          "loggedName": "Bekryde",
+          "unit": 3837,
+          "loggedK": 4,
+          "creationLine": 40045
+        },
+        {
+          "count": 3,
+          "loggedName": "Bekryde Warrior",
+          "unit": 3838,
+          "loggedK": 3,
+          "creationLine": 40046
+        }
+      ],
+      "cave": false,
+      "errors": [],
+      "secondHostHp": 15,
+      "creationLine": 40040,
+      "secondHostLine": 2829,
+      "poptype": 104,
+      "instance": 17083,
+      "firstHostHp": 15,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 194,
+      "commander": 3839,
+      "firstHostLine": 2858
+    },
+    {
+      "squads": [
+        {
+          "count": 4,
+          "loggedName": "Bekryde Hunter",
+          "unit": 3689,
+          "loggedK": 4,
+          "creationLine": 40124
+        },
+        {
+          "count": 4,
+          "loggedName": "Bekryde",
+          "unit": 3836,
+          "loggedK": 4,
+          "creationLine": 40125
+        },
+        {
+          "count": 4,
+          "loggedName": "Bekryde",
+          "unit": 3837,
+          "loggedK": 4,
+          "creationLine": 40126
+        },
+        {
+          "count": 3,
+          "loggedName": "Bekryde Warrior",
+          "unit": 3838,
+          "loggedK": 3,
+          "creationLine": 40127
+        }
+      ],
+      "cave": true,
+      "errors": [],
+      "secondHostHp": 15,
+      "creationLine": 40121,
+      "secondHostLine": 2830,
+      "poptype": 104,
+      "instance": 17099,
+      "firstHostHp": 15,
+      "survivedFirstTurn": true,
+      "medium": "dry",
+      "held": false,
+      "province": 195,
+      "commander": 3839,
+      "firstHostLine": 2859
+    }
+  ],
+  "releasedProfileCount": 76,
+  "releasedTerrainCaseCount": 161,
+  "heldPoptypes": [
+    43,
+    44,
+    72,
+    88,
+    105,
+    106
+  ],
+  "limitations": [
+    "Troop numeric IDs come from emitted #units, correlated with native squad names/counters, not independently printed numeric troop IDs.",
+    "Second-host positive HP establishes commander survival through the first full turn, not a complete final squad census.",
+    "Mounted squad counters include mounts and all riders; they are not additional authored troop counts.",
+    "Counts are fixed templates, not calibrated difficulty or persistent PD."
+  ]
+}

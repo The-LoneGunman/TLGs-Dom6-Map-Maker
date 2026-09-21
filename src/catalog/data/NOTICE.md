@@ -5,6 +5,10 @@ fields needed by Pantokrator Atlas: factual numeric IDs, display names, site
 location/path/rarity/home metadata, unit recruitment roles, nation labels, and
 plane lookup values.
 
+`population-recruitment-6.37.json` is a separate static membership catalogue.
+Its provenance, extraction boundary and relationship to initial-army templates
+are described below; it does not replace the selector index.
+
 ## Dom6 Inspector data
 
 - Repository: <https://github.com/larzm42/dom6inspector>
@@ -13,7 +17,7 @@ plane lookup values.
 - Revision date: 2026-09-18
 - Upstream description: “Update to 6.37.”
 - License: GNU General Public License v3.0; see [LICENSE.dom6inspector.txt](LICENSE.dom6inspector.txt)
-- Used for: units; commander/troop roles from nation and magic-site recruitment slots; magic sites and nation home-site references; nations; special plane IDs; site-location lookup values; and the generated province-name reservation set (playable nation names/epithets, nation home-site names, official plane names, and Nexus)
+- Used for: units; commander/troop roles from nation and magic-site recruitment slots; magic sites and nation home-site references; nations; special plane IDs; site-location lookup values; the generated province-name reservation set (playable nation names/epithets, nation home-site names, official plane names, and Nexus); and exact unit-name cross-checks for the separate population membership catalogue
 - Source paths: `gamedata/BaseU.csv`, `gamedata/MagicSites.csv`,
   `gamedata/nations.csv`, `gamedata/other_planes.csv`, and
   `gamedata/site_terrain_types.csv`; `gamedata/attributes_by_nation.csv` and
@@ -43,7 +47,9 @@ Pale One Commander `#1463` and Pale One `#1465` retain their IDs and exact names
 The source still records normal leadership 75 for the commander, Amphibian and
 Darkvision 100 for both. These unit facts do **not** establish membership in
 population type `#81`; population-to-recruitment membership requires separate
-native evidence. The Inspector export contains no population roster table.
+evidence. The Inspector export contains no population roster table. The static
+extraction and native controls below supply that separate evidence; they were
+not part of the historical selector refresh.
 
 The compact selector does not store combat statistics and is not a balance
 model. Updated game statistics can change gameplay without changing a unit ID
@@ -78,6 +84,65 @@ result is 850 known commander-role units and 842 known troop-role units.
 All 4,091 source unit records remain in the compact bundle for exact ID lookup;
 normal selector browsing hides 13 explicitly named Test, Debug, XXX, or Unused
 data records without preventing raw numeric-ID entry.
+
+## Static population recruitment membership
+
+`population-recruitment-6.37.json` preserves the default recruitment lists for
+82 documented population types (IDs 25–106), their troop/commander slot order,
+and 175 exact unit identities. These membership lists were independently
+identified in a local, read-only static executable inspection, not copied from
+Inspector or inferred from names. The executable pin is:
+
+- Dominions 6.37, Windows x64, `Dominions6.exe`
+- Length: 76,009,984 bytes
+- SHA-256: `d77cd364fe447e85e564cdd9460fcb5591f7e0b2089d6e58e9d2f2d907ee294c`
+- Recruitment table: file offset `0x3091c50`, 168-byte records, signed
+  little-endian integers; `-2` separates troops and commanders, `-1` ends a list
+
+Referenced unit names are checked against the installed monster records and
+the pinned Inspector `BaseU.csv` above, SHA-256
+`185675d8906b87dc94070d52776e19cfefec4d2efcee9b6e8084aeba059e4ec5`.
+Inspector attribution and its GPL-3.0 licence remain applicable to those
+cross-references.
+
+The published [dom6utils layout constants](https://github.com/larzm42/dom6utils/blob/fcb98596a4c092be2c8e8f0b5aae7fa4592d3eab/src/dom6utils/Starts.java)
+and [monster-name reader](https://github.com/larzm42/dom6utils/blob/fcb98596a4c092be2c8e8f0b5aae7fa4592d3eab/src/dom6utils/MonsterStatIndexer.java)
+are references for monster-record offsets, stride and ISO-8859-1 decoding.
+Their source notices specify GPL v3 or later. No third-party implementation
+was copied into the new extractor; the upstream tool does not export the
+population table.
+
+Eight native recruitment controls corroborate the membership table in
+unmodded Middle Age under MA Ulm. Only the earlier population-81 control
+claims numeric-ID panels. Other controls use observed roles and order with
+unique-name/attribute joins, distinguishing traits or exact equipment. See
+the [static-table evidence](../../../docs/research/POPULATION_RECRUITMENT_TABLE_2026-09-21.md)
+and [native batch notes](../../../docs/research/NATIVE_RECRUITMENT_BATCH_2026-09-21.md)
+for the individual methods and terrain contexts.
+
+The optional [extractor](../../../scripts/catalog/extract-population-recruitment.mjs)
+requires explicit paths to the exact reviewed game executable and catalogue
+source. It opens files read-only, rejects changed versions/lengths/hashes,
+validates record bounds and identities, and emits complete JSON to stdout only
+after success. It is not invoked by application startup, map generation,
+installation or normal tests. No installed-game access is required to use the
+bundled membership data. The separate pure-decoder tests use synthetic records
+and do not require the game.
+
+No executable bytes, game artwork, sprites, descriptions or game source code
+are distributed with this dataset. A licensed game copy must be obtained
+separately to re-extract it. The new extraction implementation is original
+project code; the project's licence does not change upstream attribution or
+licensing.
+
+Membership is not an initial-army template or persistent-PD formula. Era,
+terrain, nation and mod effects remain separate runtime concerns. Population
+44 has no recruitable commander; 106 has an observed empty roster; 75 contains
+a legitimate dual-role ID. These distinctions are preserved without invented
+units. New automatic-defender templates require their own leadership, habitat
+and native army-acceptance evidence, and remain revision-pinned and opt-in.
+Adding this catalogue alone does not change custom guardians or ordinary
+initial armies.
 
 ## Illwinter map manual
 

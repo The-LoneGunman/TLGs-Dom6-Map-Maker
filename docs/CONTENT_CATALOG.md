@@ -14,6 +14,11 @@ The bundled catalog is pinned to 6.37; it does not automatically track later
 game or Inspector updates. Custom catalog imports add editor metadata only,
 not game content.
 
+A separate [population recruitment catalogue](../src/catalog/data/population-recruitment-6.37.json)
+records the static default troop and commander lists for all 82 documented
+population types. It does not make all 82 populations eligible for automatic
+initial defenders; those templates require separate native acceptance.
+
 This is a selector index, not a complete game-rules or combat-stat database.
 The intended patch/mod declarations in the workbench do not replace this
 data or certify nation balance. Current source imports merge
@@ -144,8 +149,9 @@ Pale One Commander **#1463** and Pale One **#1465** retain their exact names and
 IDs. The commander still has normal leadership 75, and both retain Amphibian
 and Darkvision 100 in the source. These unit facts alone do not prove their
 membership in population type #81. The Inspector tables do not provide a
-population-to-recruitment roster; that relationship requires separate native
-verification. Matching unit names is not a substitute.
+population-to-recruitment roster. The separate static extraction and native
+controls described below establish that relationship, not this selector
+refresh. Matching unit names is not a substitute.
 
 ## Other post-6.26 thrones
 
@@ -178,6 +184,50 @@ is recruitable or suitable for a guardian army.
 Typing a verified raw numeric ID remains supported, and a hidden record already
 selected in a project remains visible.
 
+## Population recruitment membership
+
+[`population-recruitment-6.37.json`](../src/catalog/data/population-recruitment-6.37.json)
+is a separate evidence dataset, extracted read-only from one hash-pinned
+Windows x64 Dominions 6.37 executable. It preserves **82 population rows
+(25–106)**, recruitment order, commander/troop role positions, and **175 exact
+unit identities**. All referenced names match both the installed monster
+records and pinned Inspector data. Eight independent native recruitment
+controls corroborate the table in unmodded Middle Age under MA Ulm.
+
+| Data | Establishes | Does not establish |
+| --- | --- | --- |
+| Selector catalogue | IDs, names, classifications and known national/site recruitment roles for editing | Complete game rules or combat balance |
+| Static population membership | Default recruitable troop/commander IDs and their order in the reviewed build | Initial-army counts, post-capture PD, or every runtime era/mod/terrain effect |
+| [Versioned defender profiles](../src/populationDefenseProfiles.ts) | Separately accepted fixed initial-army templates within declared patch, era, mod and terrain limits | Full population coverage or calibrated multiplayer difficulty |
+
+Roles are not inferred from unit names or leadership values. Population 44
+(Troglodytes) has troop #447 but no recruitable commander. Population 106
+(Nexus) has a delimited empty roster, also observed natively. Neither case
+justifies inventing a leader or exporting an empty replacement army.
+Population 75 legitimately includes #1196 in both roles. Reserved all-zero
+records beyond #106 are not treated as verified empty populations.
+
+The bundled dataset is ordinary application data: loading it does not access
+an installed game. Its optional
+[extractor](../scripts/catalog/extract-population-recruitment.mjs) requires
+explicit executable and `BaseU.csv` paths, checks exact lengths and SHA-256
+hashes, and emits JSON only to stdout. It is not run at startup, during
+generation, installation or normal tests. It never launches Dominions or
+modifies game files, settings or saves. Future builds require a new reviewed
+layout and source pin; there is no approximate-version fallback.
+
+No game executable bytes, artwork or game source code are distributed.
+Re-extraction requires a separately obtained, licensed game copy. See the
+[table evidence and reproduction guide](research/POPULATION_RECRUITMENT_TABLE_2026-09-21.md)
+for exact hashes, layout, controls and limitations.
+
+Adding membership evidence does not enable or expand the opt-in defender
+registry by itself. New templates require leadership and habitat checks plus
+actual native initial-army acceptance. Current template coverage is shown in
+the GUI; unsupported contexts retain normal engine armies, and existing custom
+guardians remain unchanged. Recruitment observations and individual PD or
+battle tests must not be generalized into an all-population defence guarantee.
+
 ## Provenance boundary
 
 Official patch announcements establish which named content was introduced in
@@ -185,6 +235,8 @@ each game update. They do not publish every numeric internal ID. Numeric IDs,
 duplicate-form distinctions, recruitment-role tags, and complete selector
 coverage come from the pinned GPL-3.0 Dom6 Inspector data export documented in
 [`src/catalog/data/NOTICE.md`](../src/catalog/data/NOTICE.md).
+Population membership has its own static-executable and native-control
+provenance; it is not presented as a table supplied by Inspector or the manual.
 
 The [catalog builder](../scripts/build-dom6-catalog.mjs) verifies SHA-256 hashes
 for all thirteen input files before writing `dom6-6.37.json`; the same hashes

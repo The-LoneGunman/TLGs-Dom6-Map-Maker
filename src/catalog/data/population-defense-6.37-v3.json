@@ -1,0 +1,3952 @@
+[
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 25,
+      "name": "Barbarians",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 141,
+          "name": "Barbarian Chief",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 139,
+              "name": "Barbarian",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 8
+          },
+          {
+            "unit": {
+              "id": 140,
+              "name": "Barbarian",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 7
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 26,
+      "name": "Horse Tribe",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 136,
+          "name": "Horse Tribe Chief",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 137,
+              "name": "Horse Tribe Cavalry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 15
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 27,
+      "name": "Militia, Archers, Hvy Inf",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 34,
+          "name": "Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 30,
+              "name": "Militia",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 17,
+              "name": "Archer",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 38,
+              "name": "Heavy Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 28,
+      "name": "Militia, Archers, Hvy Inf",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 35,
+          "name": "Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 18,
+              "name": "Militia",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 33,
+              "name": "Archer",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 39,
+              "name": "Heavy Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 29,
+      "name": "Militia, Archers, Hvy Inf",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 36,
+          "name": "Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 31,
+              "name": "Militia",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 32,
+              "name": "Archer",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 40,
+              "name": "Heavy Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 30,
+      "name": "Militia, Longbow, Knight",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 23,
+          "name": "Knight Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 30,
+              "name": "Militia",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 55,
+              "name": "Longbowman",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 22,
+              "name": "Knight",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 31,
+      "name": "Tritons",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "water"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 406,
+          "name": "Triton Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 176,
+              "name": "Triton",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 15
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 32,
+      "name": "Lt Inf, Hvy Inf, X-Bow",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 35,
+          "name": "Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 29,
+              "name": "Light Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 39,
+              "name": "Heavy Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 47,
+              "name": "Crossbowman",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 33,
+      "name": "Lt Inf, Hvy Inf, X-Bow",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 36,
+          "name": "Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 29,
+              "name": "Light Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 40,
+              "name": "Heavy Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 48,
+              "name": "Crossbowman",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 34,
+      "name": "Raptors",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 252,
+          "name": "Harab Seraph",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 205,
+              "name": "Raptor",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 15
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 35,
+      "name": "Slingers",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 34,
+          "name": "Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 50,
+              "name": "Slinger",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 15
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 36,
+      "name": "Lizards",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 1514,
+          "name": "Lizard Shaman",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 423,
+              "name": "Lizard Warrior",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 8
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 37,
+      "name": "Woodsmen",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 105,
+          "name": "Woodhenge Druid",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 125,
+              "name": "Woodsman Blowpipe",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 4
+          },
+          {
+            "unit": {
+              "id": 126,
+              "name": "Woodsman",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 4
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 38,
+      "name": "Hoburg",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 272,
+          "name": "Hoburg Champion",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 483,
+              "name": "Hoburg Militia",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 271,
+              "name": "Burgmeister Guard",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 273,
+              "name": "Hoburg Crossbow",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 39,
+      "name": "Militia, Archers, Lt Inf",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 34,
+          "name": "Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 18,
+              "name": "Militia",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 33,
+              "name": "Archer",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 29,
+              "name": "Light Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 40,
+      "name": "Amazon, Crystal",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 347,
+          "name": "Crystal Priestess",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 348,
+              "name": "Amazon",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 8
+          },
+          {
+            "unit": {
+              "id": 367,
+              "name": "Pegasus Rider",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 7
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 41,
+      "name": "Amazon, Garnet",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 350,
+          "name": "Garnet Priestess",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 351,
+              "name": "Amazon",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 8
+          },
+          {
+            "unit": {
+              "id": 612,
+              "name": "Gryphon Rider",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 7
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 42,
+      "name": "Amazon, Jade",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 353,
+          "name": "Jade Priestess",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 354,
+              "name": "Amazon",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 8
+          },
+          {
+            "unit": {
+              "id": 370,
+              "name": "Jade Maiden",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 7
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 45,
+      "name": "Tritons, Shark Knights",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "water"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 406,
+          "name": "Triton Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 175,
+              "name": "Triton Guard",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 577,
+              "name": "Triton Trooper",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 545,
+              "name": "Shark Knight",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 46,
+      "name": "Amber Clan Tritons",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "water"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 576,
+          "name": "Amber Clan Priest",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 574,
+              "name": "Amber Clan Triton",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 8
+          },
+          {
+            "unit": {
+              "id": 573,
+              "name": "Amber Clan Guard",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 7
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 47,
+      "name": "X-Bow, Hvy Cavalry",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 44,
+          "name": "Mounted Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 49,
+              "name": "Crossbowman",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 8
+          },
+          {
+            "unit": {
+              "id": 21,
+              "name": "Heavy Cavalry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 7
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 48,
+      "name": "Militia, Lt Inf, Hvy Inf",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 34,
+          "name": "Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 30,
+              "name": "Militia",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 28,
+              "name": "Light Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 38,
+              "name": "Heavy Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 49,
+      "name": "Militia, Lt Inf, Hvy Inf",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 35,
+          "name": "Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 18,
+              "name": "Militia",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 28,
+              "name": "Light Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 39,
+              "name": "Heavy Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 50,
+      "name": "Militia, Lt Inf, Hvy Inf",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 36,
+          "name": "Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 31,
+              "name": "Militia",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 29,
+              "name": "Light Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 40,
+              "name": "Heavy Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 51,
+      "name": "Militia, Lt Cav, Hvy Cav",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 46,
+          "name": "Mounted Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 30,
+              "name": "Militia",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 24,
+              "name": "Light Cavalry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 20,
+              "name": "Heavy Cavalry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 52,
+      "name": "Militia, Lt Cav, Hvy Cav",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 45,
+          "name": "Mounted Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 18,
+              "name": "Militia",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 25,
+              "name": "Light Cavalry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 19,
+              "name": "Heavy Cavalry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 53,
+      "name": "Militia, Lt Cav, Hvy Cav",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 44,
+          "name": "Mounted Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 31,
+              "name": "Militia",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 26,
+              "name": "Light Cavalry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 21,
+              "name": "Heavy Cavalry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 54,
+      "name": "Hvy Inf, Hvy Cavalry",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 46,
+          "name": "Mounted Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 38,
+              "name": "Heavy Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 8
+          },
+          {
+            "unit": {
+              "id": 20,
+              "name": "Heavy Cavalry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 7
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 55,
+      "name": "Hvy Inf, Hvy Cavalry",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 45,
+          "name": "Mounted Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 39,
+              "name": "Heavy Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 8
+          },
+          {
+            "unit": {
+              "id": 19,
+              "name": "Heavy Cavalry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 7
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 56,
+      "name": "Hvy Inf, Hvy Cavalry",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 44,
+          "name": "Mounted Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 40,
+              "name": "Heavy Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 8
+          },
+          {
+            "unit": {
+              "id": 21,
+              "name": "Heavy Cavalry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 7
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 57,
+      "name": "Shamblers",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry",
+      "water"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 207,
+          "name": "Shambler Chief",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 110,
+              "name": "Atlantian Militia",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 8
+          },
+          {
+            "unit": {
+              "id": 206,
+              "name": "Shambler",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 7
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 58,
+      "name": "Lt Inf, Hvy Inf, X-Bow",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 36,
+          "name": "Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 29,
+              "name": "Light Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 40,
+              "name": "Heavy Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 49,
+              "name": "Crossbowman",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 59,
+      "name": "Militia, Lt Inf, Archers",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 34,
+          "name": "Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 30,
+              "name": "Militia",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 28,
+              "name": "Light Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 17,
+              "name": "Archer",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 60,
+      "name": "Militia, Lt Inf, Archers",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 35,
+          "name": "Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 18,
+              "name": "Militia",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 29,
+              "name": "Light Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 33,
+              "name": "Archer",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 61,
+      "name": "Vaettir, Trolls",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 283,
+          "name": "Chief",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 541,
+              "name": "Vaetti",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 282,
+              "name": "Wolf Rider",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 518,
+              "name": "Troll",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 62,
+      "name": "Tribals, Deer",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 1598,
+          "name": "Deer Tribe Shaman",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 1595,
+              "name": "Deer Tribe Archer",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 4
+          },
+          {
+            "unit": {
+              "id": 1594,
+              "name": "Deer Tribe Warrior",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 4
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 63,
+      "name": "Tritons",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "water"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 406,
+          "name": "Triton Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 176,
+              "name": "Triton",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 174,
+              "name": "Triton",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 175,
+              "name": "Triton Guard",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 64,
+      "name": "Tritons",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "water"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 406,
+          "name": "Triton Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 175,
+              "name": "Triton Guard",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 8
+          },
+          {
+            "unit": {
+              "id": 577,
+              "name": "Triton Trooper",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 7
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 65,
+      "name": "Ichtyids",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry",
+      "water"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 976,
+          "name": "Ichtyid Lord",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 974,
+              "name": "Ichtyid",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 8
+          },
+          {
+            "unit": {
+              "id": 975,
+              "name": "Ichtyid Warrior",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 7
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 66,
+      "name": "Vaettir",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 283,
+          "name": "Chief",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 541,
+              "name": "Vaetti",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 282,
+              "name": "Wolf Rider",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 1085,
+              "name": "Moose Rider",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 67,
+      "name": "Vaettir, Dwarven Smith",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 283,
+          "name": "Chief",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 541,
+              "name": "Vaetti",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 282,
+              "name": "Wolf Rider",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 1085,
+              "name": "Moose Rider",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 68,
+      "name": "Slingers, Hvy Inf, Elephants",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 34,
+          "name": "Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 50,
+              "name": "Slinger",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 38,
+              "name": "Heavy Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 150,
+              "name": "Elephant Rider",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 69,
+      "name": "Asmeg",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 1002,
+          "name": "Asmeg Jarl",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 1001,
+              "name": "Asmeg",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 15
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 70,
+      "name": "Vaettir, Svartalf",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 283,
+          "name": "Chief",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 541,
+              "name": "Vaetti",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 282,
+              "name": "Wolf Rider",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 1085,
+              "name": "Moose Rider",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 71,
+      "name": "Trolls",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 519,
+          "name": "Troll King",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 518,
+              "name": "Troll",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 1037,
+              "name": "War Troll",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 1086,
+              "name": "Troll Moose Knight",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 73,
+      "name": "Tritons, Triton Knights",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "water"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 406,
+          "name": "Triton Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 175,
+              "name": "Triton Guard",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 577,
+              "name": "Triton Trooper",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 1060,
+              "name": "Triton Knight",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 74,
+      "name": "Lt Inf, Lt Cav, Cataphracts",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 46,
+          "name": "Mounted Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 29,
+              "name": "Light Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 26,
+              "name": "Light Cavalry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 1187,
+              "name": "Cataphract",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 75,
+      "name": "Hoburg, LA",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 272,
+          "name": "Hoburg Champion",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 483,
+              "name": "Hoburg Militia",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 4
+          },
+          {
+            "unit": {
+              "id": 271,
+              "name": "Burgmeister Guard",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 4
+          },
+          {
+            "unit": {
+              "id": 273,
+              "name": "Hoburg Crossbow",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 4
+          },
+          {
+            "unit": {
+              "id": 1196,
+              "name": "Hog Knight",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 3
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 76,
+      "name": "Hoburg, EA",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 1198,
+          "name": "Horticulturist",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 483,
+              "name": "Hoburg Militia",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 15
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 77,
+      "name": "Atavi Apes",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 1127,
+          "name": "Atavi Chieftain",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 1118,
+              "name": "Markata",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 1121,
+              "name": "Atavi Archer",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 1122,
+              "name": "Atavi Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 78,
+      "name": "Tribals, Wolf",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 1596,
+          "name": "Wolf Tribe Shaman",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 123,
+              "name": "Wolf Tribe Archer",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 4
+          },
+          {
+            "unit": {
+              "id": 124,
+              "name": "Wolf Tribe Warrior",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 4
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 79,
+      "name": "Tribals, Bear",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 1597,
+          "name": "Bear Tribe Shaman",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 1592,
+              "name": "Bear Tribe Warrior",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 4
+          },
+          {
+            "unit": {
+              "id": 1593,
+              "name": "Bear Tribe Warrior",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 4
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 80,
+      "name": "Tribals, Lion",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 1602,
+          "name": "Lion Tribe Witch Doctor",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 1601,
+              "name": "Lion Tribe Archer",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 4
+          },
+          {
+            "unit": {
+              "id": 1600,
+              "name": "Lion Tribe Warrior",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 4
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 81,
+      "name": "Pale Ones",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "required",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 1463,
+          "name": "Pale One Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 1465,
+              "name": "Pale One",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 15
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 82,
+      "name": "Tribals, Jaguar",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 1612,
+          "name": "Jaguar Tribe Priest",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 1610,
+              "name": "Jaguar Tribe Slinger",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 4
+          },
+          {
+            "unit": {
+              "id": 1611,
+              "name": "Jaguar Tribe Warrior",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 4
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 83,
+      "name": "Tribals, Toad",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry",
+      "water"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 1614,
+          "name": "Toad Tribe Shaman",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 1613,
+              "name": "Toad Tribe Warrior",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 15
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 84,
+      "name": "Cavemen",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "required",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 1616,
+          "name": "Caveman Champion",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 1615,
+              "name": "Caveman",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 8
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 85,
+      "name": "Kappa",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry",
+      "water"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 1531,
+          "name": "Kappa Chief",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 1550,
+              "name": "Kappa",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 15
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 86,
+      "name": "Bakemono",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 1845,
+          "name": "Bakemono Chief",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 1394,
+              "name": "Bakemono-Sho",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 15
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 87,
+      "name": "Bakemono",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 1845,
+          "name": "Bakemono Chief",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 1394,
+              "name": "Bakemono-Sho",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 8
+          },
+          {
+            "unit": {
+              "id": 1395,
+              "name": "Bakemono Archer",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 7
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 89,
+      "name": "Fir Bolg",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 1750,
+          "name": "Fir Bolg Champion",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 1749,
+              "name": "Fir Bolg Militia",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 1758,
+              "name": "Fir Bolg Slinger",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 1756,
+              "name": "Fir Bolg Warrior",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 90,
+      "name": "Turtle Tribe Tritons",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "water"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 406,
+          "name": "Triton Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 2382,
+              "name": "Turtle Tribe Triton",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 15
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 91,
+      "name": "Shark Tribe Tritons",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "water"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 406,
+          "name": "Triton Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 2383,
+              "name": "Shark Tribe Triton",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 15
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 92,
+      "name": "Shark Tribe, Shark Riders",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "water"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 406,
+          "name": "Triton Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 2383,
+              "name": "Shark Tribe Triton",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 8
+          },
+          {
+            "unit": {
+              "id": 545,
+              "name": "Shark Knight",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 7
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 93,
+      "name": "Zotz",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "required",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 2505,
+          "name": "Camazotz",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 2504,
+              "name": "Zotz",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 15
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 94,
+      "name": "Lava-born",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 2511,
+          "name": "Lava-born Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 2510,
+              "name": "Lava-born",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 15
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 95,
+      "name": "Ichtyids with Shaman",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry",
+      "water"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 2804,
+          "name": "Ichtyid Shaman",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 974,
+              "name": "Ichtyid",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 8
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 96,
+      "name": "Bone Tribe",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 2819,
+          "name": "Bone Tribe Head Hunter",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 2817,
+              "name": "Bone Tribe Hunter",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 8
+          },
+          {
+            "unit": {
+              "id": 2818,
+              "name": "Bone Tribe Beast Hunter",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 7
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 97,
+      "name": "Merrow",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry",
+      "water"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 2905,
+          "name": "Merrow Chieftain",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 2902,
+              "name": "Merrow Militia",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 2903,
+              "name": "Merrow",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 2904,
+              "name": "Merrow",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 98,
+      "name": "Kulullu",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "water"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 3093,
+          "name": "Kulullu Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 3089,
+              "name": "Kulullu",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 15
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 99,
+      "name": "Bronze Hoplites",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 3182,
+          "name": "Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 3183,
+              "name": "Ekdromos",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 3184,
+              "name": "Hoplite",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 50,
+              "name": "Slinger",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 100,
+      "name": "Bronze Hvy Inf",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 3186,
+          "name": "Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 3185,
+              "name": "Heavy Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 8
+          },
+          {
+            "unit": {
+              "id": 50,
+              "name": "Slinger",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 7
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 101,
+      "name": "Bronze Hvy Cav, Hvy Inf",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 3186,
+          "name": "Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 3187,
+              "name": "Heavy Cavalry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 3185,
+              "name": "Heavy Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          },
+          {
+            "unit": {
+              "id": 17,
+              "name": "Archer",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 5
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 102,
+      "name": "Bronze Hvy Spear",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 3186,
+          "name": "Commander",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 3188,
+              "name": "Heavy Infantry",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 8
+          },
+          {
+            "unit": {
+              "id": 50,
+              "name": "Slinger",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 7
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 103,
+      "name": "Cynocephalians",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 3278,
+          "name": "Cynocephalian Chieftain",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 3276,
+              "name": "Cynocephalian Hunter",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 8
+          },
+          {
+            "unit": {
+              "id": 3277,
+              "name": "Cynocephalian Warrior",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 7
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "revision": "dom6-6.37-native-2026-09-21-v3",
+    "poptype": {
+      "id": 104,
+      "name": "Bekrydes",
+      "provenanceId": "illwinter-map-manual-6.26"
+    },
+    "gameVersion": "6.37",
+    "mods": "",
+    "allowedEras": [
+      2
+    ],
+    "allowedMedia": [
+      "dry"
+    ],
+    "caveRule": "any",
+    "source": {
+      "title": "Reviewed 6.37 recruitment table and native initial-army batch",
+      "reference": "docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md",
+      "revision": "EXE d77cd364fe447e85; Inspector c30c6c14e18ab284415d599b81579af9b3070112; native TOLS15",
+      "verification": "Static recruitment membership independently reviewed against native controls. Exact exported army creation and two host cycles checked for each declared medium/Cave scope under unmodded Middle Age 6.37; commanders survived the first complete turn. Troop counts are fixed authored totals, not calibrated difficulty or native PD. Exact post-turn troop census, other eras, patches and mods are not verified."
+    },
+    "groups": [
+      {
+        "commander": {
+          "id": 3839,
+          "name": "Bekryde Champion",
+          "provenanceId": "dom6inspector-6.37-c30c6c14"
+        },
+        "squads": [
+          {
+            "unit": {
+              "id": 3689,
+              "name": "Bekryde Hunter",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 4
+          },
+          {
+            "unit": {
+              "id": 3836,
+              "name": "Bekryde",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 4
+          },
+          {
+            "unit": {
+              "id": 3837,
+              "name": "Bekryde",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 4
+          },
+          {
+            "unit": {
+              "id": 3838,
+              "name": "Bekryde Warrior",
+              "provenanceId": "dom6inspector-6.37-c30c6c14"
+            },
+            "count": 3
+          }
+        ]
+      }
+    ]
+  }
+]

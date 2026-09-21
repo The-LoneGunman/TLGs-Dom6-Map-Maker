@@ -10,17 +10,17 @@ Projects, imported catalogs, and generated packages remain in your browser profi
 
 ## Versions and documentation
 
-This README and the user guide describe the current `main` source, including the September 20 implementation round. Source integration does not publish the hosted app or a Windows release. The delivery channels are separate; reviewed on **September 20, 2026**:
+This README and the user guide describe the **0.1.5 source**. The hosted app and downloadable releases can lag behind source development; a source merge does not publish either of them.
 
-| Edition | Verified revision | Availability |
+| Edition | Where to check the build | Availability |
 | --- | --- | --- |
-| GitHub `main` | Includes implementation [`950481f`](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/commit/950481fbfbf4434172e84a9ceb68f9861ee5f4e7) and September 20 repairs | Includes Iterate, plane preferences, expanded structural diagnostics, native inspection, player ZIPs, and guardian fixtures. Script/browser checks pass; current-source Dominions playtesting remains incomplete. |
-| Hosted GUI | Site version 12, [`c0ab14a`](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/commit/c0ab14ac5da4d52f552872885b493b640b1d123d), published September 19 | Includes the multiplayer workbench and new naming controls, but not the September 20 repairs. |
-| Windows installer / portable release | [v0.1.4](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/tag/v0.1.4), published September 6 | Predates the multiplayer workbench, randomized fresh-project seeds, optional name shuffling on reopen, and subsequent repairs. |
+| Source checkout | Selected Git branch/commit and `package.json` | Includes the features documented here when using the 0.1.5 source. A normal clone selects the repository's default branch, not an unmerged development branch. |
+| Hosted GUI | [Open app](https://pantokrator-atlas.mbatlle7.chatgpt.site) and [release verification](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/RELEASE_VERIFICATION_0.1.5.md) | Updated by a separate deployment; newer source documentation alone does not identify the deployed build. |
+| Windows installer / portable release | [Latest release and its notes](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/latest) | Contains the tagged build supplied by that release, not every later source change. |
 
-Merging source does not update the hosted app or create an installer release. The source package version remains `0.1.4` until another tagged release; use the commit or release above to identify a build. Keep a pre-upgrade JSON backup: older builds may reject newer optional project fields.
+As of the September 21 release-preparation review, **0.1.5 is a release candidate, not yet merged or published**. The [release verification record](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/RELEASE_VERIFICATION_0.1.5.md) tracks testing and delivery separately. Keep a pre-upgrade JSON backup: older builds may reject newer optional project fields.
 
-September 21 development updates in this checkout add smoother underground shapes and relief, the pinned 6.37 selector catalog, and opt-in population-matched initial defenders. Initial coverage is deliberately limited to Pale Ones in unmodded 6.37 Middle Age dry caves; unsupported populations retain native armies. These updates are not yet merged or published. See the [development verification record](docs/UNDERGROUND_POLISH_2026-09-21.md) and [population-defender instructions](docs/USER_GUIDE.md#population-matched-initial-defenders).
+The 0.1.5 source includes smoother underground shapes and relief, the pinned 6.37 selector catalog, and opt-in population-matched initial defenders. The current v3 templates cover **76 population types in unmodded 6.37 Middle Age**, within their declared terrain scope; unsupported contexts retain native armies. See the [population-defender instructions](docs/USER_GUIDE.md#population-matched-initial-defenders) and [native acceptance evidence](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md).
 
 ## Run locally on Windows
 
@@ -48,7 +48,7 @@ Where browser folder access is supported, use **Install directly**; otherwise us
 - Browser autosave, Undo/Redo, editable JSON backups, direct folder installation, ZIP export, and structural/gameplay validation.
 - Planned-versus-current province budgets, control-scope labels, cross-plane province search, and a per-start structural inspector with temporary region highlights.
 
-The September 20 implementation adds opt-in tools without changing inherited generation settings:
+Additional opt-in tools preserve inherited generation settings:
 
 - **Iterate:** filtered province selections, named bookmarks, field/layout/start locks, previewed batch edits and content rerolls, settings recipes, and comparison of two or three generated candidates.
 - **Plane preferences:** dry-terrain weights and regional plans, water preferences, eligible border mixes, guardian coverage/troop counts, and many-sites preferences.
@@ -88,7 +88,7 @@ Generated maps use native game content. Keep these distinctions in mind:
 
 ## Develop from source
 
-Use source for the latest merged controls and corrections; use the hosted GUI or Windows installer for the simpler setup paths above. A normal clone opens `main`, including the September 20 implementation. Source development requires **Node.js 22.13.0 or newer with npm**, plus Git for the clone method:
+Use source for the controls and corrections on your selected branch; use the hosted GUI or Windows installer for the simpler setup paths above. A normal clone opens the default branch. Check the [version table](#versions-and-documentation) before expecting unreleased features. Source development requires **Node.js 22.13.0 or newer with npm**, plus Git for the clone method:
 
 ```powershell
 git clone https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker.git
@@ -112,7 +112,7 @@ npm.cmd run licenses:check
 
 `npm test` includes a production build. CI additionally audits the locked dependencies and smoke-tests the local server and Windows launcher.
 
-The September 20 implementation passed **418 automated tests**, desktop/narrow-screen browser checks, and a 1,000-map structural evaluation with zero export errors. That evaluation still had 243 experimental quality-target misses; actual Dominions acceptance remains incomplete because the installed game opened a black startup window. See the [work and verification record](docs/IMPLEMENTATION_ROUND_2026-09-20.md) for evidence and limits. Automated validation does not certify nation balance, guardian combat, or actual multiplayer play.
+The 0.1.5 candidate passed **743 automated tests**, type checking, lint, license checks, and local-server/launcher checks. Native 6.37 checks loaded and visually inspected all eight planes, exercised all **161 released population-template terrain cases**, and completed one [generated Inferno guardian battle, capture, recruitment and PD inspection](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/research/NATIVE_GUARDIAN_CAPTURE_2026-09-21.md). See [release verification](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/RELEASE_VERIFICATION_0.1.5.md) for remaining checks, packaging and publication. These are scoped functional checks, not universal seasonal/PD verification or multiplayer balance certification. The earlier [1,000-map structural evaluation](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/IMPLEMENTATION_ROUND_2026-09-20.md) had no export errors but retained 243 experimental quality-target misses.
 
 ## Documentation and references
 
