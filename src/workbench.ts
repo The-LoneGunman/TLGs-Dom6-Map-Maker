@@ -1,7 +1,8 @@
 import { isBlockedProvince, isWaterProvince, type GenerationInputSnapshot, type MapProject, type Province } from "./domain";
 import { globalMovementAdjacency, isImpassableEdge, shortestDistances } from "./generator";
+import { requirementReportLines } from "./nationRequirements";
 
-export const ANALYSIS_MODEL_VERSION = "structural-inspector-1";
+export const ANALYSIS_MODEL_VERSION = "structural-inspector-2";
 export const MAX_ANALYSIS_STARTS = 64;
 export type AnalysisMode = "structural" | "conservative";
 export type GenerationInputGroup = Exclude<keyof GenerationInputSnapshot, "version">;
@@ -20,7 +21,8 @@ export function captureGenerationInputs(project: MapProject): GenerationInputSna
     terrain: JSON.stringify([s.waterPercent, s.oceanLayout ?? "natural", s.continentCount ?? 3, s.biomeCohesion,
       s.economyBalance ?? "hard", s.overlandTopology ?? "competitive", s.specialPlaneSizePercent ?? 30, s.throneCount]),
     planes: JSON.stringify(project.planes.map((p, i) => [p.id, p.kind, p.variant, p.autoSize ?? (i === 0),
-      (p.autoSize ?? (i === 0)) ? null : p.provinceTarget, p.noGeneratedStarts ?? false, p.ownershipMode, p.width, p.height, p.wrapX, p.wrapY])),
+      (p.autoSize ?? (i === 0)) ? null : p.provinceTarget, p.noGeneratedStarts ?? false, p.ownershipMode, p.width, p.height, p.wrapX, p.wrapY,
+      ...(p.generationOverrides ? [p.generationOverrides] : [])])),
     links: JSON.stringify([s.gateLayout ?? "hub", s.gatePairsPerConnection ?? 1, s.planeConnections ?? null]),
   };
 }
@@ -84,6 +86,12 @@ export interface StartAnalysis extends ProvinceReference {
   nearestRival?: number;
   nearestThrone?: number;
   nearestRealmEntrance?: number;
+  nearestAlly?: number;
+  sharedCapitalNeighbours?: number;
+  fractionalOpportunity?: number;
+  rivalRegionsAtFrontier?: number;
+  nearestFixedThrone?: number;
+  nearestPreferredThrone?: number;
 }
 
 export interface StartAnalysisReport {
@@ -136,6 +144,21 @@ export function analyzeStarts(project: MapProject, mode: AnalysisMode = "structu
     const rivals = allStarts.filter(r => r.key !== ref.key && !sameTeam(ref.province, r.province));
     const rivalIndexes = selectedStarts.flatMap((r, j) => r.key !== ref.key && !sameTeam(ref.province, r.province) ? [j] : []);
     const exclusive = region.filter(r => rivalIndexes.every(j => (distanceMaps[j]!.get(r.key) ?? Infinity) > (distances.get(r.key) ?? Infinity))).length;
+    const fractionalOpportunity = region.reduce((sum, r) => {
+      const own = distances.get(r.key) ?? Infinity;
+      const competitors = rivalIndexes.map(j => distanceMaps[j]!.get(r.key) ?? Infinity);
+      if (competitors.some(d => d < own)) return sum;
+      return sum + 1 / (1 + competitors.filter(d => d === own).length);
+    }, 0);
+    const direct = new Set((graphFor(ref).get(ref.key) ?? []).filter(key => !startKeys.has(key)));
+    const otherDirect = new Set(selectedStarts.filter(r => r.key !== ref.key).flatMap(r => graphFor(r).get(r.key) ?? []));
+    const frontier = new Set(region.flatMap(r => graphFor(ref).get(r.key) ?? []));
+    const rivalGroups = new Set<string>();
+    // Count distinct hostile regions, not individual portal-clique edges or allied capitals.
+    for (const j of rivalIndexes) if ([...frontier].some(key => {
+      const theirs = distanceMaps[j]!.get(key) ?? Infinity;
+      return theirs <= 2 && theirs <= (distances.get(key) ?? Infinity);
+    })) rivalGroups.add(selectedStarts[j]!.province.teamStart === undefined ? selectedStarts[j]!.key : `team:${selectedStarts[j]!.province.teamStart}`);
     const nearby = thrones.filter(r => (distances.get(r.key) ?? Infinity) <= 4);
     return {
       ...ref, nations: nationsByKey.get(ref.key) ?? [], team: ref.province.teamStart, blocked: !graphFor(ref).has(ref.key),
@@ -152,6 +175,12 @@ export function analyzeStarts(project: MapProject, mode: AnalysisMode = "structu
       nearestRival: nearest(rivals.map(r => distances.get(r.key))),
       nearestThrone: nearest(thrones.map(r => distances.get(r.key))),
       nearestRealmEntrance: nearest([...crossPlaneEntrances].map(key => distances.get(key))),
+      nearestAlly: nearest(allStarts.filter(r => r.key !== ref.key && sameTeam(ref.province, r.province)).map(r => distances.get(r.key))),
+      sharedCapitalNeighbours: allStarts.length <= MAX_ANALYSIS_STARTS ? [...direct].filter(key => otherDirect.has(key)).length : undefined,
+      fractionalOpportunity: allStarts.length <= MAX_ANALYSIS_STARTS ? fractionalOpportunity : undefined,
+      rivalRegionsAtFrontier: allStarts.length <= MAX_ANALYSIS_STARTS ? rivalGroups.size : undefined,
+      nearestFixedThrone: nearest(thrones.filter(r => r.province.throne === "fixed").map(r => distances.get(r.key))),
+      nearestPreferredThrone: nearest(thrones.filter(r => r.province.throne === "preferred").map(r => distances.get(r.key))),
     };
   });
   return { mode, modelVersion: ANALYSIS_MODEL_VERSION, totalStarts: allStarts.length, truncated: allStarts.length > MAX_ANALYSIS_STARTS,
@@ -240,9 +269,13 @@ export function buildStartAnalysisText(project: MapProject, catalogVersion: stri
         `    Exits: ${s.exits}; within 2/3 steps: ${s.twoStepKeys.length}/${s.threeStepCount}; exclusive/contested: ${s.exclusive ?? "unknown"}/${s.contested ?? "unknown"}`,
         `    Two-step population: ${s.knownPopulation} known + ${s.unknownPopulationCount} unknown provinces; authored guardian provinces: ${s.guardianProvinceCount} (difficulty unknown)`,
         `    Thrones within 4 hops: ${s.preferredThrones} preferred / ${s.fixedThrones} fixed`,
-        `    Nearest rival: ${distance(s.nearestRival)}; throne: ${distance(s.nearestThrone)}; cross-plane entrance: ${distance(s.nearestRealmEntrance)}`);
+        `    Nearest rival: ${distance(s.nearestRival)}; throne: ${distance(s.nearestThrone)}; cross-plane entrance: ${distance(s.nearestRealmEntrance)}`,
+        `    Fractional two-step opportunity: ${s.fractionalOpportunity?.toFixed(2) ?? "unknown"}; hostile frontier groups: ${s.rivalRegionsAtFrontier ?? "unknown"}; shared direct surroundings: ${s.sharedCapitalNeighbours}`,
+        `    Nearest ally: ${distance(s.nearestAlly)}; fixed throne: ${distance(s.nearestFixedThrone)}; preferred throne: ${distance(s.nearestPreferredThrone)}`);
     }
   }
   lines.push("", "Exclusive = closer than every rival; contested = tied or a rival is closer. Neither predicts ownership.");
+  lines.push("Fractional opportunity awards one share for a distance lead, divides ties between rival starts, and awards zero if a rival is closer. Allies do not compete; shares are not an additive team economy or conquest forecast.");
+  lines.push(...requirementReportLines(project));
   return lines.join("\r\n");
 }

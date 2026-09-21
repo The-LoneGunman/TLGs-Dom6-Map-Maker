@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { NationRequirementsPanel } from "./NationRequirementsPanel";
 import { type FairnessMetrics, type MapProject } from "./domain";
 import { previewProvinceBudget } from "./generator";
 import { analyzeStarts, GENERATION_INPUT_LABELS, pendingGenerationGroups, rulesetNotice, searchProvinces,
@@ -72,6 +73,7 @@ export function StartBalancePanel({ project, fairness, errors, catalogVersion, o
       </label>
     </details>
     <p className="analysis-caution" role="status">{rulesetNotice(project, catalogVersion)}</p>
+    <NationRequirementsPanel project={project} onChange={onContextChange} />
     <label className="field analysis-model"><span>Access model <span className="scope-badge">Analysis only</span></span>
       <select value={mode} onChange={event => setMode(event.target.value as AnalysisMode)}>
         <option value="structural">Potential connections (all terrain)</option>
@@ -94,15 +96,16 @@ export function StartBalancePanel({ project, fairness, errors, catalogVersion, o
               {row.province.name}<small>Global #{row.globalNumber} · P{row.planeNumber} / local #{row.province.index}</small>
             </button><small>{row.planeName}{row.team !== undefined ? ` · Team group ${row.team}` : ""}{row.nations.length ? ` · Nation ${row.nations.join(", ")}` : ""}{row.blocked ? " · BLOCKED" : ""}</small></th>
             <td>{row.blocked ? "—" : row.exits}</td><td>{row.blocked ? "—" : `${row.twoStepKeys.length} / ${row.threeStepCount}`}</td>
-            <td>{report.truncated || row.blocked ? "—" : `${row.exclusive} / ${row.contested}`}</td>
+            <td>{report.truncated || row.blocked ? "—" : <>{row.exclusive} / {row.contested}<small>{row.fractionalOpportunity?.toFixed(2)} fractional opportunity</small></>}</td>
             <td>{row.blocked ? "—" : <>{row.knownPopulation.toLocaleString("en-US")}<small>{row.unknownPopulationCount ? `+ ${row.unknownPopulationCount} unknown provinces` : "Population only; not income/resources"}</small></>}</td>
             <td>{row.guardianProvinceCount}<small>provinces; difficulty unknown</small></td>
-            <td>{row.preferredThrones} preferred / {row.fixedThrones} fixed</td>
-            <td>{hop(row.nearestRival)} / {hop(row.nearestThrone)} / {hop(row.nearestRealmEntrance)}</td>
+            <td>{row.preferredThrones} preferred / {row.fixedThrones} fixed<small>Nearest preferred: {hop(row.nearestPreferredThrone)} · fixed: {hop(row.nearestFixedThrone)}</small></td>
+            <td>{hop(row.nearestRival)} / {hop(row.nearestThrone)} / {hop(row.nearestRealmEntrance)}<small>Ally: {hop(row.nearestAlly)} · hostile frontier groups: {row.rivalRegionsAtFrontier ?? "—"} · shared direct surroundings: {row.sharedCapitalNeighbours}</small></td>
           </tr>)}</tbody>
         </table>
       </div>
       <p>Exclusive means closer than every competing start in this model; contested includes ties and provinces a rival reaches sooner. It predicts neither ownership nor battle success. “—” means no reachable target, blocked start, or incomplete analysis.</p>
+      <p>Fractional opportunity gives a full share for a distance lead, splits rival ties, and gives zero when a rival is closer. Allies do not compete; do not sum these as a team economy. Frontier exposure counts distinct hostile team/start regions touching the two-step neighbourhood, not individual gateway links. Shared surroundings include allies.</p>
       <p>Throne markers are planned locations, not confirmation of the engine’s final selection. Guardian counts cover authored groups only; random independents remain unknown. Resources, recruitment points, and actual income are not modeled.</p>
     </>}
     <details><summary>All legacy subscores and notes</summary><ul>{metricEntries(fairness).map(([label, value]) => <li key={label}>{label}: {value}/100</li>)}</ul><ul>{fairness.notes.map(note => <li key={note}>{note}</li>)}</ul></details>

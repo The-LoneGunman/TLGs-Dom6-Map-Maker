@@ -197,6 +197,8 @@ export interface Province {
   name: string;
   /** Missing on schema-v1 imports is conservatively treated as user-authored. */
   nameSource?: "generated" | "authored";
+  /** Protect these fields from generation, scoped rerolls and batch edits, not direct inspector edits. */
+  editorLocks?: ProvinceLockGroup[];
   biome: BiomeKey;
   /** Base terrain preset; its flags combine with terrainFlags for art and export. */
   terrain: TerrainKey;
@@ -239,6 +241,8 @@ export interface Plane {
   autoSize?: boolean;
   /** Missing/false allows generated starts; true reserves this plane for neutral expansion. */
   noGeneratedStarts?: boolean;
+  /** Optional preferences for the next generation; absent preserves the original generator. */
+  generationOverrides?: PlaneGenerationOverrides;
   provinceTarget: number;
   width: number;
   height: number;
@@ -354,9 +358,54 @@ export interface MapProject {
   createdAt: string;
   updatedAt: string;
   /** Optional device-local notes; never a certificate of nation or mod balance. */
-  analysisContext?: { gameVersion?: string; mods?: string };
+  analysisContext?: { gameVersion?: string; mods?: string; requirements?: NationTerrainRequirement[] };
   /** Inputs recorded by the editor after a successful generation, not map-edit provenance. */
   generationInputs?: GenerationInputSnapshot;
+  /** Optional authored editing safeguards and named selections; not native game commands. */
+  authoring?: AuthoringOptions;
+}
+
+export type ProvinceLockGroup = "name" | "terrain" | "economy" | "sites" | "guardians";
+export interface AuthoredRegion {
+  id: string;
+  name: string;
+  planeId: string;
+  provinceIds: string[];
+}
+export interface AuthoringOptions {
+  lockLayout?: boolean;
+  lockStarts?: boolean;
+  regions?: AuthoredRegion[];
+}
+
+export type DryTerrainPreference = "plains" | "forest" | "farm" | "swamp" | "waste" | "highland" | "mountains";
+export interface RegionalTerrainPlan {
+  name: string;
+  x0: number; y0: number; x1: number; y1: number;
+  terrain: DryTerrainPreference;
+}
+export interface PlaneGenerationOverrides {
+  waterPercent?: number;
+  caveWaterPercent?: number;
+  terrainWeights?: Partial<Record<DryTerrainPreference, number>>;
+  roadPercent?: number;
+  riverPercent?: number;
+  passPercent?: number;
+  guardianCoveragePercent?: number;
+  guardianRosterScale?: number;
+  manySitesPercent?: number;
+  regions?: RegionalTerrainPlan[];
+}
+
+/** Host-authored requirements, never bundled metagame tiers or automatic bonuses. */
+export interface NationTerrainRequirement {
+  nation: number;
+  label: string;
+  gameVersion: string;
+  mods: string;
+  terrain: TerrainFlag;
+  minimum: number;
+  radius: number;
 }
 
 export interface GenerationInputSnapshot {

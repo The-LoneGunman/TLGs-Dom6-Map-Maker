@@ -1,40 +1,42 @@
 # Multiplayer workbench implementation
 
-Source status reviewed September 20, 2026. The first workbench stage is implemented, along with subsequent naming and safety corrections. The hosted app and Windows installer are separate releases; see [Versions and documentation](../README.md#versions-and-documentation). Remaining roadmap items below are not implemented or scheduled merely because they were approved.
+Reviewed September 20, 2026. This document covers the current `main` source, including implementation commit **`950481f`** from `codex/full-implementation-round-sep20`. The user authorized merging current progress while deferring the native-game check. This round has not been deployed to the hosted app or included in a Windows release. See [Versions and documentation](../README.md#versions-and-documentation).
 
-This tracks the approved [comparative-research roadmap](MULTIPLAYER_MAPMAKER_RESEARCH_2026-09-06.md). Approval is not evidence that every stage has shipped. Nation-specific compensation remains disabled; selector catalogs are not balance rulesets.
+This tracks the approved [comparative-research roadmap](MULTIPLAYER_MAPMAKER_RESEARCH_2026-09-06.md). Approval is not proof of delivery or measured balance. Selector catalogs remain pinned to 6.35; they are not nation-strength rulesets.
 
-## Implemented in current source
+## Existing source features
 
-- Stage 1: scope labels for shared controls and mixed-behavior exceptions; pending generation inputs; current/planned province budgets; clearer descriptive-biome and initial-guardian wording.
-- Stage 1: per-start structural breakdown, all seven legacy subscores, explicit validity/confidence distinctions, unknown economy and combat data, versioned analysis assumptions, saved user-declared patch/mod notes.
-- Early Stage 2: cross-plane province search and editor-only two-step region overlays. Navigation cancels armed editing tools; stale overlays disappear after project edits.
-- Early Stage 3: conservative dry/water graph filtering, team-label-aware competition, and per-start throne/realm-entrance distances. These are graph diagnostics, not validated game-movement or combat models.
-- Host reports include both structural access views and quoted patch/mod assumptions. Playable map directives and native artwork formats are unchanged.
-- Safe iteration already includes generation cancellation, replacement confirmations/backups, bounded Undo/Redo, guarded project/recovery loading, ordered catalog imports, and conflict-aware direct installation. This does not provide batch editing, authored-field locks, or scoped regeneration.
-- Fresh atlases use random seeds; optional generated-name shuffling on reopen preserves manual names. The naming pool includes 528 additional original realm/terrain-aware places.
-- The September 19–20 repairs preserve Styx crossings during start repair, synchronize changed topology, align package reports with the active catalog, expose custom border values, and correct map proportions, condition previews, and label readability.
+- Control-scope labels, pending generation inputs, current/planned province budgets, and cross-plane province search.
+- Per-start structural analysis with explicit unknown economy/combat data, conservative dry/water access, team-aware comparisons, throne/gateway distances, and saved patch/mod assumptions.
+- Generation cancellation, replacement confirmations/backups, bounded Undo/Redo, guarded recovery/import, ordered catalog imports, and conflict-aware direct installation.
+- Fresh-project seeds, optional generated-name shuffling on reopen, contextual names, and September 19–20 generation, export, border, preview, and readability repairs.
 
-## Remaining approved work
+## Implemented in the September 20 round
 
-- Safer iteration: batch edits, authored-field locks, constrained rerolls, candidate comparison, and settings-only recipes.
-- Opportunity analysis: calibrated movement profiles, separate income/resources/recruitment estimates, richer team exposure and objective comparisons.
-- Richer generation: regional planning; granular terrain, route and ocean controls; guardian/reward profiles; explicitly optional and patch-validated nation accommodations.
-- Interoperability: external-map inspection/import, differentiated player handoffs, and isolated guardian test scenarios.
-- Release evaluation: held-out seed corpus, the proposed 1,000-seed quality evaluation, in-engine checks, multiplayer playtests, and measured user-task studies. The research targets are not achieved performance claims.
+| Area | Available controls and limits |
+| --- | --- |
+| Safe iteration | The **Iterate** tab filters the active plane by role, terrain, effective flags, name/number, or a named selection. Batch edits and selected-content rerolls preview changes and newly introduced export blockers before applying as one Undoable edit. |
+| Safeguards | Layout/start locks guard structure; five province field groups protect batch tools and same-seed generation. Different-seed full generation is rejected while field-locked province IDs would disappear. Direct inspector edits remain intentional edits. |
+| Alternatives | Settings-only recipes and two/three background-generated candidates, with per-plane previews and two-step spread comparisons. Candidates are never selected automatically; their scores remain structural heuristics. Recipes are not exact map backups. |
+| Generation preferences | Per-plane water/cave-ocean preferences, dry-terrain weights, normalized regional plans, eligible road/river/pass shares, guardian coverage/troop-count multipliers, and many-sites preferences. Safety and topology take precedence over quotas; inherited settings preserve existing behavior. |
+| Structural analysis | Fractional two-step opportunity, distinct hostile frontier groups, nearest ally, shared direct capital surroundings, and separate preferred/fixed-throne distances. No movement-turn, income, resources, recruitment-point, or combat model is claimed. |
+| Patch-bound requests | Optional host-declared nation terrain requirements, tied to the declared patch/mod snapshot and one explicit nation start. They report met/shortfall/unassigned/unverified; they never apply automatic compensation. |
+| Interoperability | Read-only `.map` inventories and bounded `.d6m` structure checks. Referenced assets are not opened; arbitrary native artwork is not converted into editable Atlas geometry. |
+| Handoffs and fixtures | Player ZIPs omit editable JSON and host reports while retaining identical playable files. Separate background-generated two-player guardian fixtures copy one authored encounter and disclose any target-terrain adaptation; they do not simulate battles or alter the current atlas. |
 
-## Current verification boundary
+## Verification and remaining work
 
-The [September 20 repair pass](REPAIR_VERIFICATION_2026-09-20.md) passed 368 automated tests, type checking, lint, license checks, local-server smoke, and desktop/narrow-browser checks. [GitHub CI for repair commit `bc5fe0a`](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35515033664) also passed. This includes generation and export regressions, not a calibrated movement/combat model or proof of multiplayer balance.
+Five fixed generation fixtures cover default, islands, continents, caves, and eight planes to detect changes when new preferences are unused. The [implementation-round record](IMPLEMENTATION_ROUND_2026-09-20.md) owns the final automated/browser/native results; do not reuse an earlier test count as evidence for this branch.
 
-The installed Dominions 6.37 engine did not produce a saved game in the latest scripted attempt, so fresh in-engine acceptance remains incomplete. The 1,000-seed evaluation and measured user studies proposed in the research have not been completed. The bundled selectors remain pinned to 6.35; no nation-strength tier or automatic compensation has been introduced.
+The structural evaluation ran 1,000 fixed-corpus maps with zero export-error maps or generation exceptions. **243 missed the experimental quality criteria**; the separate held-out set had **48 misses out of 200**. These misses remain quality follow-up work, not export blockers or proof that the maps are unplayable. The criteria are proposed diagnostics, not established community standards, and the results do not certify multiplayer balance.
 
-## Historical first-stage verification (September 6)
+Still outstanding:
 
-The first workbench implementation left generation policies and random sequences unchanged. Four pre-change fixtures (default, mixed core/bonus, island-chain mixed starts, and manual/automatic sizing) retained identical generated-map digests. This was a check of that first stage, not a claim that later generation repairs preserve every old map. Regression tests covered budget/generation agreement, input provenance, metadata import safety, terrain/media filters, teams, unknown values, large/empty start sets, navigation wiring, and accessible server-rendered panels.
+- Full lossless editable import of arbitrary external maps, including authored raster geometry and unsupported directives.
+- Calibrated nation movement, separate income/resources/recruitment estimates, and combat difficulty models.
+- Verified automatic nation accommodations. Host-declared checks are not a substitute for patch-specific evidence.
+- Comprehensive in-engine seasonal, recruitment, post-capture defence, and guardian-combat acceptance; inspect the dated record for the exact scope of any completed engine test.
+- Human task studies and actual multiplayer playtests, plus investigation of the seed-corpus quality misses.
+- Native-game acceptance, hosted deployment, and a separately built/tested Windows release for this round. The source merge is complete, not a release-readiness claim.
 
-That regression run passed 319 tests (14 build/integration checks and 305 TypeScript tests). Type checking, lint, license verification, and whitespace checks also passed. The build retained its large-client-chunk warning; no bundle-performance claim was implied.
-
-Interactive local browser checks covered the default desktop and a 390×844 viewport: switching access models; start-region navigation; search with the Start tool armed; future-patch warnings and Undo; budget changes without regeneration; draft-plane handling; keyboard focus into native disclosure controls; and horizontal table scrolling. No browser errors were logged. Testing found and fixed toolbar overlap and a header disappearing after switching from a scrolled mobile layout back to desktop. The new label scopes use explicit props instead of shared React context to avoid a development-renderer warning. The original map/settings were restored, and the temporary viewport override was reset.
-
-These checks do not substitute for Dominions playtests, full movement calibration, or user studies. No nation has been assigned a strength tier or silently compensated. New project metadata is optional for current imports, but older releases may reject it; retain older backups when testing upgrades.
+The general illustrated asset-pack specification also remains a future contract, not a delivered pack-import system. New editing metadata is optional, but older apps can reject projects containing it; retain pre-upgrade JSON backups.

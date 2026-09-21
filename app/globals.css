@@ -1,3 +1,19 @@
+.iteration-panel { min-width: 0; font-size: 13px; line-height: 1.5; }
+.iteration-panel h2 { font-size: 23px; margin: 0 0 12px; }
+.iteration-panel h3 { font-size: 15px; margin: 8px 0; }
+.iteration-panel p { margin: 10px 0; overflow-wrap: anywhere; }
+.iteration-panel details { border-top: 1px solid #34413b; padding: 12px 0; }
+.iteration-panel summary { cursor: pointer; font-weight: 650; padding: 6px 0; }
+.iteration-panel .field { margin-top: 12px; }
+.iteration-panel .button { margin-top: 8px; white-space: normal; }
+.iteration-check { display: flex; align-items: flex-start; gap: 8px; margin: 12px 0; }
+.iteration-check input { flex: 0 0 auto; width: 16px; height: 16px; padding: 0; margin: 3px 0 0; accent-color: var(--gold); }
+.iteration-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.iteration-preview { border: 1px solid #bca55f; border-radius: 8px; background: #202b25; padding: 12px; margin: 16px 0; }
+.candidate-card { border: 1px solid #415148; border-radius: 6px; margin: 12px 0; padding: 10px; }
+.candidate-map { height: 220px; position: relative; }
+.candidate-map > div { height: 100%; }
+
 :root {
   --ink-950: #090d0e;
   --ink-900: #0f1516;

@@ -139,6 +139,9 @@ test("per-start analysis deduplicates all start types, excludes all capitals and
   assert.equal(first.exclusive, 1);
   assert.equal(first.contested, 1);
   assert.equal(first.nearestRival, 4);
+  assert.equal(first.fractionalOpportunity, 1.5);
+  assert.equal(first.rivalRegionsAtFrontier, 1);
+  assert.equal(first.sharedCapitalNeighbours, 0);
   assert.equal(JSON.stringify(p), before);
   assert.equal(report.modelVersion, ANALYSIS_MODEL_VERSION);
 });
@@ -151,6 +154,9 @@ test("team zero is an alliance label, not falsy or a nearest rival", () => {
   assert.equal(first.nearestRival, undefined);
   assert.equal(first.exclusive, first.twoStepKeys.length);
   assert.equal(first.contested, 0);
+  assert.equal(first.nearestAlly, 4);
+  assert.equal(first.fractionalOpportunity, first.twoStepKeys.length);
+  assert.equal(first.rivalRegionsAtFrontier, 0);
 });
 
 test("conservative model separates water/dry access and seasonal border assumptions", () => {
