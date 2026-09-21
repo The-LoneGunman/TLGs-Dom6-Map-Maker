@@ -4,7 +4,7 @@ Pantokrator Atlas is a local-first map maker for Dominions 6. It generates deter
 
 This guide describes the **0.1.5 source**, including **Iterate, plane generation preferences, expanded analysis, native inspection, player ZIPs, guardian fixtures, underground visual polish, and population-matched initial defenders**. The hosted GUI and Windows releases can contain older builds. Check [Versions and documentation](../README.md#versions-and-documentation) before looking for a missing control; a normal source clone selects the default branch, not an unmerged candidate.
 
-At the September 21 review, 0.1.5 is being prepared for release and is not yet merged or published. The [release verification record](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/RELEASE_VERIFICATION_0.1.5.md) separates completed tests from remaining checks and delivery. Native testing covers specific map-loading, defender-template and guardian-capture cases; it does not certify every seasonal visual, PD roster or multiplayer matchup. Supplemental evidence and catalog links open GitHub and require internet access; the installed Windows edition bundles this guide and the README for offline use.
+The [release verification record](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/RELEASE_VERIFICATION_0.1.5.md) separates completed tests from remaining limits and delivery. Native testing covers specific map-loading, winter appearance, defender-template and guardian-capture cases; it does not certify every seasonal visual, PD roster or multiplayer matchup. Supplemental evidence and catalog links open GitHub and require internet access; the installed Windows edition bundles this guide and the README for offline use.
 
 ## Contents
 
