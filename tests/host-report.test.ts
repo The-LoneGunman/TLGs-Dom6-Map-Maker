@@ -138,3 +138,19 @@ test("host dossier is deterministic, does not mutate the project, and records mi
   assert.match(first, /\[missing province id "absent"\]/);
   assert.match(first, /\[missing plane id "missing-plane"\] \/ \[province id "missing-province"\]/);
 });
+
+test("host dossier reports opt-in defender coverage without exposing raw directives or implying matched rosters", () => {
+  const project = reportFixture();
+  const disabledReport = buildHostTopologyReport(project);
+  project.populationDefense = { enabled: false, profileRevision: "no-verified-data" };
+  assert.equal(buildHostTopologyReport(project), disabledReport);
+  project.populationDefense.enabled = true;
+  const before = JSON.stringify(project);
+  const report = buildHostTopologyReport(project);
+  assert.match(report, /Population-matched initial defenders: revision "no-verified-data"/);
+  assert.match(report, /Defense coverage: 0 matched/);
+  assert.match(report, /not persistent provincial defense/);
+  assert.match(report, /initial defenders=(?:custom|excluded|unsupported)/);
+  assert.doesNotMatch(report, /private_project|private_plane|private_province|surface-secret|alpha|beta/);
+  assert.equal(JSON.stringify(project), before);
+});

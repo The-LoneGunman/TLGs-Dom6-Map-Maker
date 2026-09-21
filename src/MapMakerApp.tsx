@@ -92,6 +92,7 @@ import { MapCanvas, canRenderPlanePreview, renderPlanePng, type ProvinceMarkerAn
 import { GenerationPlanSummary, ProvinceExplorer, StartBalancePanel } from "./WorkbenchPanels";
 import { IterationPanel } from "./IterationPanel";
 import { PlanePreferencesPanel } from "./PlanePreferencesPanel";
+import { PopulationDefensePanel, PopulationDefenseProvinceStatus } from "./PopulationDefensePanel";
 import { recordGenerationInputs, type AnalysisMode, type ProvinceReference } from "./workbench";
 import { CatalogCombobox } from "./catalog/CatalogCombobox";
 import { BoundedNumberInput, ItemListInput } from "./EditorInputs";
@@ -910,7 +911,7 @@ export function MapMakerApp() {
     setUserCatalog(undefined);
     const cleared = removeStoredCustomCatalog();
     setToast(cleared
-      ? "Custom catalog entries removed; bundled Dominions 6.35 data remains available."
+      ? `Custom catalog entries removed; bundled Dominions ${BUILTIN_DOM6_CATALOG.gameVersion} data remains available.`
       : "Custom catalog entries were removed for this session, but browser storage could not be cleared; they may return after reload.");
   };
 
@@ -1551,7 +1552,12 @@ export function MapMakerApp() {
               <SectionHeading kicker="HOST & SCENARIO" title="Game setup" />
               <Field scope="Host / export" label="Description"><textarea maxLength={MAX_IMPORTED_STRING_LENGTH} rows={3} value={project.description} onChange={(event) => mutate((draft) => { draft.description = event.target.value; })} /></Field>
               <NumberField scope="Host / export" label="Minimum Dominions version (#domversion)" value={project.targetVersion} min={600} max={999} onChange={(value) => mutate((draft) => { draft.targetVersion = value; })} />
-              <p className="field-note">Use 635 or newer when relying on IDs from the bundled Dominions 6.35 catalog.</p>
+              <p className="field-note">This declares the minimum game version, not the host’s actual patch. The bundled selector catalog is pinned to Dominions {BUILTIN_DOM6_CATALOG.gameVersion}; population-matched defenders use the separate host-patch declaration.</p>
+              <PopulationDefensePanel project={project} catalog={catalog} busy={generationBusy || exportBusy}
+                onPolicyChange={policy => mutate(draft => { draft.populationDefense = policy; })}
+                onContextChange={context => mutate(draft => { draft.analysisContext = context; })}
+                onOpenAssumptions={() => setBalanceOpen(true)} />
+              <Divider />
               <div className="field-grid two">
                 <NumberField scope="Host / export" label="Sail distance" value={project.sailDistance} min={1} max={10} onChange={(value) => mutate((draft) => { draft.sailDistance = value; })} />
                 <NumberField scope="Host / export" label="Site frequency" value={project.settings.siteFrequency ?? 50} min={0} max={100} onChange={(value) => mutate((draft) => { draft.settings.siteFrequency = value; })} />
@@ -1647,13 +1653,16 @@ export function MapMakerApp() {
               </div>
               <div id="inspector-active-panel" className="panel-scroll inspector-scroll" role="tabpanel" aria-labelledby={`inspector-tab-${inspectorTab}`}>
                 {inspectorTab === "terrain" && <TerrainInspector planeId={activePlane.id} province={selected} update={updateSelected} mutateProject={mutate} />}
-                {inspectorTab === "gameplay" && <GameplayInspector catalog={catalog} project={project} planeId={activePlane.id} province={selected} update={updateSelected} mutateProject={mutate} />}
+                {inspectorTab === "gameplay" && <><GameplayInspector catalog={catalog} project={project} planeId={activePlane.id} province={selected} update={updateSelected} mutateProject={mutate} />
+                  <div className="inspector-stack"><PopulationDefenseProvinceStatus project={project} catalog={catalog} planeId={activePlane.id} provinceId={selected.id} onConfigure={() => setLeftTab("scenario")} /></div>
+                </>}
                 {inspectorTab === "sites" && <SitesDefenseInspector
                   catalog={catalog}
                   plane={activePlane}
                   province={selected}
                   protectedStart={selected.start || selected.teamStart !== undefined || project.specificStarts.some((start) => start.planeId === activePlane.id && start.provinceId === selected.id)}
                   update={updateSelected}
+                  populationDefenseStatus={<PopulationDefenseProvinceStatus project={project} catalog={catalog} planeId={activePlane.id} provinceId={selected.id} onConfigure={() => setLeftTab("scenario")} />}
                 />}
                 {inspectorTab === "advanced" && <AdvancedInspector project={project} planeId={activePlane.id} province={selected} update={updateSelected} mutateProject={mutate} />}
               </div>
@@ -1677,7 +1686,7 @@ export function MapMakerApp() {
         <span>{project.planes.length} plane{project.planes.length === 1 ? "" : "s"} · {totalProvinces} provinces · {project.settings.players} starts target</span>
         <button className="status-review" type="button" aria-haspopup="dialog" onClick={() => setBalanceOpen(true)}>Fairness (structural) <strong className={scoreClass(fairness.overall)}>{fairness.overall}</strong> · Inspect starts</button>
         <span>{Math.round(zoom * 100)}%</span>
-        <span>{formatBytes(estimatedPackageBytes(project))} package</span>
+        <span>{formatBytes(estimatedPackageBytes(project, catalog))} package</span>
       </footer>
 
       {destructiveConfirmation && <DestructiveConfirmationDialog
@@ -1704,6 +1713,7 @@ export function MapMakerApp() {
 
       {exportOpen && <ExportDialog
         project={project}
+        catalog={catalog}
         activePlane={activePlane}
         issues={issues}
         progress={exportProgress}
@@ -1829,14 +1839,17 @@ function GameplayInspector({ catalog, project, planeId, province, update, mutate
   );
 }
 
-export function SitesDefenseInspector({ catalog, plane, province, protectedStart = false, update }: { catalog: Dom6CatalogBundle; plane: Plane; province: Province; protectedStart?: boolean; update: (recipe: (province: Province) => void) => void }) {
+export function SitesDefenseInspector({ catalog, plane, province, protectedStart = false, update, populationDefenseStatus }: { catalog: Dom6CatalogBundle; plane: Plane; province: Province; protectedStart?: boolean; update: (recipe: (province: Province) => void) => void; populationDefenseStatus?: ReactNode }) {
   const [showTerrainMismatches, setShowTerrainMismatches] = useState(false);
   const [showSpecialSites, setShowSpecialSites] = useState(false);
   const [showAllGuardianUnits, setShowAllGuardianUnits] = useState(true);
   const siteStatus = (entry: CatalogEntry) => siteCompatibility(entry, province, plane);
   const placeableSites = provinceSiteEntries(catalog.sites);
   const placeableSiteIds = new Set(placeableSites.map((entry) => entry.id));
-  const ordinarySites = placeableSites.filter((entry) => entry.provenanceId !== "dom6inspector-6.35-cfac4311" || entry.tags?.includes("ordinary-site"));
+  // Older exported catalog overlays retain their original source IDs after an upgrade.
+  const bundledSiteSources = new Set(["dom6inspector-6.35-cfac4311", ...BUILTIN_DOM6_CATALOG.sites.map(entry => entry.provenanceId)]);
+  const ordinarySites = placeableSites.filter((entry) => !entry.tags?.includes("non-random-site")
+    && (!bundledSiteSources.has(entry.provenanceId) || entry.tags?.includes("ordinary-site")));
   const sitePool = showSpecialSites ? placeableSites : ordinarySites;
   const siteChoices = showTerrainMismatches ? sitePool : sitePool.filter((entry) => siteStatus(entry).compatible);
   const selectableUnits = selectableUnitEntries(catalog.units);
@@ -1867,6 +1880,7 @@ export function SitesDefenseInspector({ catalog, plane, province, protectedStart
       <p className="microcopy">The default picker includes the complete {ordinarySites.length.toLocaleString()}-site ordinary pool (rarity 0-4); the expanded {placeableSites.length.toLocaleString()}-site pool also includes verified non-random sites that are not nation homes. Nation home/capital sites and Thrones of Ascension stay excluded; fixed thrones are selected under Gameplay. Hidden sites use <code>#feature</code>; known sites use <code>#knownfeature</code>.</p>
       <Divider />
       <SectionHeading kicker="UNIQUE INITIAL DEFENSE" title="Guardian groups" />
+      {populationDefenseStatus}
       <div className="info-card amber"><strong>Map-only boundary</strong><p>These commanders and squads are unique initial independents. Persistent purchasable PD composition is defined by a vanilla poptype or nation; a wholly new PD roster requires enabling a separate mod.</p></div>
       <div className="catalog-filter-bar"><span>{showAllGuardianUnits ? `All ${selectableUnits.length.toLocaleString()} gameplay records available; role filters cover ${roleCommanders.length.toLocaleString()} commanders / ${roleTroops.length.toLocaleString()} troops` : `${roleCommanders.length.toLocaleString()} known commanders / ${roleTroops.length.toLocaleString()} known troops`}</span><button type="button" className={!showAllGuardianUnits ? "active" : ""} aria-pressed={!showAllGuardianUnits} onClick={() => setShowAllGuardianUnits((value) => !value)}>{showAllGuardianUnits ? "Use role-focused lists" : `Search all ${selectableUnits.length.toLocaleString()} units`}</button></div>
       <p className="microcopy">Role-focused lists combine the pinned Inspector nation and magic-site recruitment tables, not unit-name guesses. {internalUnitCount.toLocaleString()} Test, Debug, XXX, or Unused data records are hidden from normal browsing. Dominions map commands can still instantiate any verified raw numeric ID, and an already selected hidden record remains visible.</p>
@@ -2113,9 +2127,9 @@ function ValidationDrawer({ issues, fairness, onClose, onReview, onSelectIssue }
   </aside></div>;
 }
 
-export function ExportDialog({ project, activePlane, issues, progress, busy, onClose, onInstall, onZip, onPlayerZip, onProject, onPreview, onValidate }: { project: MapProject; activePlane: Plane; issues: ValidationIssue[]; progress?: ExportProgress; busy: boolean; onClose: () => void; onInstall: () => void; onZip: () => void; onPlayerZip?: () => void; onProject: () => void; onPreview: () => void; onValidate: () => void }) {
+export function ExportDialog({ project, catalog = BUILTIN_DOM6_CATALOG, activePlane, issues, progress, busy, onClose, onInstall, onZip, onPlayerZip, onProject, onPreview, onValidate }: { project: MapProject; catalog?: Dom6CatalogBundle; activePlane: Plane; issues: ValidationIssue[]; progress?: ExportProgress; busy: boolean; onClose: () => void; onInstall: () => void; onZip: () => void; onPlayerZip?: () => void; onProject: () => void; onPreview: () => void; onValidate: () => void }) {
   const errors = issues.filter((issue) => issue.severity === "error").length;
-  const zipSafety = zipPackageSafety(project);
+  const zipSafety = zipPackageSafety(project, catalog);
   const zipBlocked = zipSafety.level === "blocked";
   const dialogRef = useDialogFocus<HTMLElement>(onClose, busy);
   const progressPercent = Math.max(0, Math.min(100, progress?.percent ?? 0));
@@ -2129,7 +2143,7 @@ export function ExportDialog({ project, activePlane, issues, progress, busy, onC
   }, [busy, dialogRef]);
   return <div className="modal-backdrop"><section ref={dialogRef} className="export-dialog" tabIndex={-1} role="dialog" aria-modal="true" aria-busy={busy} aria-label="Install or export map">
     <div className="dialog-heading"><div><p className="eyebrow">DOMINIONS 6 PACKAGE</p><h2>Install a playable atlas</h2></div><button type="button" disabled={busy} onClick={onClose} aria-label="Close">×</button></div>
-    <div className="package-summary"><div className="package-glyph">D6</div><div><strong>{sanitizeMapName(project.name)}.map</strong><span>{project.planes.length} plane{project.planes.length === 1 ? "" : "s"} · {project.planes.reduce((sum, plane) => sum + plane.provinces.length, 0)} provinces · {formatBytes(estimatedPackageBytes(project))}</span></div><i className={errors ? "bad" : "good"}>{errors ? "!" : "✓"}</i></div>
+    <div className="package-summary"><div className="package-glyph">D6</div><div><strong>{sanitizeMapName(project.name)}.map</strong><span>{project.planes.length} plane{project.planes.length === 1 ? "" : "s"} · {project.planes.reduce((sum, plane) => sum + plane.provinces.length, 0)} provinces · {formatBytes(estimatedPackageBytes(project, catalog))}</span></div><i className={errors ? "bad" : "good"}>{errors ? "!" : "✓"}</i></div>
     {errors ? <div className="export-blocked"><strong>{errors} compatibility blocker{errors === 1 ? "" : "s"}</strong><p>Resolve export errors before building the package.</p><button className="button quiet" type="button" onClick={onValidate}>Review validation</button></div> : <div className="export-options">
       <button className="export-option primary-option" type="button" onClick={onInstall} disabled={busy}><span className="option-icon" aria-hidden="true">↳</span><span><strong>Install directly</strong><small>Choose the Dominions 6 <code>maps</code> folder once; the ready-to-play folder is written there.</small></span><b>Recommended</b></button>
       <button

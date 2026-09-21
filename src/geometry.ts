@@ -55,6 +55,10 @@ export interface ProvinceChamberPrimitive {
   rotationSin: number;
   /** 1 = fractured/diamond, 2 = organic/elliptic, 4 = tomb-like/boxy. */
   contourPower: 1 | 2 | 4;
+  /** Rounded underground interpretation of the nominal contour grammar. */
+  organicPower?: number;
+  /** Smooth third/fifth angular harmonics; absent preserves the legacy contour. */
+  outlineWaves?: readonly [number, number, number, number];
   /** Low-cost directional contour biases that make the analytic shape asymmetric. */
   warpX: number;
   warpY: number;
@@ -77,6 +81,10 @@ export interface ProvinceCorridorPrimitive {
   to: Point;
   /** Half-width in units of the plane's shorter pixel axis. */
   halfWidth: number;
+  /** Optional gently curved centerline, with exact original endpoints and midpoint. */
+  path?: readonly Point[];
+  /** Per-path-point half-widths; linearly tapered between the samples. */
+  halfWidths?: readonly number[];
 }
 
 export interface ProvinceBoundaryPrimitive {
@@ -401,6 +409,10 @@ export function createProvinceOwnershipModel(
     }
   }
 
+  if (isOrganicUndergroundKind(plane.kind)) {
+    shapeUndergroundCorridors(primitives, plane, spacing, pixelFloor, metricAspect);
+  }
+
   const primitiveCopies = buildSparsePrimitiveCopies(primitives, plane, metricAspect);
   const buckets = bucketSparsePrimitiveCopies(primitiveCopies, columns, rows);
   const styxEdgeInsetX = 1 / Math.max(1, Math.round(plane.width));
@@ -437,6 +449,13 @@ export function createProvinceOwnershipModel(
           if (pointInsideChamber(dx, dy, primitive)) candidates.add(primitive.owner);
           continue;
         }
+        if (primitive.kind === "corridor" && primitive.path && copy.segmentIndex !== undefined) {
+          if (pointInsideCorridorSegment(nx - copy.offsetX, ny - copy.offsetY, primitive, copy.segmentIndex, metricAspect)) {
+            candidates.add(primitive.owners[0]);
+            candidates.add(primitive.owners[1]);
+          }
+          continue;
+        }
         const distance = pointSegmentDistanceSquared(
           nx * metricAspect,
           ny,
@@ -465,6 +484,7 @@ export function createProvinceOwnerResolver(plane: Plane): ProvinceOwnerResolver
 
 interface SparsePrimitiveCopy {
   primitiveIndex: number;
+  segmentIndex?: number;
   offsetX: number;
   offsetY: number;
   minX: number;
@@ -558,6 +578,10 @@ interface SparseShapeProfile {
 
 function isCaveFamilyKind(kind: Plane["kind"]): boolean {
   return kind === "cave" || kind === "cavern";
+}
+
+function isOrganicUndergroundKind(kind: Plane["kind"]): boolean {
+  return isCaveFamilyKind(kind) || kind === "underworld" || kind === "hell" || kind === "abyss";
 }
 
 /**
@@ -780,6 +804,12 @@ function createChamberPrimitive(
   const contourPower = floodedCave || styxWater
     ? 2
     : (profile.contourPowers[Math.abs(province.index) % profile.contourPowers.length] ?? 2);
+  const organicPower = isOrganicUndergroundKind(plane.kind) && !styxWater
+    ? contourPower === 1 ? interpolate(1.6, 1.95, deterministicUnit(`${key}:organic-power`))
+      : contourPower === 4 ? interpolate(2.45, 3.15, deterministicUnit(`${key}:organic-power`))
+        : interpolate(1.9, 2.3, deterministicUnit(`${key}:organic-power`))
+    : undefined;
+  const outlineWaves = organicPower === undefined ? undefined : chamberOutlineWaves(key, floodedCave);
   const warpScale = floodedCave ? 0.48 : styxWater ? 0.3 : 1;
   const warpX = (deterministicUnit(`${key}:warp-x`) * 2 - 1) * profile.warp * warpScale;
   const warpY = (deterministicUnit(`${key}:warp-y`) * 2 - 1) * profile.warp * warpScale;
@@ -792,8 +822,11 @@ function createChamberPrimitive(
   const lobeScale = hasLobe
     ? interpolate(profile.lobeScaleRange[0], profile.lobeScaleRange[1], deterministicUnit(`${key}:lobe-scale`))
     : 0;
-  const contourLimit = 1 + Math.abs(warpX) + Math.abs(warpY);
-  const contourOuterFactor = contourPower === 1
+  const contourLimit = 1 + Math.abs(warpX) + Math.abs(warpY)
+    + (outlineWaves?.reduce((sum, wave) => sum + Math.abs(wave), 0) ?? 0);
+  const contourOuterFactor = organicPower !== undefined
+    ? Math.pow(contourLimit, 1 / organicPower) * (organicPower > 2 ? Math.pow(2, 0.5 - 1 / organicPower) : 1)
+    : contourPower === 1
     ? contourLimit
     : contourPower === 2
       ? Math.sqrt(contourLimit)
@@ -822,6 +855,7 @@ function createChamberPrimitive(
     rotationCos,
     rotationSin,
     contourPower,
+    ...(organicPower !== undefined ? { organicPower, outlineWaves } : {}),
     warpX,
     warpY,
     lobeX,
@@ -844,15 +878,38 @@ function chamberRotation(profile: SparseShapeProfile, key: string, preferredAxis
 }
 
 function pointInsideChamber(dx: number, dy: number, chamber: ProvinceChamberPrimitive): boolean {
+  if (chamber.organicPower !== undefined && dx * dx + dy * dy > chamber.radius * chamber.radius + EPSILON) return false;
   const localX = (dx * chamber.rotationCos + dy * chamber.rotationSin) / chamber.radiusX;
   const localY = (-dx * chamber.rotationSin + dy * chamber.rotationCos) / chamber.radiusY;
   const contourBias = chamber.warpX * localX / (1 + Math.abs(localX))
     + chamber.warpY * localY / (1 + Math.abs(localY));
-  if (contourMeasure(localX, localY, chamber.contourPower) <= 1 + contourBias + EPSILON) return true;
+  const measure = chamber.organicPower === undefined
+    ? contourMeasure(localX, localY, chamber.contourPower)
+    : Math.pow(Math.abs(localX), chamber.organicPower) + Math.pow(Math.abs(localY), chamber.organicPower);
+  const wave = chamber.outlineWaves ? angularContourWave(localX, localY, chamber.outlineWaves) : 0;
+  if (measure <= 1 + contourBias + wave + EPSILON) return true;
   if (chamber.lobeScale <= 0) return false;
   const lobeX = (localX - chamber.lobeX) / chamber.lobeScale;
   const lobeY = (localY - chamber.lobeY) / chamber.lobeScale;
   return lobeX * lobeX + lobeY * lobeY <= 1 + EPSILON;
+}
+
+function chamberOutlineWaves(key: string, flooded: boolean): readonly [number, number, number, number] {
+  const phase = deterministicUnit(`${key}:outline-phase`) * Math.PI * 2;
+  const secondary = deterministicUnit(`${key}:outline-secondary`) * Math.PI * 2;
+  const amplitude = interpolate(0.15, 0.22, deterministicUnit(`${key}:outline-amplitude`)) * (flooded ? 0.55 : 1);
+  return [Math.cos(phase) * amplitude, Math.sin(phase) * amplitude,
+    Math.cos(secondary) * amplitude * 0.36, Math.sin(secondary) * amplitude * 0.36];
+}
+
+/** Polynomial angular harmonics avoid expensive trigonometry in every ownership sample. */
+function angularContourWave(x: number, y: number, waves: readonly [number, number, number, number]): number {
+  const length = Math.hypot(x, y);
+  if (length <= EPSILON) return 0;
+  const ux = x / length, uy = y / length, x2 = ux * ux, y2 = uy * uy;
+  return waves[0] * ux * (4 * x2 - 3) + waves[1] * uy * (3 - 4 * y2)
+    + waves[2] * ux * (16 * x2 * x2 - 20 * x2 + 5)
+    + waves[3] * uy * (16 * y2 * y2 - 20 * y2 + 5);
 }
 
 function contourMeasure(x: number, y: number, power: 1 | 2 | 4): number {
@@ -935,6 +992,110 @@ function shortestPeriodicEndpoint(a: Pick<Province, "x" | "y">, b: Pick<Province
   return { x: a.x + dx, y: a.y + dy };
 }
 
+/**
+ * Add a restrained meander and smooth mouth flare only where negative-space
+ * clearance permits it. Original straight envelopes are used for every check,
+ * so the result does not depend on primitive order or create a new near-touch
+ * with an unrelated room/passage. Existing authored crossings remain unchanged.
+ */
+function shapeUndergroundCorridors(
+  primitives: ProvinceOwnershipPrimitive[],
+  plane: Plane,
+  spacing: number,
+  pixelFloor: number,
+  aspect: number,
+): void {
+  const bridgeKeys = new Set(plane.edges.filter(isExplicitBridge).map(edge => connectionKey(edge.a, edge.b)));
+  const offsetsX = plane.wrapX ? [-1, 0, 1] : [0];
+  const offsetsY = plane.wrapY ? [-1, 0, 1] : [0];
+  for (const corridor of primitives) {
+    if (corridor.kind !== "corridor") continue;
+    // Never introduce a dry detour around the Styx or bend an explicit crossing.
+    if (plane.kind === "underworld" && (bridgeKeys.has(corridor.key)
+      || corridor.owners.some(owner => isWaterProvince(plane.provinces[owner]!)))) continue;
+    const ax = corridor.from.x * aspect, ay = corridor.from.y;
+    const bx = corridor.to.x * aspect, by = corridor.to.y;
+    const dx = bx - ax, dy = by - ay, length = Math.hypot(dx, dy);
+    if (length <= pixelFloor * 4) continue;
+    const seed = `${plane.id}:${plane.kind}:${corridor.key}:organic-corridor`;
+    const bend = Math.min(spacing * 0.06, length * 0.075, corridor.halfWidth * 1.05);
+    const flare = corridor.halfWidth * 0.72;
+    const desiredGrowth = bend * 1.15 + flare;
+    let growth = desiredGrowth;
+    const gap = pixelFloor * 0.25;
+    for (const other of primitives) {
+      if (other === corridor) continue;
+      const related = other.kind === "chamber" || other.kind === "boundary"
+        ? corridor.owners.includes(other.owner)
+        : other.owners.some(owner => corridor.owners.includes(owner));
+      if (related) continue;
+      for (const oy of offsetsY) for (const ox of offsetsX) {
+        const separation = other.kind === "chamber"
+          ? Math.sqrt(pointSegmentDistanceSquared((other.center.x + ox) * aspect, other.center.y + oy, ax, ay, bx, by)) - other.radius
+          : Math.sqrt(segmentDistanceSquared(ax, ay, bx, by,
+            (other.from.x + ox) * aspect, other.from.y + oy,
+            (other.to.x + ox) * aspect, other.to.y + oy)) - other.halfWidth;
+        // Each of two unrelated passages may spend at most 40% of the gap.
+        growth = Math.min(growth, Math.max(0, separation - corridor.halfWidth - gap) * 0.4);
+      }
+      if (growth <= EPSILON) break;
+    }
+    if (growth <= EPSILON || desiredGrowth <= EPSILON) continue;
+    const strength = growth / desiredGrowth;
+    const direction = deterministicUnit(`${seed}:side`) < 0.5 ? -1 : 1;
+    const secondary = (deterministicUnit(`${seed}:secondary`) * 2 - 1) * 0.15;
+    const widthPhase = deterministicUnit(`${seed}:width`) * Math.PI * 2;
+    const path: Point[] = [], halfWidths: number[] = [];
+    for (let step = 0; step <= 8; step++) {
+      const t = step / 8;
+      // Explicit zeros retain the original endpoints and owner bisector, including wrap seams.
+      const wave = step === 0 || step === 4 || step === 8 ? 0
+        : Math.sin(Math.PI * 2 * t) + secondary * Math.sin(Math.PI * 4 * t);
+      const displacement = wave * bend * strength * direction;
+      path.push(step === 0 ? { ...corridor.from } : step === 8 ? { ...corridor.to }
+        : step === 4 ? { x: (corridor.from.x + corridor.to.x) / 2, y: (corridor.from.y + corridor.to.y) / 2 }
+          : { x: corridor.from.x + (corridor.to.x - corridor.from.x) * t - dy / length * displacement / aspect,
+            y: corridor.from.y + (corridor.to.y - corridor.from.y) * t + dx / length * displacement });
+      const mouth = 1 - smoothStep(Math.min(t, 1 - t) / 0.44);
+      const variation = Math.sin(Math.PI * 2 * t + widthPhase) * Math.sin(Math.PI * t) ** 2 * 0.075;
+      halfWidths.push(corridor.halfWidth + strength * (flare * mouth + corridor.halfWidth * variation));
+    }
+    corridor.path = path;
+    corridor.halfWidths = halfWidths;
+  }
+}
+
+function isExplicitBridge(edge: Plane["edges"][number]): boolean {
+  return edge.kind === "bridge" || (edge.kind === "custom" && ((edge.special ?? 0) & 16) !== 0);
+}
+
+function smoothStep(value: number): number {
+  const t = clampNumber(value, 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+function segmentDistanceSquared(ax: number, ay: number, bx: number, by: number, cx: number, cy: number, dx: number, dy: number): number {
+  const ux = bx - ax, uy = by - ay, vx = dx - cx, vy = dy - cy;
+  const determinant = ux * vy - uy * vx;
+  if (Math.abs(determinant) > EPSILON) {
+    const wx = cx - ax, wy = cy - ay;
+    const t = (wx * vy - wy * vx) / determinant, u = (wx * uy - wy * ux) / determinant;
+    if (t >= 0 && t <= 1 && u >= 0 && u <= 1) return 0;
+  }
+  return Math.min(pointSegmentDistanceSquared(ax, ay, cx, cy, dx, dy), pointSegmentDistanceSquared(bx, by, cx, cy, dx, dy),
+    pointSegmentDistanceSquared(cx, cy, ax, ay, bx, by), pointSegmentDistanceSquared(dx, dy, ax, ay, bx, by));
+}
+
+function pointInsideCorridorSegment(x: number, y: number, corridor: ProvinceCorridorPrimitive, segment: number, aspect: number): boolean {
+  const a = corridor.path![segment]!, b = corridor.path![segment + 1]!;
+  const dx = (b.x - a.x) * aspect, dy = b.y - a.y;
+  const px = (x - a.x) * aspect, py = y - a.y;
+  const lengthSquared = dx * dx + dy * dy;
+  const t = lengthSquared <= EPSILON ? 0 : clampNumber((px * dx + py * dy) / lengthSquared, 0, 1);
+  const width = interpolate(corridor.halfWidths![segment]!, corridor.halfWidths![segment + 1]!, t);
+  return (px - dx * t) ** 2 + (py - dy * t) ** 2 <= width * width + EPSILON;
+}
+
 function buildSparsePrimitiveCopies(
   primitives: readonly ProvinceOwnershipPrimitive[],
   plane: Pick<Plane, "wrapX" | "wrapY">,
@@ -944,6 +1105,21 @@ function buildSparsePrimitiveCopies(
   const offsetsY = plane.wrapY ? [-1, 0, 1] : [0];
   const copies: SparsePrimitiveCopy[] = [];
   primitives.forEach((primitive, primitiveIndex) => {
+    if (primitive.kind === "corridor" && primitive.path) {
+      for (let segmentIndex = 0; segmentIndex < primitive.path.length - 1; segmentIndex++) {
+        const from = primitive.path[segmentIndex]!, to = primitive.path[segmentIndex + 1]!;
+        const radius = Math.max(primitive.halfWidths![segmentIndex]!, primitive.halfWidths![segmentIndex + 1]!);
+        for (const offsetY of offsetsY) for (const offsetX of offsetsX) {
+          const minX = Math.min(from.x, to.x) + offsetX - radius / metricAspect;
+          const maxX = Math.max(from.x, to.x) + offsetX + radius / metricAspect;
+          const minY = Math.min(from.y, to.y) + offsetY - radius;
+          const maxY = Math.max(from.y, to.y) + offsetY + radius;
+          if (maxX < 0 || minX > 1 || maxY < 0 || minY > 1) continue;
+          copies.push({ primitiveIndex, segmentIndex, offsetX, offsetY, minX, maxX, minY, maxY });
+        }
+      }
+      return;
+    }
     for (const offsetY of offsetsY) {
       for (const offsetX of offsetsX) {
         const radiusX = (primitive.kind === "chamber" ? primitive.radius : primitive.halfWidth) / metricAspect;
@@ -1048,12 +1224,31 @@ function sparseSharedBorders(
     const length = Math.hypot(dx, dy);
     if (length <= EPSILON) continue;
     const midpoint = { x: (primitive.from.x + primitive.to.x) / 2, y: (primitive.from.y + primitive.to.y) / 2 };
+    const normal = { x: (-dy / length) / ownership.metricAspect, y: dx / length };
+    const halfExtent = (direction: number): number => {
+      if (!primitive.path) return primitive.halfWidth;
+      let low = 0, high = Math.max(...primitive.halfWidths!) * 3;
+      // Ownership between these endpoint owners still changes on their metric
+      // bisector. Trace its intersection with the curved/tapered tube, rather
+      // than drawing a straight-capsule border outside the new passage.
+      for (let iteration = 0; iteration < 14; iteration++) {
+        const distance = (low + high) / 2;
+        const x = midpoint.x + normal.x * distance * direction;
+        const y = midpoint.y + normal.y * distance * direction;
+        const inside = primitive.path.slice(1).some((_, segment) => pointInsideCorridorSegment(x, y, primitive, segment, ownership.metricAspect));
+        if (inside) low = distance; else high = distance;
+      }
+      return low;
+    };
+    const left = halfExtent(-1), right = halfExtent(1);
     const offset = {
       x: (-dy / length) * primitive.halfWidth / ownership.metricAspect,
       y: (dx / length) * primitive.halfWidth,
     };
-    const from = { x: midpoint.x - offset.x, y: midpoint.y - offset.y };
-    const to = { x: midpoint.x + offset.x, y: midpoint.y + offset.y };
+    const from = primitive.path ? { x: midpoint.x - normal.x * left, y: midpoint.y - normal.y * left }
+      : { x: midpoint.x - offset.x, y: midpoint.y - offset.y };
+    const to = primitive.path ? { x: midpoint.x + normal.x * right, y: midpoint.y + normal.y * right }
+      : { x: midpoint.x + offset.x, y: midpoint.y + offset.y };
     for (const offsetY of plane.wrapY ? [-1, 0, 1] : [0]) {
       for (const offsetX of plane.wrapX ? [-1, 0, 1] : [0]) {
         const segment = clipSegmentToUnitSquare(
@@ -1299,7 +1494,7 @@ function clampNumber(value: number, minimum: number, maximum: number): number {
 function geometrySignature(plane: Plane): string {
   const ownership = resolvePlaneOwnershipMode(plane);
   const edgePart = ownership === "sparse"
-    ? plane.edges.map((edge) => connectionKey(edge.a, edge.b)).sort().join(",")
+    ? plane.edges.map((edge) => `${connectionKey(edge.a, edge.b)}${plane.kind === "underworld" && isExplicitBridge(edge) ? ":bridge" : ""}`).sort().join(",")
     : "";
   return `${ownership}:${plane.id}:${plane.kind}:${plane.width}x${plane.height}:${plane.wrapX ? 1 : 0}${plane.wrapY ? 1 : 0}:${plane.provinces
     .map((province) => `${province.id}:${province.index}:${province.x}:${province.y}:${province.small ? 1 : 0}${province.large ? 1 : 0}:${province.terrain}:${province.freshwater ? 1 : 0}:${[...(province.terrainFlags ?? [])].sort().join("+")}`)

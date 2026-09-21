@@ -1,6 +1,9 @@
 export const MAX_PLANES = 8;
 export const SCHEMA_VERSION = 1;
 
+export const GAME_ERA_LABELS = { 1: "Early Age", 2: "Middle Age", 3: "Late Age" } as const;
+export type GameEra = keyof typeof GAME_ERA_LABELS;
+
 export type PlaneArchetype =
   | "surface"
   | "cave"
@@ -357,12 +360,20 @@ export interface MapProject {
   rawDirectives: string;
   createdAt: string;
   updatedAt: string;
-  /** Optional device-local notes; never a certificate of nation or mod balance. */
-  analysisContext?: { gameVersion?: string; mods?: string; requirements?: NationTerrainRequirement[] };
+  /** Optional host declarations and notes; never a certificate of nation or mod balance. */
+  analysisContext?: { gameVersion?: string; era?: GameEra; mods?: string; requirements?: NationTerrainRequirement[] };
   /** Inputs recorded by the editor after a successful generation, not map-edit provenance. */
   generationInputs?: GenerationInputSnapshot;
   /** Optional authored editing safeguards and named selections; not native game commands. */
   authoring?: AuthoringOptions;
+  /** Opt-in, revision-pinned initial armies from independently verified recruitment profiles. */
+  populationDefense?: PopulationDefensePolicy;
+}
+
+export interface PopulationDefensePolicy {
+  enabled: boolean;
+  /** Never silently upgraded: an unknown revision must preserve native independent armies. */
+  profileRevision: string;
 }
 
 export type ProvinceLockGroup = "name" | "terrain" | "economy" | "sites" | "guardians";

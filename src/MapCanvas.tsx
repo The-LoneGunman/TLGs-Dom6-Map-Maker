@@ -198,7 +198,7 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
     context.translate(-frame.width / 2, -frame.height / 2);
     context.fillStyle = mapBackgroundColor(plane, ownership);
     context.fillRect(0, 0, frame.width, frame.height);
-    if (backgroundImage) paintRealmBackground(context, backgroundImage, frame.width, frame.height, plane.wrapX, plane.wrapY);
+    if (backgroundImage) paintRealmBackground(context, backgroundImage, frame.width, frame.height, plane);
     paintPlane(context, plane, cells, topology, ownership, previewCondition, frame.width, frame.height, { selectedId, labels: view.zoom >= 1.35, detail: view.zoom >= 0.92, materialImages, markerAnnotations, analysisProvinceIds, screenScale: view.zoom });
     context.restore();
     drawVignette(context, width, height);
@@ -344,7 +344,7 @@ export async function renderPlanePng(plane: Plane, condition: PreviewCondition, 
   context.fillStyle = mapBackgroundColor(plane, ownership);
   context.fillRect(0, 0, canvas.width, canvas.height);
   const backgroundImage = await loadPlaneBackground(planeBackgroundAsset(plane, ownership));
-  if (backgroundImage) paintRealmBackground(context, backgroundImage, canvas.width, canvas.height, plane.wrapX, plane.wrapY);
+  if (backgroundImage) paintRealmBackground(context, backgroundImage, canvas.width, canvas.height, plane);
   const materialImages = await loadArtworkImages(planeMaterialAssets(plane, condition));
   const topology = computeProvinceTopology(plane);
   const cells = ownership.mode === "solid" ? topology.cells : [];
@@ -462,15 +462,15 @@ function paintRealmBackground(
   image: HTMLImageElement,
   width: number,
   height: number,
-  wrapX: boolean,
-  wrapY: boolean,
+  plane: Pick<Plane, "kind" | "wrapX" | "wrapY">,
 ) {
+  const { wrapX, wrapY } = plane;
   const sourceWidth = image.naturalWidth || image.width;
   const sourceHeight = image.naturalHeight || image.height;
   if (!sourceWidth || !sourceHeight) return;
   if (wrapX || wrapY) {
     context.save();
-    context.globalAlpha = 0.58;
+    context.globalAlpha = realmBackgroundOpacity(plane.kind);
     paintSeamlessTileLayout(context, image, planSeamlessTiles(width, height, sourceWidth, sourceHeight, wrapX, wrapY));
     context.globalAlpha = 1;
     context.fillStyle = "rgba(4, 8, 10, .34)";
@@ -492,12 +492,19 @@ function paintRealmBackground(
     sx = (sourceWidth - sw) / 2;
   }
   context.save();
-  context.globalAlpha = 0.58;
+  context.globalAlpha = realmBackgroundOpacity(plane.kind);
   context.drawImage(image, sx, sy, sw, sh, 0, 0, width, height);
   context.globalAlpha = 1;
   context.fillStyle = "rgba(4, 8, 10, .34)";
   context.fillRect(0, 0, width, height);
   context.restore();
+}
+
+/** Keep underground negative space subordinate to the playable floor. */
+export function realmBackgroundOpacity(kind: Plane["kind"]): number {
+  if (kind === "cave" || kind === "cavern") return 0.32;
+  if (kind === "underworld" || kind === "hell" || kind === "abyss") return 0.36;
+  return 0.58;
 }
 
 function paintPlane(

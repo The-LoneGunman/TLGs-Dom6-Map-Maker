@@ -101,7 +101,7 @@ export function IterationPanel({ project, planeId, selectedId, catalog, busy, on
     <p className="eyebrow">SAFE ITERATION</p><h2>Refine this atlas</h2>
     <p>Opt-in tools for {plane.name}. Preview changes before applying; each application is one Undoable edit. Existing Generate, Planes and Scenario controls remain available.</p>
     {error && <p role="alert" className="analysis-caution">{error}</p>}
-    <NativeInspectionPanel project={project} planeId={planeId} />
+    <NativeInspectionPanel project={project} planeId={planeId} catalog={catalog} />
     <GuardianScenarioPanel project={project} catalog={catalog} />
     <details><summary>Layout and start safeguards</summary>
       <label className="iteration-check"><input type="checkbox" checked={!!project.authoring?.lockLayout} onChange={e=>attempt(()=>{const next=cloneProject(project);next.authoring={...next.authoring,lockLayout:e.target.checked};onCommit(next,project);})} />Lock layout, borders, gateways and dimensions</label>
@@ -150,7 +150,7 @@ export function IterationPanel({ project, planeId, selectedId, catalog, busy, on
       <p>Starts, borders, gateways and geography stay unchanged. Locks and protected capital zones are respected; names marked manual are preserved.</p>
       <button className="button quiet wide" type="button" disabled={!ids.length||!contentSeed.trim()||running} onClick={()=>attempt(()=>proposeContent(previewContentReroll(project,planeId,ids,reroll,contentSeed,catalog),"Content-only reroll preview"))}>Preview content reroll</button>
     </details>
-    <details><summary>Settings-only recipes</summary>
+    <details><summary>Settings and host-policy recipes</summary>
       <label className="field"><span>Starting recipe</span><select value={recipeId} onChange={e=>{setRecipeId(e.target.value);setPreview(undefined);}}>{BUILTIN_RECIPES.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select></label>
       <p>{BUILTIN_RECIPES.find(r=>r.id===recipeId)?.note}</p>
       <button type="button" className="button quiet wide" onClick={()=>attempt(()=>propose("Apply starting recipe",applyBuiltinRecipe(project,recipeId),"Changes next-generation settings only. Current provinces, starts and gates are unchanged; generate when ready."))}>Preview recipe settings</button>
@@ -159,12 +159,12 @@ export function IterationPanel({ project, planeId, selectedId, catalog, busy, on
       <input hidden ref={recipeInput} type="file" accept=".json" aria-label="Import settings recipe file" onChange={event=>{
         const file=event.target.files?.[0];event.target.value="";if(!file)return;const source=project;const token=++recipeSequence.current;
         if(file.size>MAX_RECIPE_BYTES){setError("Settings recipes are limited to 256 KiB.");return;}
-        void file.text().then(text=>{if(token!==recipeSequence.current)return;const recipe=parseSettingsRecipe(text);setPreview({source,next:applySettingsRecipe(source,recipe),title:`Import recipe: ${recipe.name}`,detail:"Applies configuration and stages missing planes. No existing plane is removed. Geometry/borders may update for configured wrap or dimensions; Generate rebuilds the map."});setError(undefined);}).catch(e=>{if(token===recipeSequence.current)setError(e instanceof Error?e.message:"Recipe could not be read.");});
+        void file.text().then(text=>{if(token!==recipeSequence.current)return;const recipe=parseSettingsRecipe(text);setPreview({source,next:applySettingsRecipe(source,recipe),title:`Import recipe: ${recipe.name}`,detail:"Applies configuration and stages missing planes. No existing plane is removed. Geometry/borders may update for configured wrap or dimensions. Included defender policies and host patch/mod declarations affect current exports immediately; Generate rebuilds geography."});setError(undefined);}).catch(e=>{if(token===recipeSequence.current)setError(e instanceof Error?e.message:"Recipe could not be read.");});
       }} />
       <button type="button" className="button quiet wide" onClick={()=>recipeInput.current?.click()}>Open settings recipe</button>
       <label className="field"><span>Or paste recipe JSON</span><textarea rows={3} maxLength={MAX_RECIPE_BYTES} value={recipeText} onChange={e=>{recipeSequence.current++;setRecipeText(e.target.value);setPreview(undefined);}} /></label>
-      <button type="button" className="button quiet wide" disabled={!recipeText.trim()} onClick={()=>attempt(()=>{const recipe=parseSettingsRecipe(recipeText);propose(`Import recipe: ${recipe.name}`,applySettingsRecipe(project,recipe),"Applies configuration and stages missing planes; no existing plane is removed. Generate after reviewing the plan.");})}>Preview pasted recipe</button>
-      <p>A recipe contains configuration, not authored map content. Keep Editable project JSON for an exact backup. Older Atlas builds may reject new optional editing metadata.</p>
+      <button type="button" className="button quiet wide" disabled={!recipeText.trim()} onClick={()=>attempt(()=>{const recipe=parseSettingsRecipe(recipeText);propose(`Import recipe: ${recipe.name}`,applySettingsRecipe(project,recipe),"Applies configuration and stages missing planes; no existing plane is removed. Included defender policies and host patch/mod declarations affect current exports immediately. Generate after reviewing the geography plan.");})}>Preview pasted recipe</button>
+      <p>A recipe contains configuration, not authored province content. Defender policies and host patch/mod declarations affect current exports immediately. Keep Editable project JSON for an exact backup. Older Atlas builds may reject new optional editing metadata.</p>
     </details>
     <details><summary>Compare generated candidates</summary>
       <label className="field"><span>Candidate count (2–3)</span><select value={candidateCount} onChange={event=>setCandidateCount(Number(event.target.value))}><option value={2}>2 candidates</option><option value={3}>3 candidates</option></select></label>

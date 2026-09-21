@@ -7,6 +7,9 @@ import {
   type Province,
   type TerrainFlag,
 } from "./domain";
+import { BUILTIN_DOM6_CATALOG, type Dom6CatalogBundle } from "./catalog";
+import { buildInitialDefensePlan, type VerifiedPopulationDefenseProfile } from "./populationDefenders";
+import { VERIFIED_POPULATION_DEFENSE_PROFILES } from "./populationDefenseProfiles";
 
 interface ProvinceRecord {
   plane: Plane;
@@ -42,7 +45,13 @@ const TERRAIN_FLAG_LABELS: Record<TerrainFlag, string> = {
  * that advanced content exists without copying potentially private text into a
  * shareable diagnostic artifact.
  */
-export function buildHostTopologyReport(project: MapProject): string {
+export function buildHostTopologyReport(
+  project: MapProject,
+  catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG,
+  profiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES,
+): string {
+  const defensePlan = project.populationDefense?.enabled
+    ? buildInitialDefensePlan(project, catalog, project.populationDefense, profiles) : undefined;
   const records = provinceRecords(project);
   const recordByKey = new Map(records.map((record) => [provinceKey(record.plane.id, record.province.id), record]));
   const planeNumberById = new Map(project.planes.map((plane, index) => [plane.id, index + 1]));
@@ -81,6 +90,12 @@ export function buildHostTopologyReport(project: MapProject): string {
     `Advanced raw directives: ${rawStats.scopes} populated ${plural(rawStats.scopes, "scope")} | ${rawStats.lines} nonblank ${plural(rawStats.lines, "line")} (contents redacted)`,
   ];
 
+  if (defensePlan) lines.push(
+    `Population-matched initial defenders: revision ${quoted(project.populationDefense!.profileRevision)}`,
+    `Defense coverage: ${defensePlan.counts.derived} matched | ${defensePlan.counts.custom} custom armies preserved | ${defensePlan.counts.excluded} excluded | ${defensePlan.counts.unsupported} unsupported (engine armies unchanged)`,
+    "These are fixed-count initial army templates, not persistent provincial defense or a guarantee of balanced combat. Starts and their directly connected neighbors are excluded from automatic matching.",
+  );
+
   for (const [planeIndex, plane] of project.planes.entries()) {
     const planeNumber = planeIndex + 1;
     const planeRecords = records
@@ -100,6 +115,8 @@ export function buildHostTopologyReport(project: MapProject): string {
     for (const record of planeRecords) {
       const rawLines = directiveLineCount(record.province.rawDirectives);
       const markers = provinceMarkers(record, specificStartsByProvince.get(provinceKey(plane.id, record.province.id)) ?? []);
+      const defense = defensePlan?.entries.get(`${plane.id}:${record.province.id}`);
+      if (defense) markers.push(`initial defenders=${defense.status} (${defense.reason})`);
       if (rawLines) markers.push(`raw directives=${rawLines} ${plural(rawLines, "line")} (redacted)`);
       lines.push(
         `- L#${record.province.index} / G#${record.globalNumber} | ${quoted(record.province.name)}`

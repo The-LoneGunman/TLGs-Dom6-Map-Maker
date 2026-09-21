@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import {
   BUILTIN_DOM6_CATALOG,
@@ -15,6 +16,30 @@ import {
   troopUnitEntries,
 } from "../src/catalog";
 import { createDefaultProject } from "../src/generator";
+import compactCatalog from "../src/catalog/data/dom6-6.37.json";
+
+test("6.37 catalog refresh changes provenance without changing established identities or selector metadata", () => {
+  assert.equal(BUILTIN_DOM6_CATALOG.gameVersion, "6.37");
+  assert.equal(compactCatalog.sourceRevision, "c30c6c14e18ab284415d599b81579af9b3070112");
+  assert.equal(compactCatalog.sourceDate, "2026-09-18");
+  assert.equal(Object.keys(compactCatalog.sourceFileSha256).length, 13);
+  assert.equal(compactCatalog.sourceFileSha256["BaseU.csv"], "185675d8906b87dc94070d52776e19cfefec4d2efcee9b6e8084aeba059e4ec5");
+  // Frozen from the prior 6.35 compact collections before rebuilding. All
+  // names/IDs/roles/site metadata must remain stable in this source refresh.
+  const collections = Object.fromEntries(Object.entries(compactCatalog).filter(([, value]) => Array.isArray(value)));
+  assert.equal(createHash("sha256").update(JSON.stringify(collections)).digest("hex"),
+    "1993af4dda1eb2d1794d9795ff5617e49bf50755fff7421f529fdad8d57b29e7");
+  const source = BUILTIN_DOM6_CATALOG.provenance.find(entry => entry.id === "dom6inspector-6.37-c30c6c14");
+  assert.ok(source);
+  assert.match(source.source ?? "", /c30c6c14e18ab284415d599b81579af9b3070112\/gamedata$/);
+  for (const [id, name] of [[1463, "Pale One Commander"], [1465, "Pale One"]] as const) {
+    const unit = findCatalogEntry(BUILTIN_DOM6_CATALOG.units, id);
+    assert.equal(unit?.name, name);
+    assert.equal(unit?.provenanceId, source.id);
+  }
+  assert.equal(findCatalogEntry(BUILTIN_DOM6_CATALOG.poptypes, 81)?.name, "Pale Ones");
+  assert.equal(findCatalogEntry(BUILTIN_DOM6_CATALOG.poptypes, 81)?.provenanceId, "illwinter-map-manual-6.26");
+});
 
 test("ships the complete pinned Dominions selector catalogs", () => {
   assert.equal(BUILTIN_DOM6_CATALOG.units.length, 4091);

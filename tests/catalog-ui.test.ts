@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { BUILTIN_DOM6_CATALOG } from "../src/catalog";
+import { BUILTIN_DOM6_CATALOG, createCatalogTemplate, findCatalogEntry, mergeCatalogBundles, parseCatalogBundle, type Dom6CatalogBundle } from "../src/catalog";
 import { createDefaultProject } from "../src/generator";
 import { SitesDefenseInspector, includeSelectedEntry } from "../src/MapMakerApp";
 
@@ -70,4 +70,66 @@ test("guardian creation is disabled on every authored start type", () => {
 
   assert.match(html, /<button[^>]+disabled=""[^>]*>\+ Add guardian group<\/button>/);
   assert.match(html, /disabled on generic, team, and nation-specific starts/);
+});
+
+function sitePickerFixture() {
+  const project = createDefaultProject("catalog-ui-provenance-boundary");
+  const plane = project.planes[0]!;
+  const province = plane.provinces.find(entry => !entry.start)!;
+  province.sites = [{ id: "custom-selected-site", value: "9001", known: false }];
+  const catalog: Dom6CatalogBundle = { ...structuredClone(BUILTIN_DOM6_CATALOG),
+    sites: [401, 1261, 204, 1361].map(id => structuredClone(findCatalogEntry(BUILTIN_DOM6_CATALOG.sites, id)!)),
+  };
+  const render = (activeCatalog: Dom6CatalogBundle) => renderToStaticMarkup(createElement(SitesDefenseInspector, {
+    catalog: activeCatalog, plane, province, update() {},
+  }));
+  return { catalog, render };
+}
+
+test("ordinary site browsing follows current bundled provenance while preserving older custom site metadata", () => {
+  const { catalog, render } = sitePickerFixture();
+  assert.equal(catalog.sites[0]!.provenanceId, "dom6inspector-6.37-c30c6c14");
+  const savedCustom = createCatalogTemplate("6.35");
+  savedCustom.provenance[0]!.id = "saved-6.35-custom-catalog";
+  const provenanceId = savedCustom.provenance[0]!.id;
+  savedCustom.sites = [
+    { id: 9001, name: "Preserved custom spring", provenanceId },
+    { id: 9002, name: "Custom non-random sanctuary", provenanceId, tags: ["non-random-site"] },
+    { id: 401, name: "Customized ordinary site", provenanceId },
+    { id: 204, name: "Customized capital site", provenanceId, tags: ["ordinary-site"] },
+    { id: 1361, name: "Customized throne site", provenanceId, tags: ["ordinary-site"] },
+  ];
+  const parsed = parseCatalogBundle(JSON.stringify(savedCustom));
+  const merged = mergeCatalogBundles(catalog, parsed);
+  const html = render(merged);
+  assert.equal(findCatalogEntry(merged.sites, 401)?.name, "Customized ordinary site");
+  assert.equal(findCatalogEntry(merged.sites, 9001)?.provenanceId, provenanceId);
+  assert.ok(findCatalogEntry(merged.sites, 204)?.tags?.includes("nation-home-site"));
+  assert.ok(findCatalogEntry(merged.sites, 1361)?.tags?.includes("throne"));
+  assert.match(html, /of 2 ordinary province sites/);
+  assert.match(html, /2 ordinary \+ 2 non-random non-home sites available/);
+  assert.match(html, /Include all 4 non-capital sites/);
+  assert.match(html, /Preserved custom spring \(#9001\)/);
+  assert.doesNotMatch(html, /of 3 ordinary province sites/);
+});
+
+test("saved 6.35 Inspector provenance cannot leak special sites into the current ordinary picker", () => {
+  const { catalog, render } = sitePickerFixture();
+  const savedInspector = createCatalogTemplate("6.35");
+  savedInspector.provenance = [{
+    id: "dom6inspector-6.35-cfac4311", title: "Dom6 Inspector data export", authority: "community",
+    version: "6.35 / cfac4311bc0b58053b8dead7bffbc036ba9bd5dc",
+    source: "https://github.com/larzm42/dom6inspector/tree/cfac4311bc0b58053b8dead7bffbc036ba9bd5dc/gamedata",
+  }];
+  savedInspector.sites = catalog.sites.map(site => ({ ...site, provenanceId: savedInspector.provenance[0]!.id }));
+  const custom = createCatalogTemplate("6.35");
+  custom.sites = [{ id: 9001, name: "Preserved custom spring", provenanceId: custom.provenance[0]!.id }];
+  const merged = mergeCatalogBundles(catalog, parseCatalogBundle(JSON.stringify(savedInspector)), parseCatalogBundle(JSON.stringify(custom)));
+  assert.equal(findCatalogEntry(merged.sites, 1261)?.provenanceId, "dom6inspector-6.35-cfac4311", "old observations must not be silently relabelled");
+  const html = render(merged);
+  assert.match(html, /of 2 ordinary province sites/);
+  assert.match(html, /2 ordinary \+ 1 non-random non-home sites available/);
+  assert.match(html, /Include all 3 non-capital sites/);
+  assert.match(html, /Preserved custom spring \(#9001\)/);
+  assert.doesNotMatch(html, /of 3 ordinary province sites/);
 });

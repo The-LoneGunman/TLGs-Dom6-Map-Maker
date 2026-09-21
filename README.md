@@ -20,6 +20,8 @@ This README and the user guide describe the current `main` source, including the
 
 Merging source does not update the hosted app or create an installer release. The source package version remains `0.1.4` until another tagged release; use the commit or release above to identify a build. Keep a pre-upgrade JSON backup: older builds may reject newer optional project fields.
 
+September 21 development updates in this checkout add smoother underground shapes and relief, the pinned 6.37 selector catalog, and opt-in population-matched initial defenders. Initial coverage is deliberately limited to Pale Ones in unmodded 6.37 Middle Age dry caves; unsupported populations retain native armies. These updates are not yet merged or published. See the [development verification record](docs/UNDERGROUND_POLISH_2026-09-21.md) and [population-defender instructions](docs/USER_GUIDE.md#population-matched-initial-defenders).
+
 ## Run locally on Windows
 
 1. Download `Pantokrator-Atlas-Setup-x64.exe` from the [latest release](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/latest).
@@ -69,7 +71,7 @@ Start provinces and their directly connected neighbors are protected from genera
 
 **Inspect starts** separates export validity, the legacy structural score, and analysis limitations. Compare potential graph connections with conservative dry/water-separated routes; inspect nearby population, authored guardians, thrones, competing starts, and realm entrances. Distances are graph hops, not turns, and unknown population or guardian difficulty remains unknown. These diagnostics do not simulate nation strength or certify multiplayer balance.
 
-Optional game-patch and mod notes travel with project JSON and host reports. They never change generation or enable nation bonuses. Terrain-requirement checks are explicitly host-declared and become unverified when those declarations change. Catalog versions are selector snapshots, not balance rulesets; patches and mods can invalidate nation-specific assumptions.
+Optional game-patch, era and mod declarations travel with project JSON and host reports. They never enable nation bonuses. When population-matched defenders are enabled, those declarations determine which verified templates may be exported; unsupported contexts retain native armies. Terrain-requirement checks are explicitly host-declared and become unverified when their declarations change. Catalog versions are selector snapshots, not balance rulesets; patches and mods can invalidate nation-specific assumptions.
 
 ## Dominions engine boundaries
 

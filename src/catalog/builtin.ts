@@ -3,7 +3,7 @@ import {
   DOM6_CATALOG_SCHEMA_VERSION,
   type Dom6CatalogBundle,
 } from "./types";
-import catalogData from "./data/dom6-6.35.json";
+import catalogData from "./data/dom6-6.37.json";
 
 type CompactEntry = readonly [id: number, name: string];
 type CompactUnit = readonly [id: number, name: string, roleFlags: number];
@@ -21,11 +21,12 @@ const compactPoptypes = readCompactEntries(catalogData.poptypes, "poptypes");
 const compactForts = readCompactEntries(catalogData.forts, "forts");
 const compactPlanes = readCompactEntries(catalogData.planes, "planes");
 const compactSiteTerrainTypes = readCompactEntries(catalogData.siteTerrainTypes, "siteTerrainTypes");
+const inspectorProvenanceId = `dom6inspector-${catalogData.gameVersion}-${catalogData.sourceRevision.slice(0, 8)}`;
 
 const inspectorEntry = ([id, name]: CompactEntry) => ({
   id,
   name,
-  provenanceId: "dom6inspector-6.35-cfac4311",
+  provenanceId: inspectorProvenanceId,
 });
 
 const SPECIAL_NATIONS = new Map<number, string>([
@@ -49,8 +50,8 @@ const UNIT_INTERNAL_RECORD = 16;
 export const BUILTIN_DOM6_CATALOG: Dom6CatalogBundle = {
   schema: DOM6_CATALOG_SCHEMA,
   schemaVersion: DOM6_CATALOG_SCHEMA_VERSION,
-  gameVersion: "6.35",
-  catalogVersion: "dom6-6.35-cfac4311 + illwinter-map-manual-6.26",
+  gameVersion: catalogData.gameVersion,
+  catalogVersion: `dom6-${catalogData.gameVersion}-${catalogData.sourceRevision.slice(0, 8)} + illwinter-map-manual-6.26`,
   provenance: [
     {
       id: "illwinter-map-manual-6.26",
@@ -61,12 +62,12 @@ export const BUILTIN_DOM6_CATALOG: Dom6CatalogBundle = {
       notes: "Poptype, fortification, and special-nation entries are verified against the manual tables. The manual does not catalog site or unit IDs.",
     },
     {
-      id: "dom6inspector-6.35-cfac4311",
+      id: inspectorProvenanceId,
       title: "Dom6 Inspector data export",
       authority: "community",
-      version: "6.35 / cfac4311bc0b58053b8dead7bffbc036ba9bd5dc",
-      source: "https://github.com/larzm42/dom6inspector/tree/cfac4311bc0b58053b8dead7bffbc036ba9bd5dc/gamedata",
-      notes: "Pinned 2026-05-26 gamedata exports include BaseU/MagicSites, nation recruitment-role tables, nation #startsite attributes, nations, planes, and site terrain types. Distributed under GPL-3.0; see src/catalog/data/LICENSE.dom6inspector.txt and NOTICE.md.",
+      version: `${catalogData.gameVersion} / ${catalogData.sourceRevision}`,
+      source: `https://github.com/larzm42/dom6inspector/tree/${catalogData.sourceRevision}/gamedata`,
+      notes: `Pinned ${catalogData.sourceDate} gamedata exports include BaseU/MagicSites, nation recruitment-role tables, nation #startsite attributes, nations, planes, and site terrain types. Source bytes are SHA-256 checked by the builder. Distributed under GPL-3.0; see src/catalog/data/LICENSE.dom6inspector.txt and NOTICE.md.`,
     },
   ],
   poptypes: compactPoptypes.map(([id, name]) => ({ id, name, provenanceId: "illwinter-map-manual-6.26", sourceRef: "PDF p.7, Poptypes" })),
@@ -95,7 +96,7 @@ export const BUILTIN_DOM6_CATALOG: Dom6CatalogBundle = {
               ? "Non-random site"
               : undefined,
       tags: tags.length ? tags : undefined,
-      provenanceId: "dom6inspector-6.35-cfac4311",
+      provenanceId: inspectorProvenanceId,
     };
   }),
   units: compactUnits.map(([id, name, roleFlags]) => ({
@@ -111,7 +112,7 @@ export const BUILTIN_DOM6_CATALOG: Dom6CatalogBundle = {
       ...((roleFlags & UNIT_ROLE_SITE_TROOP) !== 0 ? ["site-recruitable-troop"] : []),
       ...((roleFlags & UNIT_INTERNAL_RECORD) !== 0 ? ["internal-unit-record"] : []),
     ],
-    provenanceId: "dom6inspector-6.35-cfac4311",
+    provenanceId: inspectorProvenanceId,
   })),
   nations: compactNations.filter(([id, , , , era]) => era > 0 || SPECIAL_NATIONS.has(id)).map(([id, name, subtitle, abbreviation, era]) => ({
     id,
@@ -119,7 +120,7 @@ export const BUILTIN_DOM6_CATALOG: Dom6CatalogBundle = {
     subtitle: SPECIAL_NATIONS.has(id) ? undefined : subtitle || undefined,
     abbreviation: SPECIAL_NATIONS.has(id) ? undefined : abbreviation || undefined,
     era,
-    provenanceId: SPECIAL_NATIONS.has(id) ? "illwinter-map-manual-6.26" : "dom6inspector-6.35-cfac4311",
+    provenanceId: SPECIAL_NATIONS.has(id) ? "illwinter-map-manual-6.26" : inspectorProvenanceId,
     sourceRef: SPECIAL_NATIONS.has(id) ? "PDF pp.5-6, Special Nations" : undefined,
   })),
   forts: compactForts.map(([id, name]) => ({ id, name, provenanceId: "illwinter-map-manual-6.26", sourceRef: "PDF p.8, Fortifications" })),

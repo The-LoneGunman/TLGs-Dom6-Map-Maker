@@ -4,6 +4,8 @@ Pantokrator Atlas is a local-first map maker for Dominions 6. It generates deter
 
 This guide describes the current `main` source, including **Iterate, plane generation preferences, expanded analysis, native inspection, player ZIPs, and guardian fixtures**. These controls are available through [source installation](../README.md#develop-from-source), but have not yet been deployed to the hosted app or included in a Windows release. Check [Versions and documentation](../README.md#versions-and-documentation) before looking for a missing control. Current-source Dominions playtesting remains incomplete; see the [verification record](IMPLEMENTATION_ROUND_2026-09-20.md).
 
+The September 21 development checkout additionally includes underground visual polish, a pinned 6.37 selector catalog, and [population-matched initial defenders](#population-matched-initial-defenders). Those additions are not yet merged into `main` or published; their current coverage and checks are recorded [separately](UNDERGROUND_POLISH_2026-09-21.md).
+
 ## Contents
 
 - [Quick start](#quick-start)
@@ -478,7 +480,7 @@ Validation requires at least two valid, non-blocked endpoints and a route from e
 Scenario options affect export directly and do not require regeneration.
 
 - **Description:** main map description. Secondary planes receive the description plus their plane name.
-- **Minimum Dominions version:** range 600-999; emits `#domversion`. The default 635 means Dominions 6.35 and matches the bundled catalog revision.
+- **Minimum Dominions version:** range 600-999; emits `#domversion`. The default 635 means Dominions 6.35. This is a minimum file-compatibility declaration, not the host's actual patch or the selector-catalog version. The 6.37 catalog refresh added no IDs and does not automatically raise existing maps' minimum version.
 - **Sail distance:** range 1-10; emits `#saildist`.
 - **Site frequency:** range 0-100; emits the global `#features` value.
 - **Ascension points:** optional 1-999; emits `#victorycondition 6 N`. Blank leaves that victory condition unspecified.
@@ -493,6 +495,18 @@ Scenario options affect export directly and do not require regeneration.
 - **Map-level directives:** advanced commands appended only to plane 1.
 
 Playable nation IDs must be safe integers 5 or greater. Unknown IDs require matching custom content in Dominions.
+
+### Population-matched initial defenders
+
+In **Host & scenario**, enable **Match ordinary defenders to recruitment population** to replace eligible ordinary initial armies at export. The option is off by default. Both manually assigned and generated population types use the same rule; changing a province's population type updates its preview immediately without regenerating the map.
+
+The first supported template is **Pale Ones (population type 81)**: one **Pale One Commander #1463** and **15 Pale Ones #1465**, in a **dry Cave**, for **unmodded Dominions 6.37, Middle Age**. Declare that host patch and era explicitly; neither is auto-detected. Other populations, eras, patches, mods, underwater provinces and non-cave terrain remain unsupported and keep Dominions' native initial armies. The coverage panel lists matched, preserved, excluded and unsupported provinces so partial coverage is visible.
+
+Existing custom or generated guardian groups always take priority and remain unchanged. Starts and every directly connected neighbor, including gateways, cannot receive automatic armies. Locks, explicit owners, blocked provinces and thrones are also excluded. Raw directives anywhere in the atlas suppress all automatic templates because those commands can select or change other provinces.
+
+Inspect the read-only **Initial-defender preview** in the selected province's inspector to see its resulting commander and squads. This option does not change recruitable units, create game content, modify replenishing post-capture PD, or guarantee equal combat difficulty. Counts are fixed template choices, not the game's independent-strength formula.
+
+Saved projects pin a template revision. The earlier empty v1 revision stays unsupported; use **Use current verified profiles** explicitly to adopt v2, then review coverage. No saved map silently adopts different armies during an update. [Evidence and verification scope](research/POPULATION_RECRUITMENT_EVIDENCE_2026-09-21.md) are available for maintainers.
 
 ## Iterate tab
 
@@ -781,7 +795,7 @@ Use the official map manual. Rare scenario commands such as `#god`, `#dominionst
 
 ## Catalog manager
 
-The bundled Dominions 6.35 catalog covers units, sites, population types, nations, and forts. See the [catalog coverage and provenance notes](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/CONTENT_CATALOG.md) for its pinned source and exact IDs. It does not automatically track later game updates. Pickers search names, aliases, tags, and numeric IDs.
+The development checkout's bundled Dominions 6.37 catalog covers units, sites, population types, nations, and forts. See the [catalog coverage and provenance notes](CONTENT_CATALOG.md) for its pinned source and exact IDs. It does not automatically track later game updates. Pickers search names, aliases, tags, and numeric IDs. Older published builds may still use the 6.35 snapshot.
 
 - **Sources & license:** shows data provenance.
 - **Import verified JSON:** accepts up to 8 MiB of UTF-8 JSON and merges a schema-valid catalog with bundled entries. Custom entries override matching IDs for lookup/display. The label does not independently authenticate user-supplied data; use a source you trust.

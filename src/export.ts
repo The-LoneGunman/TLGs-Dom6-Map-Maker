@@ -4,6 +4,8 @@ import { buildHostTopologyReport } from "./hostReport";
 import { analysisContextLines, analyzeStarts, buildStartAnalysisText } from "./workbench";
 import { BUILTIN_DOM6_CATALOG, type Dom6CatalogBundle } from "./catalog";
 import { assertPlaneGenerationOverrides } from "./generationControls";
+import { buildInitialDefensePlan, type InitialDefensePlan, type VerifiedPopulationDefenseProfile } from "./populationDefenders";
+import { VERIFIED_POPULATION_DEFENSE_PROFILES } from "./populationDefenseProfiles";
 import {
   compileMapText,
   encodeD6m,
@@ -42,16 +44,18 @@ type ProgressCallback = (progress: ExportProgress) => void;
 
 export type PackageAudience = "host" | "player";
 
-export async function buildPackageFiles(project: MapProject, onProgress?: ProgressCallback, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG, audience: PackageAudience = "host"): Promise<PackageFile[]> {
+/** Registry override supports internal verification fixtures; project imports cannot supply trusted profiles. */
+export async function buildPackageFiles(project: MapProject, onProgress?: ProgressCallback, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG, audience: PackageAudience = "host",
+  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES): Promise<PackageFile[]> {
   const base = sanitizeMapName(project.name);
   const encoder = new TextEncoder();
   const files: PackageFile[] = [];
   onProgress?.({ stage: "preparing", plane: 0, planeCount: project.planes.length, percent: 0, message: "Compiling Dominions map directives…" });
   for (let index = 0; index < project.planes.length; index += 1) {
     const suffix = index === 0 ? "" : `_plane${index + 1}`;
-    files.push({ name: `${base}${suffix}.map`, data: encoder.encode(compileMapText(project, index)) });
+    files.push({ name: `${base}${suffix}.map`, data: encoder.encode(compileMapText(project, index, catalog, populationProfiles)) });
   }
-  if (audience === "host") files.push(...supportFiles(project, catalog));
+  if (audience === "host") files.push(...supportFiles(project, catalog, populationProfiles));
   else files.push({ name: "PLAYER_README.txt", data: encoder.encode([
     "PANTOKRATOR ATLAS — PLAYER MAP PACKAGE", "",
     "Extract this entire folder into your Dominions 6 user-data maps directory.",
@@ -84,7 +88,7 @@ export async function buildPackageFiles(project: MapProject, onProgress?: Progre
 }
 
 export async function downloadPackage(project: MapProject, onProgress?: ProgressCallback, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG, audience: PackageAudience = "host") {
-  const safety = zipPackageSafety(project);
+  const safety = zipPackageSafety(project, catalog);
   if (safety.level === "blocked") throw new Error(safety.message);
   const files = await buildPackageFiles(project, onProgress, catalog, audience);
   const root = sanitizeMapName(project.name);
@@ -134,7 +138,7 @@ export async function installPackage(project: MapProject, onProgress?: ProgressC
     const support = supportFiles(project, catalog);
     const textArtifacts: InstallArtifact[] = project.planes.map((_, index) => {
       const suffix = index === 0 ? "" : `_plane${index + 1}`;
-      return installArtifact(root, transactionId, `${root}${suffix}.map`, encoder.encode(compileMapText(project, index)));
+      return installArtifact(root, transactionId, `${root}${suffix}.map`, encoder.encode(compileMapText(project, index, catalog)));
     });
     textArtifacts.push(...support.map((file) => installArtifact(root, transactionId, file.name, file.data)));
     const d6mArtifacts = project.planes.map((_, index) => {
@@ -343,7 +347,7 @@ const PROJECT_FIELDS = new Set([
   "schemaVersion", "name", "description", "seed", "targetVersion", "settings", "generationWarnings", "mapNoHide",
   "noDeepCaves", "noDeepChoice", "noHomelandNames", "noNameFilter", "sailDistance", "victoryPoints", "allowedPlayers",
   "computerPlayers", "cannotWin", "specificStarts", "planes", "gates", "rawDirectives", "createdAt", "updatedAt",
-  "analysisContext", "generationInputs", "authoring",
+  "analysisContext", "generationInputs", "authoring", "populationDefense",
 ]);
 const GENERATION_SETTING_FIELDS = new Set([
   "players", "provincesPerPlayer", "waterPercent", "oceanLayout", "continentCount", "specialPlaneSizePercent",
@@ -384,6 +388,17 @@ function assertProjectShape(project: Record<string, unknown>): void {
   stringAt(project.seed, "project.seed");
   numberAt(project.targetVersion, "project.targetVersion");
   assertGenerationSettings(recordAt(project.settings, "project.settings"));
+  if (project.populationDefense !== undefined) {
+    const policy = recordAt(project.populationDefense, "project.populationDefense");
+    assertKnownFields(policy, "project.populationDefense", new Set(["enabled", "profileRevision"]));
+    booleanAt(policy.enabled, "project.populationDefense.enabled");
+    stringAt(policy.profileRevision, "project.populationDefense.profileRevision");
+    const revision = policy.profileRevision as string;
+    if (!revision.trim() || revision.length > 120 || revision !== revision.trim()
+      || [...revision].some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) {
+      throw new Error("project.populationDefense.profileRevision must be a nonblank, whitespace-trimmed revision of at most 120 characters.");
+    }
+  }
   if (project.authoring !== undefined) {
     const options = recordAt(project.authoring, "project.authoring");
     assertKnownFields(options, "project.authoring", new Set(["lockLayout", "lockStarts", "regions"]));
@@ -406,8 +421,11 @@ function assertProjectShape(project: Record<string, unknown>): void {
   }
   if (project.analysisContext !== undefined) {
     const context = recordAt(project.analysisContext, "project.analysisContext");
-    assertKnownFields(context, "project.analysisContext", new Set(["gameVersion", "mods", "requirements"]));
+    assertKnownFields(context, "project.analysisContext", new Set(["gameVersion", "era", "mods", "requirements"]));
     optionalStringAt(context.gameVersion, "project.analysisContext.gameVersion");
+    if (context.era !== undefined && context.era !== 1 && context.era !== 2 && context.era !== 3) {
+      throw new Error("project.analysisContext.era must be 1 (Early Age), 2 (Middle Age), or 3 (Late Age), or omitted when unknown.");
+    }
     optionalStringAt(context.mods, "project.analysisContext.mods");
     if (context.requirements !== undefined) boundedArrayAt(context.requirements, "project.analysisContext.requirements", 64).forEach((value,index)=>{
       const path=`project.analysisContext.requirements[${index}]`;const r=recordAt(value,path);
@@ -744,9 +762,10 @@ function assertProjectTextSize(text: string): void {
   }
 }
 
-export function estimatedPackageBytes(project: MapProject): number {
+export function estimatedPackageBytes(project: MapProject, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG,
+  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES): number {
   return project.planes.reduce((sum, plane) => sum + estimatedD6mBytes(plane), 0)
-    + estimatedTextPackageBytes(project);
+    + estimatedTextPackageBytes(project, catalog, populationProfiles);
 }
 
 /**
@@ -755,9 +774,12 @@ export function estimatedPackageBytes(project: MapProject): number {
  * .map files and in atlas_project.json, so omitting text can substantially
  * understate ZIP memory for heavily authored projects.
  */
-export function estimatedTextPackageBytes(project: MapProject): number {
+export function estimatedTextPackageBytes(project: MapProject, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG,
+  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES): number {
+  const defensePlan = project.populationDefense?.enabled
+    ? buildInitialDefensePlan(project, catalog, project.populationDefense, populationProfiles) : undefined;
   const mapBytes = project.planes.reduce(
-    (sum, plane, planeIndex) => sum + estimatedCompiledMapBytes(project, plane, planeIndex),
+    (sum, plane, planeIndex) => sum + estimatedCompiledMapBytes(project, plane, planeIndex, defensePlan),
     0,
   );
   const projectJsonBytes = estimatedPrettyJsonBytes(project);
@@ -788,8 +810,8 @@ export function estimatedTextPackageBytes(project: MapProject): number {
   return mapBytes + projectJsonBytes + supportTextBytes + zipDirectoryOverhead;
 }
 
-export function zipPackageSafety(project: MapProject): ZipPackageSafety {
-  const estimatedBytes = estimatedPackageBytes(project);
+export function zipPackageSafety(project: MapProject, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG): ZipPackageSafety {
+  const estimatedBytes = estimatedPackageBytes(project, catalog);
   const estimatedPeakBytes = estimatedBytes * 3 + 16 * 1024 * 1024;
   if (estimatedPeakBytes >= ZIP_MEMORY_LIMIT_PEAK_BYTES) {
     return {
@@ -814,6 +836,7 @@ function estimatedCompiledMapBytes(
   project: MapProject,
   plane: MapProject["planes"][number],
   planeIndex: number,
+  defensePlan?: InitialDefensePlan,
 ): number {
   let bytes = 8 * 1024
     + jsonStringBytes(project.name)
@@ -830,7 +853,10 @@ function estimatedCompiledMapBytes(
     for (const value of Object.values(province.battle)) {
       if (value) bytes += 64 + jsonStringBytes(value);
     }
-    for (const defense of province.defenders) {
+    const row = defensePlan?.entries.get(`${plane.id}:${province.id}`);
+    const defenders = row?.status === "derived" ? row.groups : province.defenders;
+    if (row?.status === "derived") bytes += 512;
+    for (const defense of defenders) {
       bytes += 256 + jsonStringBytes(defense.commander) + jsonStringBytes(defense.commanderName ?? "")
         + jsonStringBytes(defense.bodyguard ?? "");
       for (const squad of defense.squads) bytes += 96 + jsonStringBytes(squad.unit);
@@ -952,10 +978,16 @@ function utf8StringBytes(value: string): number {
   return bytes;
 }
 
-function supportFiles(project: MapProject, catalog: Dom6CatalogBundle): PackageFile[] {
+function supportFiles(project: MapProject, catalog: Dom6CatalogBundle,
+  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES): PackageFile[] {
   const encoder = new TextEncoder();
   const fairness = calculateFairness(project);
-  const issues = validateProject(project, catalog);
+  const issues = validateProject(project, catalog, populationProfiles);
+  const populationDefenseNotes = project.populationDefense?.enabled ? [
+    `Population-matched initial defenders: enabled, pinned profile revision ${JSON.stringify(project.populationDefense.profileRevision)}.`,
+    "Only supported verified recruitment profiles add fixed-count initial armies. Custom guardians and protected/authored scenarios are preserved; unsupported populations retain native engine armies.",
+    "The profile snapshot must match the declared host patch, mods, active catalog identities and effective terrain. It does not replace post-capture PD or certify battle difficulty.",
+  ] : [];
   const report = [
     "PANTOKRATOR ATLAS — DOMINIONS 6 MAP REPORT",
     "",
@@ -995,6 +1027,7 @@ function supportFiles(project: MapProject, catalog: Dom6CatalogBundle): PackageF
     "NOTE ABOUT PROVINCE DEFENSE",
     "Authored commander/unit groups are unique initial independent guardians.",
     "Post-conquest recruitable province-defense composition comes from the selected poptype or nation.",
+    ...populationDefenseNotes,
   ].join("\r\n");
   const host = [
     "PANTOKRATOR ATLAS — HOST SETTINGS",
@@ -1009,6 +1042,7 @@ function supportFiles(project: MapProject, catalog: Dom6CatalogBundle): PackageF
     `Wrap: ${formatWrap(project.planes[0])}`,
     "",
     ...analysisContextLines(project, catalog.gameVersion.slice(0,256)),
+    ...populationDefenseNotes,
   ].join("\r\n");
   const install = [
     "PANTOKRATOR ATLAS - INSTALLATION",
@@ -1028,7 +1062,7 @@ function supportFiles(project: MapProject, catalog: Dom6CatalogBundle): PackageF
     { name: "atlas_project.json", data: encoder.encode(serializeProject(project, true)) },
     { name: "balance_report.txt", data: encoder.encode(report) },
     { name: "host_settings.txt", data: encoder.encode(host) },
-    { name: "host_topology.txt", data: encoder.encode(buildHostTopologyReport(project)) },
+    { name: "host_topology.txt", data: encoder.encode(buildHostTopologyReport(project, catalog, populationProfiles)) },
   ];
 }
 

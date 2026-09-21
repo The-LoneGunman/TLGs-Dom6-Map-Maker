@@ -280,6 +280,7 @@ test("province search uses all planes, exact global/local numbering and bounded 
 
 test("patch notes never certify nation strength or silently enable accommodations", () => {
   const p = fixture();
+  assert.ok(analysisContextLines(p, "6.35").includes('Declared host era: "unknown"'));
   assert.match(rulesetNotice(p, "6.35"), /not declared/);
   p.analysisContext = { gameVersion: "6.99" };
   assert.match(rulesetNotice(p, "6.35"), /differs/);
@@ -293,6 +294,24 @@ test("patch notes never certify nation strength or silently enable accommodation
   assert.match(text, /not turns/);
   assert.match(text, /random independent strength remain unknown/);
   assert.doesNotMatch(text, /\r\nFAKE REPORT HEADER/);
+});
+
+test("shared assumptions expose explicit host era and safely report only known enum values", () => {
+  const p = fixture();
+  const props = { project: p, fairness: calculateFairness(p), errors: 0, catalogVersion: "6.35", onContextChange: noop, onInspect: noop };
+  const before = JSON.stringify(p);
+  const unknown = renderToStaticMarkup(createElement(StartBalancePanel, props));
+  assert.match(unknown, /Game patch, era and mod assumptions/);
+  assert.match(unknown, /Declared host game era/);
+  assert.match(unknown, /aria-describedby="analysis-era-help"/);
+  assert.match(unknown, /<option value="" selected="">Unknown \/ not declared/);
+  assert.equal(JSON.stringify(p), before);
+  p.analysisContext = { era: 2 };
+  assert.match(renderToStaticMarkup(createElement(StartBalancePanel, props)), /<option value="2" selected="">Middle Age/);
+  assert.ok(analysisContextLines(p, "6.35").includes('Declared host era: "Middle Age (2)"'));
+  Object.assign(p.analysisContext, { era: "2\nFAKE REPORT HEADER" });
+  assert.ok(analysisContextLines(p, "6.35").includes('Declared host era: "unknown"'));
+  assert.ok(analysisContextLines(p, "6.35").every(line => !/[\r\n]/.test(line)));
 });
 
 test("exported host reports carry declared assumptions and both models without changing playable directives", async () => {

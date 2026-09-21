@@ -15,6 +15,7 @@ export interface SettingsRecipe {
   settings: GenerationSettings;
   planes: RecipePlane[];
   assumptions?: MapProject["analysisContext"];
+  populationDefense?: MapProject["populationDefense"];
 }
 
 export function createSettingsRecipe(project: MapProject, name = project.name, includeSeed = false): SettingsRecipe {
@@ -24,6 +25,7 @@ export function createSettingsRecipe(project: MapProject, name = project.name, i
     settings: structuredClone(project.settings),
     planes: project.planes.map(p => Object.fromEntries(PLANE_KEYS.filter(k => p[k] !== undefined).map(k => [k, structuredClone(p[k])]))) as unknown as RecipePlane[],
     ...(project.analysisContext ? { assumptions: structuredClone(project.analysisContext) } : {}),
+    ...(project.populationDefense ? { populationDefense: structuredClone(project.populationDefense) } : {}),
   };
 }
 
@@ -35,13 +37,14 @@ export function parseSettingsRecipe(text: string): SettingsRecipe {
   if (new TextEncoder().encode(text).byteLength > MAX_RECIPE_BYTES) throw new Error("Settings recipes are limited to 256 KiB.");
   const value = JSON.parse(text) as SettingsRecipe;
   if (!value || value.kind !== "pantokrator-settings" || value.version !== 1 || value.generator !== "atlas-generation-2026-09-20") throw new Error("This is not a supported Atlas settings recipe.");
-  if (Object.keys(value).some(k => !["kind", "version", "name", "generator", "seed", "settings", "planes", "assumptions"].includes(k))) throw new Error("The settings recipe contains unknown fields.");
+  if (Object.keys(value).some(k => !["kind", "version", "name", "generator", "seed", "settings", "planes", "assumptions", "populationDefense"].includes(k))) throw new Error("The settings recipe contains unknown fields.");
   if (typeof value.name !== "string" || !value.name.trim() || value.name.length > 120) throw new Error("Recipe names require 1–120 characters.");
   if (value.seed !== undefined && (typeof value.seed !== "string" || value.seed.length > 4096)) throw new Error("Invalid recipe seed.");
   if (!Array.isArray(value.planes) || value.planes.length < 1 || value.planes.length > 8) throw new Error("Recipes require 1–8 plane configurations.");
   const base = createDefaultProject("settings-recipe-validation", {generate:false});
   base.settings = value.settings;
   base.analysisContext = value.assumptions;
+  base.populationDefense = value.populationDefense;
   base.planes = value.planes.map(p => {
     if (!p || typeof p !== "object" || Object.keys(p).some(k => !(PLANE_KEYS as readonly string[]).includes(k))) throw new Error("A recipe plane contains map content or unknown configuration fields.");
     if (["id","name","kind","provinceTarget","width","height","wrapX","wrapY"].some(key => !(key in p))) throw new Error("A recipe plane is missing required configuration fields.");
@@ -89,7 +92,12 @@ export function applySettingsRecipe(project: MapProject, recipe: SettingsRecipe)
   const idMap = new Map(verified.planes.map((p,i) => [p.id, next.planes[i]!.id]));
   next.settings = structuredClone(verified.settings);
   if (next.settings.planeConnections) next.settings.planeConnections = next.settings.planeConnections.map(c => ({ ...c, a:idMap.get(c.a)!, b:idMap.get(c.b)! }));
-  next.analysisContext = structuredClone(verified.assumptions);
+  // Older recipes omit host assumptions. Omission is not an instruction to
+  // erase the current patch/mod declaration or silently suspend a pinned policy.
+  if (verified.assumptions !== undefined) next.analysisContext = structuredClone(verified.assumptions);
+  // Old recipes do not express a defense-policy choice; do not silently turn
+  // off an explicitly selected policy when applying one of those recipes.
+  if (verified.populationDefense !== undefined) next.populationDefense = structuredClone(verified.populationDefense);
   if (verified.seed !== undefined) next.seed = verified.seed;
   next.planes.forEach((p,i) => {
     const settings = verified.planes[i]!;

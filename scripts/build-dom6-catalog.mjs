@@ -1,10 +1,31 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import process from "node:process";
 
 const root = process.cwd();
-const sourceRoot = path.resolve(root, process.argv[2] ?? "tmp/catalog-source");
+const sourceRoot = path.resolve(root, process.argv[2] ?? "tmp/catalog-source-6.37");
 const outputRoot = path.resolve(root, "src/catalog/data");
+const SOURCE_GAME_VERSION = "6.37";
+const SOURCE_REVISION = "c30c6c14e18ab284415d599b81579af9b3070112";
+const SOURCE_DATE = "2026-09-18";
+// Pin the actual input bytes, not just their record counts: otherwise an older
+// or locally changed dump could be silently labelled as a verified 6.37 export.
+const SOURCE_SHA256 = {
+  "BaseU.csv": "185675d8906b87dc94070d52776e19cfefec4d2efcee9b6e8084aeba059e4ec5",
+  "MagicSites.csv": "817c61f15c1e371dde006eb47e98022da7c7ac86a821551b3580a481f361711a",
+  "nations.csv": "911f17f8a9384862e619895101d7c2cdfec48cabb7d493a2ecdaf69ac9a4246f",
+  "other_planes.csv": "9edbfe09189bd5abff83a6201dcf0a5fd77d35a1440f408f853065d56cebe8af",
+  "site_terrain_types.csv": "23bfeabe4e1d3dcc5ff81f199238ec4de417bf006680d0b458da87e2b9b9fccb",
+  "attributes_by_nation.csv": "de5a2b25b59be7ae7f639a709e1f5d5fccf22350e6df77fb5613e111c6c3355d",
+  "attribute_keys.csv": "e4bc71e443f4816c35e7e6326cf11324e57196087f85ff3551af76c3ca6a43b9",
+  "fort_leader_types_by_nation.csv": "b57366505ff4e1caabf53a32e628339148c5962910d0ebe434fd4672d7583801",
+  "coast_leader_types_by_nation.csv": "69287caa914a218a2beeaa2e426c42f4f887e01899f6c3f3e3c48ddcc8d65016",
+  "nonfort_leader_types_by_nation.csv": "5e38710af7bf16e7f815810a4da265671170e8470d81ea7057ad21ffc36be6b2",
+  "fort_troop_types_by_nation.csv": "dc7bb4058042476cbc7ab9242205f334a7a6029749fbb0d83bba6527b1a98a7e",
+  "coast_troop_types_by_nation.csv": "8bdbec540d8f18c1368a7dc902fab15f034fa4c9afb0f45e1d9c9d8b8f042180",
+  "nonfort_troop_types_by_nation.csv": "2078522a991b3f83a508e7a74623e9b1ebe2eefc9cfc9604c261ab09570269a6",
+};
 
 function parseTsv(text) {
   const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter(Boolean);
@@ -16,7 +37,11 @@ function parseTsv(text) {
 }
 
 async function table(filename) {
-  return parseTsv(await readFile(path.join(sourceRoot, filename), "utf8"));
+  const bytes = await readFile(path.join(sourceRoot, filename));
+  if (createHash("sha256").update(bytes).digest("hex") !== SOURCE_SHA256[filename]) {
+    throw new Error(`${filename} does not match pinned Inspector ${SOURCE_GAME_VERSION} revision ${SOURCE_REVISION}. Download the exact raw source file before rebuilding.`);
+  }
+  return parseTsv(bytes.toString("utf8"));
 }
 
 function integer(value, context) {
@@ -221,9 +246,10 @@ if (poptypes.length !== 82 || poptypes[0][0] !== 25 || poptypes.at(-1)[0] !== 10
 const output = {
   format: "pantokrator-atlas/compact-catalog",
   formatVersion: 3,
-  gameVersion: "6.35",
-  sourceRevision: "cfac4311bc0b58053b8dead7bffbc036ba9bd5dc",
-  sourceDate: "2026-05-26",
+  gameVersion: SOURCE_GAME_VERSION,
+  sourceRevision: SOURCE_REVISION,
+  sourceDate: SOURCE_DATE,
+  sourceFileSha256: SOURCE_SHA256,
   units,
   sites,
   nations,
@@ -234,7 +260,7 @@ const output = {
 };
 
 await mkdir(outputRoot, { recursive: true });
-await writeFile(path.join(outputRoot, "dom6-6.35.json"), `${JSON.stringify(output)}\n`, "utf8");
+await writeFile(path.join(outputRoot, `dom6-${SOURCE_GAME_VERSION}.json`), `${JSON.stringify(output)}\n`, "utf8");
 console.log(JSON.stringify({
   units: units.length,
   nationRecruitableLeaders: leaderIds.size,

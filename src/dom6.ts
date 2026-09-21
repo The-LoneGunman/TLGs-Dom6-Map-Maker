@@ -31,6 +31,9 @@ import {
 import { auditPlaneTopology, createProvinceOwnerResolver, resolvePlaneOwnershipMode } from "./geometry";
 import { BUILTIN_DOM6_CATALOG, findCatalogEntry, siteCompatibility, type Dom6CatalogBundle } from "./catalog";
 import { previewProvinceTerrain, terrainElevation, terrainVisualKey } from "./terrainVisuals";
+import { buildInitialDefensePlan, type VerifiedPopulationDefenseProfile } from "./populationDefenders";
+import { VERIFIED_POPULATION_DEFENSE_PROFILES } from "./populationDefenseProfiles";
+import { protectedStartProvinceKeys } from "./authoringLocks";
 
 export const D6M_MAGIC = 898933;
 export const D6M_VERSION = 3;
@@ -202,9 +205,17 @@ export interface CompiledTextFile {
   mime: string;
 }
 
-export function compileMapText(project: MapProject, planeIndex: number): string {
+/** The optional registry override is for internal verification fixtures, never imported project data. */
+export function compileMapText(project: MapProject, planeIndex: number, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG,
+  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES): string {
   const plane = project.planes[planeIndex];
   if (!plane) throw new Error(`Plane ${planeIndex + 1} does not exist.`);
+  const defensePlan = project.populationDefense?.enabled
+    ? buildInitialDefensePlan(project, catalog, project.populationDefense, populationProfiles) : undefined;
+  const derivedAt = (province: Province) => {
+    const row = defensePlan?.entries.get(`${plane.id}:${province.id}`);
+    return row?.status === "derived" ? row : undefined;
+  };
   const baseName = sanitizeMapName(project.name);
   const fileStem = `${baseName}${planeFileSuffix(planeIndex)}`;
   const lines: string[] = [
@@ -286,15 +297,18 @@ export function compileMapText(project: MapProject, planeIndex: number): string 
     if (special) lines.push(`#neighbourspec ${a} ${b} ${special}`);
   }
 
-  const configured = plane.provinces.filter(hasProvinceBlock);
+  const configured = plane.provinces.filter(province => hasProvinceBlock(province) || derivedAt(province)?.groups.length);
   if (configured.length) lines.push("", "-- Authored province features and defenders");
   for (const province of configured) {
-    const replacesIndependents = province.defenders.length > 0;
+    const derived = derivedAt(province);
+    const defenders = province.defenders.length ? province.defenders : derived?.groups ?? province.defenders;
+    const replacesIndependents = defenders.length > 0;
     const isProtectedStart = province.start
       || province.teamStart !== undefined
       || project.specificStarts.some((start) => start.planeId === plane.id && start.provinceId === province.id);
     // #land is forbidden on every kind of start: it can erase the starting
     // army and god. #setland keeps the province contents intact.
+    if (derived?.profile) lines.push(`-- Population-matched initial defenders: poptype ${derived.profile.poptypeId}; profile ${safeComment(derived.profile.revision)}; host snapshot ${safeComment(derived.profile.gameVersion)}`);
     lines.push(`${replacesIndependents && !isProtectedStart ? "#land" : "#setland"} ${province.index}`);
     if (province.owner !== undefined) lines.push(`#owner ${province.owner}`);
     if (province.poptype !== undefined) lines.push(`#poptype ${province.poptype}`);
@@ -312,7 +326,7 @@ export function compileMapText(project: MapProject, planeIndex: number): string 
     if (province.battle.groundColor) lines.push(`#groundcol ${rgbArgs(province.battle.groundColor)}`);
     if (province.battle.rockColor) lines.push(`#rockcol ${rgbArgs(province.battle.rockColor)}`);
     if (province.battle.fogColor) lines.push(`#fogcol ${rgbArgs(province.battle.fogColor)}`);
-    for (const defense of province.defenders) {
+    for (const defense of defenders) {
       if (!defense.commander) continue;
       lines.push(`#commander ${unitArg(defense.commander)}`);
       if (defense.commanderName) lines.push(`#comname ${quote(defense.commanderName)}`);
@@ -356,12 +370,13 @@ function hasProvinceBlock(province: Province): boolean {
     || !!province.rawDirectives.trim();
 }
 
-export function compileTextFiles(project: MapProject): CompiledTextFile[] {
+export function compileTextFiles(project: MapProject, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG,
+  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES): CompiledTextFile[] {
   const encoder = new TextEncoder();
   const baseName = sanitizeMapName(project.name);
   return project.planes.map((_, index) => ({
     name: `${baseName}${planeFileSuffix(index)}.map`,
-    data: encoder.encode(compileMapText(project, index)),
+    data: encoder.encode(compileMapText(project, index, catalog, populationProfiles)),
     mime: "text/plain;charset=utf-8",
   }));
 }
@@ -420,6 +435,10 @@ export async function encodeD6m(
   const ownerResolver = createProvinceOwnerResolver(plane);
   const seedHash = hash32(seed);
   const baseHeights = plane.provinces.map((province) => terrainElevation(province));
+  const undergroundRelief = resolvePlaneOwnershipMode(plane) === "sparse"
+    && ["cave", "cavern", "underworld", "hell", "abyss"].includes(plane.kind)
+    ? createUndergroundReliefSampler(plane, width, height, seedHash, baseHeights)
+    : undefined;
   const yieldEvery = Math.max(8, Math.floor(height / 40));
 
   for (let y = 0; y < height; y += 1) {
@@ -433,8 +452,13 @@ export async function encodeD6m(
         owners[pixel] = 0;
         continue;
       }
-      const noise = pixelNoise(x >> 2, y >> 2, seedHash) * 0.32 + pixelNoise(x >> 5, y >> 5, seedHash ^ 0x9e3779b9) * 0.68;
-      heights[pixel] = clamp(Math.round(baseHeights[bestIndex]! + noise * 180), -2000, 2000);
+      // Retain the original raster byte-for-byte outside sparse underground
+      // planes. Their narrow tunnels need low, continuous relief, not the old
+      // 4/32-pixel sample-and-hold steps which read as square terraces in-game.
+      const relief = undergroundRelief
+        ? undergroundRelief(x, y, bestIndex)
+        : (pixelNoise(x >> 2, y >> 2, seedHash) * 0.32 + pixelNoise(x >> 5, y >> 5, seedHash ^ 0x9e3779b9) * 0.68) * 180;
+      heights[pixel] = clamp(Math.round(baseHeights[bestIndex]! + relief), -2000, 2000);
       owners[pixel] = bestIndex + 1;
     }
     if (onProgress && (y % yieldEvery === 0 || y === height - 1)) {
@@ -527,7 +551,8 @@ export function inspectD6m(data: Uint8Array) {
   };
 }
 
-export function validateProject(project: MapProject, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG): ValidationIssue[] {
+export function validateProject(project: MapProject, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG,
+  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const add = (severity: ValidationIssue["severity"], message: string, planeId?: string, provinceId?: string) => {
     issues.push({ id: `issue-${issues.length + 1}`, severity, message, planeId, provinceId });
@@ -635,6 +660,25 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
     }
   }
 
+  const startLocations = new Map<string, { plane: Plane; province: Province }>();
+  for (const plane of project.planes) for (const province of plane.provinces) {
+    if (province.start || province.teamStart !== undefined) startLocations.set(`${plane.id}:${province.id}`, { plane, province });
+  }
+  for (const start of project.specificStarts) {
+    const plane = project.planes.find(item => item.id === start.planeId);
+    const province = plane?.provinces.find(item => item.id === start.provinceId);
+    if (plane && province) startLocations.set(`${plane.id}:${province.id}`, { plane, province });
+  }
+  const protectedStartRingKeys = protectedStartProvinceKeys(project, 1);
+  const gatewayStartNames = new Map<string, string>();
+  for (const gate of project.gates) {
+    const start = gate.endpoints.map(endpoint => startLocations.get(`${endpoint.planeId}:${endpoint.provinceId}`)).find(Boolean);
+    if (!start) continue;
+    for (const endpoint of gate.endpoints) {
+      const key = `${endpoint.planeId}:${endpoint.provinceId}`;
+      if (!gatewayStartNames.has(key)) gatewayStartNames.set(key, `${start.province.name} through gateway ${gate.gateNumber}`);
+    }
+  }
   const planeIds = new Set<string>();
   for (const plane of project.planes) {
     if (!plane.id.trim()) add("error", `${plane.name} needs a stable internal plane ID.`);
@@ -741,9 +785,10 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
       const adjacentStartId = isStartProvince
         ? undefined
         : adjacency.get(province.id)?.find((provinceId) => protectedStartIds.has(provinceId));
+      const isStartNeighbor = !isStartProvince && protectedStartRingKeys.has(`${plane.id}:${province.id}`);
       const startRingName = isStartProvince
         ? province.name
-        : plane.provinces.find((item) => item.id === adjacentStartId)?.name;
+        : plane.provinces.find((item) => item.id === adjacentStartId)?.name ?? gatewayStartNames.get(`${plane.id}:${province.id}`);
       if (protectedStartIds.has(province.id)) {
         if (province.noStart) add("error", `${province.name} is marked both Start and No start.`, plane.id, province.id);
         if (isBlockedProvince(province)) add("error", `${province.name} is a start on blocked terrain.`, plane.id, province.id);
@@ -811,7 +856,7 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
         if (!knownSite) add("warning", `${province.name}: magic site ${site.value} is not in the active catalog.`, plane.id, province.id);
         else {
           if (!siteCompatibility(knownSite, province, plane).compatible) add("warning", `${province.name}: ${knownSite.name} is not normally compatible with this province terrain.`, plane.id, province.id);
-          if (knownSite.tags?.includes("throne") && (isStartProvince || adjacentStartId)) {
+          if (knownSite.tags?.includes("throne") && (isStartProvince || isStartNeighbor)) {
             add(
               "error",
               isStartProvince
@@ -826,11 +871,11 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
       if (province.throne === "preferred" || province.throne === "fixed") {
         if (isStartProvince) {
           add("error", `${province.name} is both a throne location and a player start; capitals must remain free of thrones.`, plane.id, province.id);
-        } else if (adjacentStartId) {
+        } else if (isStartNeighbor) {
           add("error", `${province.name} is a throne location adjacent to start province ${startRingName ?? "a start"}; the entire start one-ring must remain free of thrones.`, plane.id, province.id);
         }
       }
-      if ((isStartProvince || adjacentStartId) && hasRawIndependentDefenderDirectives(province.rawDirectives)) {
+      if ((isStartProvince || isStartNeighbor) && hasRawIndependentDefenderDirectives(province.rawDirectives)) {
         add(
           "error",
           isStartProvince
@@ -868,7 +913,7 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
         }
       }
       if (!isStartProvince && province.defenders.length) {
-        if (adjacentStartId) {
+        if (isStartNeighbor) {
           const description = powerfulGuardianForce(province)
             ? "a powerful independent guardian force"
             : "independent guardian groups";
@@ -896,17 +941,6 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
   }
 
   const genericStarts = project.planes.flatMap((plane) => plane.provinces.filter((province) => province.start).map((province) => ({ plane, province })));
-  const startLocations = new Map<string, { plane: Plane; province: Province }>();
-  for (const plane of project.planes) {
-    for (const province of plane.provinces) {
-      if (province.start || province.teamStart !== undefined) startLocations.set(`${plane.id}:${province.id}`, { plane, province });
-    }
-  }
-  for (const start of project.specificStarts) {
-    const plane = project.planes.find((item) => item.id === start.planeId);
-    const province = plane?.provinces.find((item) => item.id === start.provinceId);
-    if (plane && province) startLocations.set(`${plane.id}:${province.id}`, { plane, province });
-  }
   const starts = [...startLocations.values()];
   if (starts.length < project.settings.players) add("error", `Only ${starts.length} distinct start locations exist across all planes for ${project.settings.players} players.`);
   if (starts.length > project.settings.players) add("info", `The atlas has ${starts.length} distinct start locations for ${project.settings.players} players.`);
@@ -1121,6 +1155,22 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
       if (!connectedPlanes.has(plane.id)) add("error", `${plane.name} is not linked to the main plane.`, plane.id);
     }
   }
+  if (project.populationDefense?.enabled) {
+    const plan = buildInitialDefensePlan(project, catalog, project.populationDefense, populationProfiles);
+    if (project.rawDirectives.trim() || project.planes.some(plane => plane.rawDirectives.trim()
+      || plane.provinces.some(province => province.rawDirectives.trim()))) {
+      add("warning", "Population-matched initial defenders are suspended across this atlas because raw directives can change province selection or contents. Authored commands and custom guardian groups are preserved; Atlas adds no derived replacement armies while any raw directives remain.");
+    }
+    if (plan.counts.unsupported) {
+      const reasons = new Map<string, { count: number; message: string }>();
+      for (const row of plan.entries.values()) if (row.status === "unsupported") {
+        const previous = reasons.get(row.reason);
+        reasons.set(row.reason, { count: (previous?.count ?? 0) + 1, message: row.message });
+      }
+      add("warning", `Population-matched initial defenders: ${plan.counts.unsupported} eligible province${plan.counts.unsupported === 1 ? " has" : "s have"} no usable verified template and retain normal engine-generated armies. No empty replacement army is exported. ${[...reasons.values()].map(reason => `${reason.count}: ${reason.message}`).join(" ")}`);
+    }
+    if (plan.counts.derived) add("info", `Population-matched initial defenders: ${plan.counts.derived} province${plan.counts.derived === 1 ? " uses" : "s use"} verified, revision-pinned recruitment identities with fixed authored counts. These are initial armies, not calibrated combat difficulty or post-capture province defense.`);
+  }
   if (!issues.some((issue) => issue.severity === "error")) add("info", "Compatibility checks passed; the package is ready for Dominions 6.");
   return issues;
 }
@@ -1160,6 +1210,80 @@ function pixelNoise(x: number, y: number, seed: number): number {
   value = Math.imul(value, 0x45d9f3b);
   value ^= value >>> 15;
   return ((value >>> 0) / 4294967295) * 2 - 1;
+}
+
+/**
+ * Square-pixel, map-relative value noise. The lattice and per-axis smoothstep
+ * weights are prepared once, so an owned pixel uses only two bilinear samples
+ * (eight bounded lattice lookups), with no per-pixel hashes or trigonometry.
+ * Whole lattice periods meet smoothly at enabled wrap seams. Using the shorter
+ * map axis as the scale keeps portrait and ultrawide maps from stretching the
+ * relief into stripes, and keeps its visual scale stable between 256px and 4K.
+ */
+function createUndergroundReliefSampler(
+  plane: Plane, width: number, height: number, seed: number, baseHeights: readonly number[],
+): (x: number, y: number, owner: number) => number {
+  const shortSide = Math.min(width, height);
+  const broad = smoothReliefOctave(width, height, shortSide, 6, plane.wrapX, plane.wrapY, seed);
+  const detail = smoothReliefOctave(width, height, shortSide, 18, plane.wrapX, plane.wrapY, seed ^ 0x9e3779b9);
+  // Even very low dry terrain must remain above zero; aquatic terrain must
+  // remain below it. Terrain/spec semantics are never inferred from this art.
+  const amplitudes = baseHeights.map((base) => Math.min(24, Math.abs(base) * 0.45));
+  const centerX = plane.provinces.map((province) => clamp(Math.round(province.x * (width - 1)), 0, width - 1));
+  const centerY = plane.provinces.map((province) => clamp(Math.round(province.y * (height - 1)), 0, height - 1));
+  const anchorRadius = shortSide / 32;
+  const inverseAnchorRadiusSquared = 1 / (anchorRadius * anchorRadius);
+  return (x, y, owner) => {
+    let relief = (broad(x, y) * 0.75 + detail(x, y) * 0.25) * amplitudes[owner]!;
+    let dx = Math.abs(x - centerX[owner]!);
+    let dy = Math.abs(y - centerY[owner]!);
+    if (plane.wrapX) dx = Math.min(dx, width - dx);
+    if (plane.wrapY) dy = Math.min(dy, height - dy);
+    if (dx < anchorRadius && dy < anchorRadius) {
+      // Exact native capital heights are an existing contract. Fade nearby
+      // relief toward them instead of leaving an isolated one-pixel spike.
+      const t = Math.min(1, (dx * dx + dy * dy) * inverseAnchorRadiusSquared);
+      relief *= t * t * (3 - 2 * t);
+    }
+    return relief;
+  };
+}
+
+function smoothReliefOctave(
+  width: number, height: number, shortSide: number, frequency: number,
+  wrapX: boolean, wrapY: boolean, seed: number,
+): (x: number, y: number) => number {
+  const columns = Math.max(1, Math.round(width / shortSide * frequency));
+  const rows = Math.max(1, Math.round(height / shortSide * frequency));
+  const stride = columns + 1;
+  const values = new Float32Array(stride * (rows + 1));
+  for (let y = 0; y <= rows; y += 1) {
+    for (let x = 0; x <= columns; x += 1) {
+      values[y * stride + x] = pixelNoise(wrapX && x === columns ? 0 : x, wrapY && y === rows ? 0 : y, seed);
+    }
+  }
+  const axis = (length: number, cells: number, offsetStride: number) => {
+    const offsets = new Uint32Array(length);
+    const weights = new Float32Array(length);
+    for (let pixel = 0; pixel < length; pixel += 1) {
+      const position = (pixel + 0.5) / length * cells;
+      const cell = Math.floor(position);
+      const t = position - cell;
+      offsets[pixel] = cell * offsetStride;
+      weights[pixel] = t * t * (3 - 2 * t);
+    }
+    return { offsets, weights };
+  };
+  const horizontal = axis(width, columns, 1);
+  const vertical = axis(height, rows, stride);
+  return (x, y) => {
+    const offset = horizontal.offsets[x]! + vertical.offsets[y]!;
+    const a = values[offset]!;
+    const b = values[offset + stride]!;
+    const top = a + (values[offset + 1]! - a) * horizontal.weights[x]!;
+    const bottom = b + (values[offset + stride + 1]! - b) * horizontal.weights[x]!;
+    return top + (bottom - top) * vertical.weights[y]!;
+  };
 }
 
 function hash32(value: string): number {

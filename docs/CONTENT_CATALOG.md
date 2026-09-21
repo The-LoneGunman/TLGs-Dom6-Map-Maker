@@ -1,25 +1,32 @@
 # Dominions 6 content catalog
 
-Pantokrator Atlas ships a searchable Dominions **6.35** selector catalog. The
+Current source ships a searchable Dominions **6.37** selector catalog. The
 map-making manual remains the authority for map commands, population types,
 and fortification IDs, but it predates later nations, units, and thrones.
 
 The current selector data is generated from Dom6 Inspector revision
-`cfac4311bc0b58053b8dead7bffbc036ba9bd5dc` (2026-05-26), whose upstream commit
-is described as “Update to 6.35.” The then-current upstream `main` revision was
-checked against that pin on 2026-08-11 and was identical.
+`c30c6c14e18ab284415d599b81579af9b3070112` (2026-09-18), whose upstream commit
+is described as “Update to 6.37.” The source refresh was verified on September
+21, 2026. Hosted and installer releases can lag current source; consult the
+README's version table for their status.
 
-The bundled catalog is pinned to 6.35; it does not automatically track later
+The bundled catalog is pinned to 6.37; it does not automatically track later
 game or Inspector updates. Custom catalog imports add editor metadata only,
 not game content.
 
-Coverage status reviewed September 20, 2026: the bundled data is still **6.35**,
-not a complete 6.37 catalog. The intended patch/mod notes in the workbench do
-not change this data or certify nation balance. Current source imports merge
+This is a selector index, not a complete game-rules or combat-stat database.
+The intended patch/mod declarations in the workbench do not replace this
+data or certify nation balance. Current source imports merge
 in selection order; reset invalidates pending imports, and a failed save leaves
 the prior catalog active. Both ZIP and direct-install validation reports use
 the active merged catalog and state its assumptions. Custom catalog JSON and
 any required game mods must be backed up and distributed separately.
+
+Saved 6.35 custom catalogs remain importable. Their verified custom names and
+metadata are preserved rather than silently relabelled as 6.37 observations.
+Built-in home-site and throne classifications remain protected when an import
+overrides an ID. Ordinary-site browsing must keep non-random Inspector sites
+separate, including records carrying the historical 6.35 provenance.
 
 ## Post-publication content and map-manual table gaps
 
@@ -118,6 +125,28 @@ and **Draugherse #2193**.
 | #4134 | Gnu Clan Commander |
 | #1405 (site) | The Throne of Violence |
 
+### Dominions 6.36–6.37 source refresh
+
+Comparing the previous 6.35 pin with the 6.37 export found **no new, removed,
+renamed, or renumbered selector entries**. All compact unit IDs/names/roles,
+site metadata, nation labels, and other lookup tables are unchanged. Coverage
+remains 4,091 unit records, 1,253 sites, 106 selectable nations including the
+three independent-owner IDs, 82 population labels, and 28 fortifications.
+
+Twelve of the thirteen source tables are byte-identical. `BaseU.csv` changes
+statistics on 22 existing units; the compact selector does not store those
+statistics. None of those changed rows belongs to the existing generated
+guardian pools or the verified water-capable guardian list. This refresh does
+not change guardian IDs, army compositions, or province-name reservations, and
+does not itself require raising existing maps' minimum `#domversion`.
+
+Pale One Commander **#1463** and Pale One **#1465** retain their exact names and
+IDs. The commander still has normal leadership 75, and both retain Amphibian
+and Darkvision 100 in the source. These unit facts alone do not prove their
+membership in population type #81. The Inspector tables do not provide a
+population-to-recruitment roster; that relationship requires separate native
+verification. Matching unit names is not a substitute.
+
 ## Other post-6.26 thrones
 
 The throne-only selector also contains:
@@ -156,3 +185,9 @@ each game update. They do not publish every numeric internal ID. Numeric IDs,
 duplicate-form distinctions, recruitment-role tags, and complete selector
 coverage come from the pinned GPL-3.0 Dom6 Inspector data export documented in
 [`src/catalog/data/NOTICE.md`](../src/catalog/data/NOTICE.md).
+
+The [catalog builder](../scripts/build-dom6-catalog.mjs) verifies SHA-256 hashes
+for all thirteen input files before writing `dom6-6.37.json`; the same hashes
+are recorded in that bundle. Rebuilding from older or modified source bytes is
+rejected rather than producing a misleading 6.37 provenance label. Game
+updates can still change balance while keeping every selector ID unchanged.

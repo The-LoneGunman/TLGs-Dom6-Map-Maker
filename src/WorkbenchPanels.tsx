@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { NationRequirementsPanel } from "./NationRequirementsPanel";
-import { type FairnessMetrics, type MapProject } from "./domain";
+import { GAME_ERA_LABELS, type FairnessMetrics, type GameEra, type MapProject } from "./domain";
 import { previewProvinceBudget } from "./generator";
 import { analyzeStarts, GENERATION_INPUT_LABELS, pendingGenerationGroups, rulesetNotice, searchProvinces,
   type AnalysisMode, type ProvinceReference } from "./workbench";
@@ -63,12 +63,20 @@ export function StartBalancePanel({ project, fairness, errors, catalogVersion, o
       <div><span>Analysis confidence</span><strong>Limited / assumptions shown</strong><small>Not a nation, economy, or combat balance certificate</small></div>
     </div>
     <p>The legacy score uses population/farmland and graph-distance heuristics. A high average cannot override an export error or an individual weak region.</p>
-    <details className="ruleset-context"><summary>Game patch and mod assumptions</summary>
-      <p>Notes travel with project JSON and the host report. Nothing is auto-detected, and changing these notes never changes a map or applies nation bonuses.</p>
-      <label className="field"><span>Declared game patch <span className="scope-badge">Saved note only</span></span>
+    <details className="ruleset-context"><summary>Game patch, era and mod assumptions</summary>
+      <p>These declarations travel with project JSON and the host report; nothing is auto-detected. They never apply nation bonuses. When population-matched defenders are enabled, changing the patch, era or mods rechecks which verified army templates can be exported.</p>
+      <label className="field"><span>Declared game patch <span className="scope-badge">Current Map</span></span>
         <input maxLength={64} value={project.analysisContext?.gameVersion ?? ""} placeholder="Unknown / not declared" onChange={event => onContextChange({ ...project.analysisContext, gameVersion: event.target.value })} />
       </label>
-      <label className="field"><span>Mod names and versions <span className="scope-badge">Saved note only</span></span>
+      <label className="field"><span>Declared host game era <span className="scope-badge">Current Map</span></span>
+        <select value={project.analysisContext?.era ?? ""} aria-describedby="analysis-era-help"
+          onChange={event => onContextChange({ ...project.analysisContext, era: event.target.value ? Number(event.target.value) as GameEra : undefined })}>
+          <option value="">Unknown / not declared</option>
+          {([1, 2, 3] as const).map(era => <option key={era} value={era}>{GAME_ERA_LABELS[era]}</option>)}
+        </select>
+      </label>
+      <p id="analysis-era-help">This does not configure the game host. Choose the same era in Dominions; restricted defender templates require a known, matching era.</p>
+      <label className="field"><span>Mod names and versions <span className="scope-badge">Current Map</span></span>
         <textarea maxLength={4096} rows={2} value={project.analysisContext?.mods ?? ""} placeholder="None declared (not verified)" onChange={event => onContextChange({ ...project.analysisContext, mods: event.target.value })} />
       </label>
     </details>

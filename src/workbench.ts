@@ -1,4 +1,4 @@
-import { isBlockedProvince, isWaterProvince, type GenerationInputSnapshot, type MapProject, type Province } from "./domain";
+import { GAME_ERA_LABELS, isBlockedProvince, isWaterProvince, type GenerationInputSnapshot, type MapProject, type Province } from "./domain";
 import { globalMovementAdjacency, isImpassableEdge, shortestDistances } from "./generator";
 import { requirementReportLines } from "./nationRequirements";
 
@@ -239,10 +239,12 @@ export function rulesetNotice(project: MapProject, catalogVersion: string): stri
 
 /** Encode user notes as single-line quoted values so a newline cannot impersonate a report section. */
 export function analysisContextLines(project: MapProject, catalogVersion: string): string[] {
+  const era = project.analysisContext?.era;
   return [
     `Analysis model: ${ANALYSIS_MODEL_VERSION} (neutral structural diagnostics)`,
     `Selector catalog snapshot: ${catalogVersion} (not a balance ruleset)`,
     `Declared game patch: ${JSON.stringify(project.analysisContext?.gameVersion?.trim() || "unknown")}`,
+    `Declared host era: ${JSON.stringify(era === 1 || era === 2 || era === 3 ? `${GAME_ERA_LABELS[era]} (${era})` : "unknown")}`,
     `Declared mods: ${JSON.stringify(project.analysisContext?.mods?.trim() || "none declared; not verified")}`,
     rulesetNotice(project, catalogVersion).replace(/[\r\n]/g, " "),
     "Patches and mods can change nation strength. No nation compensation is applied; no patch is certified balanced.",
