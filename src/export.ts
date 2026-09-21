@@ -3,6 +3,7 @@ import { calculateFairness } from "./generator";
 import { buildHostTopologyReport } from "./hostReport";
 import { analysisContextLines, analyzeStarts, buildStartAnalysisText } from "./workbench";
 import { BUILTIN_DOM6_CATALOG, type Dom6CatalogBundle } from "./catalog";
+import { assertPlaneGenerationOverrides } from "./generationControls";
 import {
   compileMapText,
   encodeD6m,
@@ -39,7 +40,9 @@ export const ZIP_MEMORY_LIMIT_PEAK_BYTES = 768 * 1024 * 1024;
 
 type ProgressCallback = (progress: ExportProgress) => void;
 
-export async function buildPackageFiles(project: MapProject, onProgress?: ProgressCallback, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG): Promise<PackageFile[]> {
+export type PackageAudience = "host" | "player";
+
+export async function buildPackageFiles(project: MapProject, onProgress?: ProgressCallback, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG, audience: PackageAudience = "host"): Promise<PackageFile[]> {
   const base = sanitizeMapName(project.name);
   const encoder = new TextEncoder();
   const files: PackageFile[] = [];
@@ -48,7 +51,17 @@ export async function buildPackageFiles(project: MapProject, onProgress?: Progre
     const suffix = index === 0 ? "" : `_plane${index + 1}`;
     files.push({ name: `${base}${suffix}.map`, data: encoder.encode(compileMapText(project, index)) });
   }
-  files.push(...supportFiles(project, catalog));
+  if (audience === "host") files.push(...supportFiles(project, catalog));
+  else files.push({ name: "PLAYER_README.txt", data: encoder.encode([
+    "PANTOKRATOR ATLAS — PLAYER MAP PACKAGE", "",
+    "Extract this entire folder into your Dominions 6 user-data maps directory.",
+    "Find it using Tools & Manuals > Open User Data Directory in Dominions 6.",
+    "For an update, replace the old map folder instead of merging; stale plane files can change the map.",
+    "Use the game version, mods and settings specified by your host.", "",
+    "This handoff omits the editable project, seed dossier, balance report and host topology/settings reports.",
+    "Native .map/.d6m files are identical to the host package. They still contain map content, including starts and guardians.",
+    "This is a reduced-spoiler handoff, NOT encryption or protection against inspecting map files.",
+  ].join("\r\n")) });
 
   for (let index = 0; index < project.planes.length; index += 1) {
     const plane = project.planes[index]!;
@@ -70,14 +83,14 @@ export async function buildPackageFiles(project: MapProject, onProgress?: Progre
   return files;
 }
 
-export async function downloadPackage(project: MapProject, onProgress?: ProgressCallback, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG) {
+export async function downloadPackage(project: MapProject, onProgress?: ProgressCallback, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG, audience: PackageAudience = "host") {
   const safety = zipPackageSafety(project);
   if (safety.level === "blocked") throw new Error(safety.message);
-  const files = await buildPackageFiles(project, onProgress, catalog);
+  const files = await buildPackageFiles(project, onProgress, catalog, audience);
   const root = sanitizeMapName(project.name);
   onProgress?.({ stage: "packaging", plane: project.planes.length, planeCount: project.planes.length, percent: 96, message: "Packing the ready-to-install map folder…" });
   const zip = createStoredZip(files.map((file) => ({ ...file, name: `${root}/${file.name}` })));
-  downloadBlob(new Blob([ownedBuffer(zip)], { type: "application/zip" }), `${root}.zip`);
+  downloadBlob(new Blob([ownedBuffer(zip)], { type: "application/zip" }), `${root}${audience === "player" ? "_players" : ""}.zip`);
   onProgress?.({ stage: "done", plane: project.planes.length, planeCount: project.planes.length, percent: 100, message: "Package downloaded." });
 }
 
@@ -330,7 +343,7 @@ const PROJECT_FIELDS = new Set([
   "schemaVersion", "name", "description", "seed", "targetVersion", "settings", "generationWarnings", "mapNoHide",
   "noDeepCaves", "noDeepChoice", "noHomelandNames", "noNameFilter", "sailDistance", "victoryPoints", "allowedPlayers",
   "computerPlayers", "cannotWin", "specificStarts", "planes", "gates", "rawDirectives", "createdAt", "updatedAt",
-  "analysisContext", "generationInputs",
+  "analysisContext", "generationInputs", "authoring",
 ]);
 const GENERATION_SETTING_FIELDS = new Set([
   "players", "provincesPerPlayer", "waterPercent", "oceanLayout", "continentCount", "specialPlaneSizePercent",
@@ -345,11 +358,11 @@ const PLANE_CONNECTION_FIELDS = new Set(["a", "b", "pairs", "enabled"]);
 const PLANE_FIELDS = new Set([
   "id", "name", "kind", "variant", "autoSize", "noGeneratedStarts", "provinceTarget", "width", "height", "wrapX",
   "wrapY", "ownershipMode", "mapNoHide", "noDeepCaves", "mapTextColor", "mapDominionColor", "provinces", "edges",
-  "rawDirectives",
+  "rawDirectives", "generationOverrides",
 ]);
 const EDGE_FIELDS = new Set(["id", "a", "b", "kind", "special"]);
 const PROVINCE_FIELDS = new Set([
-  "id", "index", "x", "y", "gridX", "gridY", "name", "nameSource", "biome", "terrain", "terrainFlags",
+  "id", "index", "x", "y", "gridX", "gridY", "name", "nameSource", "editorLocks", "biome", "terrain", "terrainFlags",
   "freshwater", "small", "large", "noStart", "manySites", "warmer", "colder", "siteBias", "start", "startType",
   "teamStart", "throne", "fixedThrone", "sites", "killRandomSites", "owner", "poptype", "population", "unrest", "fort",
   "temple", "lab", "provinceDefense", "defenders", "battle", "rawDirectives",
@@ -371,11 +384,39 @@ function assertProjectShape(project: Record<string, unknown>): void {
   stringAt(project.seed, "project.seed");
   numberAt(project.targetVersion, "project.targetVersion");
   assertGenerationSettings(recordAt(project.settings, "project.settings"));
+  if (project.authoring !== undefined) {
+    const options = recordAt(project.authoring, "project.authoring");
+    assertKnownFields(options, "project.authoring", new Set(["lockLayout", "lockStarts", "regions"]));
+    optionalBooleanAt(options.lockLayout, "project.authoring.lockLayout");
+    optionalBooleanAt(options.lockStarts, "project.authoring.lockStarts");
+    if (options.regions !== undefined) {
+      const seen = new Set<string>();
+      boundedArrayAt(options.regions, "project.authoring.regions", 64).forEach((value, index) => {
+        const path = `project.authoring.regions[${index}]`;
+        const region = recordAt(value, path);
+        assertKnownFields(region, path, new Set(["id", "name", "planeId", "provinceIds"]));
+        idAt(region.id, `${path}.id`); idAt(region.planeId, `${path}.planeId`); stringAt(region.name, `${path}.name`);
+        if (seen.has(region.id as string)) throw new Error("Authored region IDs must be unique.");
+        seen.add(region.id as string);
+        const ids = boundedArrayAt(region.provinceIds, `${path}.provinceIds`, MAX_IMPORTED_PROVINCES_PER_PLANE);
+        ids.forEach((id, i) => idAt(id, `${path}.provinceIds[${i}]`));
+        if (new Set(ids).size !== ids.length) throw new Error("A region cannot contain duplicate provinces.");
+      });
+    }
+  }
   if (project.analysisContext !== undefined) {
     const context = recordAt(project.analysisContext, "project.analysisContext");
-    assertKnownFields(context, "project.analysisContext", new Set(["gameVersion", "mods"]));
+    assertKnownFields(context, "project.analysisContext", new Set(["gameVersion", "mods", "requirements"]));
     optionalStringAt(context.gameVersion, "project.analysisContext.gameVersion");
     optionalStringAt(context.mods, "project.analysisContext.mods");
+    if (context.requirements !== undefined) boundedArrayAt(context.requirements, "project.analysisContext.requirements", 64).forEach((value,index)=>{
+      const path=`project.analysisContext.requirements[${index}]`;const r=recordAt(value,path);
+      assertKnownFields(r,path,new Set(["nation","label","gameVersion","mods","terrain","minimum","radius"]));
+      for(const k of ["label","gameVersion","mods"])stringAt(r[k],`${path}.${k}`);
+      if(!(r.label as string).trim()||(r.label as string).length>120||!(r.gameVersion as string).trim()||(r.gameVersion as string).length>64)throw new Error("Requirements need a short label and explicit patch snapshot.");
+      enumAt(r.terrain,TERRAIN_FLAGS,`${path}.terrain`);
+      for(const [key,min,max] of [["nation",5,1000000],["minimum",1,20],["radius",1,3]] as const){numberAt(r[key],`${path}.${key}`);if(!Number.isInteger(r[key])||(r[key] as number)<min||(r[key] as number)>max)throw new Error(`${path}.${key} is outside the supported range.`);}
+    });
   }
   if (project.generationInputs !== undefined) {
     const inputs = recordAt(project.generationInputs, "project.generationInputs");
@@ -414,6 +455,11 @@ function assertProjectShape(project: Record<string, unknown>): void {
   const planes = boundedArrayAt(project.planes, "project.planes", MAX_IMPORTED_PLANES);
   if (planes.length === 0) throw new Error("project.planes must contain at least one plane.");
   planes.forEach((value, index) => assertPlane(recordAt(value, `project.planes[${index}]`), index));
+  const regions=(project.authoring as {regions?: {planeId:string;provinceIds:string[]}[]}|undefined)?.regions;
+  for(const r of regions??[]){
+    const plane=planes.find(v=>(v as Record<string,unknown>).id===r.planeId) as {provinces:{id:string}[]}|undefined;
+    if(!plane||r.provinceIds.some(id=>!plane.provinces.some(p=>p.id===id)))throw new Error("An authored region references a missing plane or province.");
+  }
 
   boundedArrayAt(project.gates, "project.gates", MAX_IMPORTED_GATES).forEach((value, index) => {
     const gate = recordAt(value, `project.gates[${index}]`);
@@ -484,6 +530,7 @@ function assertPlane(plane: Record<string, unknown>, index: number): void {
   optionalEnumAt(plane.variant, PLANE_VARIANTS, `${path}.variant`);
   optionalBooleanAt(plane.autoSize, `${path}.autoSize`);
   optionalBooleanAt(plane.noGeneratedStarts, `${path}.noGeneratedStarts`);
+  if (plane.generationOverrides !== undefined) assertPlaneGenerationOverrides(plane.generationOverrides);
   numberAt(plane.provinceTarget, `${path}.provinceTarget`);
   numberAt(plane.width, `${path}.width`);
   numberAt(plane.height, `${path}.height`);
@@ -522,6 +569,11 @@ function assertProvince(province: Record<string, unknown>, path: string): void {
   for (const key of ["x", "y", "gridX", "gridY"] as const) numberAt(province[key], `${path}.${key}`);
   stringAt(province.name, `${path}.name`);
   optionalEnumAt(province.nameSource, new Set(["generated", "authored"]), `${path}.nameSource`);
+  if (province.editorLocks !== undefined) {
+    const locks = boundedArrayAt(province.editorLocks, `${path}.editorLocks`, 5);
+    locks.forEach(lock => enumAt(lock, new Set(["name", "terrain", "economy", "sites", "guardians"]), `${path}.editorLocks`));
+    if (new Set(locks).size !== locks.length) throw new Error(`${path}.editorLocks contains duplicates.`);
+  }
   enumAt(province.biome, BIOME_KEYS, `${path}.biome`);
   enumAt(province.terrain, TERRAIN_KEYS, `${path}.terrain`);
   if (province.terrainFlags !== undefined) enumArrayAt(province.terrainFlags, TERRAIN_FLAGS, `${path}.terrainFlags`);
@@ -718,7 +770,8 @@ export function estimatedTextPackageBytes(project: MapProject): number {
   const analyzedStarts = project.planes.flatMap(plane => plane.provinces.filter(province => province.start
     || province.teamStart !== undefined || specificKeys.has(`${plane.id}:${province.id}`))).slice(0, 64);
   const analysisTextBytes = 16 * 1024 + analyzedStarts.reduce((sum, province) => sum + 2048 + province.name.length * 12, 0)
-    + ((project.analysisContext?.gameVersion?.length ?? 0) + (project.analysisContext?.mods?.length ?? 0)) * 18;
+    + ((project.analysisContext?.gameVersion?.length ?? 0) + (project.analysisContext?.mods?.length ?? 0)) * 18
+    + (project.analysisContext?.requirements ?? []).reduce((sum, r) => sum + 2048 + (r.label.length + r.gameVersion.length + r.mods.length) * 6, 0);
 
   // INSTALL, balance, host settings, and host topology. The topology dossier
   // repeats province/edge descriptions, so budget by records instead of using
@@ -955,7 +1008,7 @@ function supportFiles(project: MapProject, catalog: Dom6CatalogBundle): PackageF
     `Special starts: ${project.specificStarts.length ? "enable if using assigned nations" : "not required"}`,
     `Wrap: ${formatWrap(project.planes[0])}`,
     "",
-    ...analysisContextLines(project, BUILTIN_DOM6_CATALOG.gameVersion),
+    ...analysisContextLines(project, catalog.gameVersion.slice(0,256)),
   ].join("\r\n");
   const install = [
     "PANTOKRATOR ATLAS - INSTALLATION",

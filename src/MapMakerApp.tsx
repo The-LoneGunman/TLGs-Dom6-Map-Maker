@@ -68,6 +68,7 @@ import { auditPlaneTopology, canAuthorPlaneEdge, connectionKey } from "./geometr
 import { regenerateAllProvinceNames, regenerateGeneratedProvinceNames } from "./naming";
 import { createFreshProject, createProjectImportGuard, prepareProjectForOpening, randomSeed } from "./projectSession";
 import { createCatalogImportSession } from "./catalog/importSession";
+import { assertProjectLocks, pruneAuthoringRegions } from "./authoringLocks";
 import {
   downloadPackage,
   downloadProject,
@@ -89,6 +90,8 @@ import {
 } from "./generationWorker";
 import { MapCanvas, canRenderPlanePreview, renderPlanePng, type ProvinceMarkerAnnotations } from "./MapCanvas";
 import { GenerationPlanSummary, ProvinceExplorer, StartBalancePanel } from "./WorkbenchPanels";
+import { IterationPanel } from "./IterationPanel";
+import { PlanePreferencesPanel } from "./PlanePreferencesPanel";
 import { recordGenerationInputs, type AnalysisMode, type ProvinceReference } from "./workbench";
 import { CatalogCombobox } from "./catalog/CatalogCombobox";
 import { BoundedNumberInput, ItemListInput } from "./EditorInputs";
@@ -128,7 +131,7 @@ import {
 
 type Tool = "select" | "link" | "gate" | "start" | "throne" | "site";
 type InspectorTab = "terrain" | "gameplay" | "sites" | "advanced";
-type LeftTab = "generate" | "planes" | "scenario";
+type LeftTab = "generate" | "planes" | "scenario" | "iterate";
 type DestructiveConfirmation =
   | { kind: "new-atlas" }
   | { kind: "generate"; impact: AtlasReplacementImpact }
@@ -141,12 +144,12 @@ export interface ActionErrorNotice {
   title: string;
 }
 const INSPECTOR_TABS: readonly InspectorTab[] = ["terrain", "gameplay", "sites", "advanced"];
-const LEFT_TABS: readonly LeftTab[] = ["generate", "planes", "scenario"];
+const LEFT_TABS: readonly LeftTab[] = ["generate", "planes", "scenario", "iterate"];
 
 const ACTION_ERROR_TITLES: Record<ActionErrorKind, string> = {
   "catalog-import": "Catalog could not be imported",
   "project-import": "Project could not be opened",
-  "project-edit": "This edit exceeds the project limits",
+  "project-edit": "This edit could not be applied",
   "package-export": "Map package could not be exported",
   "preview-export": "Preview could not be exported",
   "device-save": "Project could not be saved",
@@ -430,7 +433,7 @@ export function MapMakerApp() {
   const [redoStack, setRedoStack] = useState<MapProject[]>([]);
   const [validationOpen, setValidationOpen] = useState(false);
   const [balanceOpen, setBalanceOpen] = useState(false);
-  const [analysisSelection, setAnalysisSelection] = useState<{ project: MapProject; keys: string[]; label: string; mode: AnalysisMode }>();
+  const [analysisSelection, setAnalysisSelection] = useState<{ project: MapProject; keys: string[]; label: string; mode: AnalysisMode; kind?: "iteration" }>();
   const [exportOpen, setExportOpen] = useState(false);
   const [replaceAllNamesOpen, setReplaceAllNamesOpen] = useState(false);
   const [destructiveConfirmation, setDestructiveConfirmation] = useState<DestructiveConfirmation>();
@@ -622,8 +625,14 @@ export function MapMakerApp() {
     task?.cancel();
   }, []);
 
-  const commit = useCallback((next: MapProject, remember = true) => {
-    try { serializeProject(next); } catch (error) {
+  const commit = useCallback((next: MapProject, remember = true, respectLocks = true) => {
+    try {
+      if (respectLocks) {
+        assertProjectLocks(currentProjectRef.current, next);
+        pruneAuthoringRegions(next);
+      }
+      serializeProject(next);
+    } catch (error) {
       showActionError("project-edit", error, "The previous project is unchanged.");
       return false;
     }
@@ -671,9 +680,10 @@ export function MapMakerApp() {
   const handleUndo = () => {
     const previous = undoStack.at(-1);
     if (!previous) return;
+    const current = currentProjectRef.current;
     rangeEditStartRef.current = undefined;
     setUndoStack((stack) => stack.slice(0, -1));
-    setRedoStack((stack) => appendHistorySnapshot(stack, currentProjectRef.current));
+    setRedoStack((stack) => appendHistorySnapshot(stack, current));
     importGuardRef.current.changed();
     currentProjectRef.current = previous;
     setProject(previous);
@@ -686,9 +696,10 @@ export function MapMakerApp() {
   const handleRedo = () => {
     const next = redoStack.at(-1);
     if (!next) return;
+    const current = currentProjectRef.current;
     rangeEditStartRef.current = undefined;
     setRedoStack((stack) => stack.slice(0, -1));
-    setUndoStack((stack) => appendHistorySnapshot(stack, currentProjectRef.current));
+    setUndoStack((stack) => appendHistorySnapshot(stack, current));
     importGuardRef.current.changed();
     currentProjectRef.current = next;
     setProject(next);
@@ -1035,7 +1046,7 @@ export function MapMakerApp() {
     });
   };
 
-  const runExport = async (kind: "install" | "zip") => {
+  const runExport = async (kind: "install" | "zip" | "player") => {
     if (errorCount) {
       setValidationOpen(true);
       return;
@@ -1052,7 +1063,7 @@ export function MapMakerApp() {
           setToast("Installed into your selected Dominions 6 maps folder.");
         }
       } else {
-        await downloadPackage(project, setExportProgress, catalog);
+        await downloadPackage(project, setExportProgress, catalog, kind === "player" ? "player" : "host");
         clearActionError("package-export");
         setToast("Ready-to-install map package downloaded.");
       }
@@ -1165,7 +1176,7 @@ export function MapMakerApp() {
       }
       // Recovery inspection is lossless: no name reroll, and Undo retains the
       // displaced local project rather than erasing its only recovery path.
-      if (!commit(result.project)) return;
+      if (!commit(result.project, true, false)) return;
       rangeEditStartRef.current = undefined;
       autosaveRevisionRef.current = result.revision ?? null;
       setAutosaveState(result);
@@ -1237,7 +1248,7 @@ export function MapMakerApp() {
           <div className="tab-row compact-tabs" role="tablist" aria-label="Map setup">
             {LEFT_TABS.map((tab) => (
               <button key={tab} id={`setup-tab-${tab}`} type="button" role="tab" tabIndex={leftTab === tab ? 0 : -1} aria-selected={leftTab === tab} aria-controls="setup-active-panel" className={leftTab === tab ? "active" : ""} onClick={() => setLeftTab(tab)} onKeyDown={(event) => handleTabKey(event, LEFT_TABS, leftTab, setLeftTab)}>
-                {tab === "generate" ? "Generate" : tab === "planes" ? "Planes" : "Scenario"}
+                {tab === "generate" ? "Generate" : tab === "planes" ? "Planes" : tab === "scenario" ? "Scenario" : "Iterate"}
               </button>
             ))}
           </div>
@@ -1452,6 +1463,10 @@ export function MapMakerApp() {
               <PlaneStartPolicyControl plane={activePlane} onChange={(value) => mutate((draft) => {
                 draft.planes.find((plane) => plane.id === activePlane.id)!.noGeneratedStarts = value || undefined;
               })} />
+              <PlanePreferencesPanel key={activePlane.id} plane={activePlane} onChange={value=>mutate(draft=>{
+                const plane=draft.planes.find(p=>p.id===activePlane.id)!;
+                if(value===undefined)delete plane.generationOverrides;else plane.generationOverrides=value;
+              })} />
               <Toggle scope="Current Map + next generation" label="Wrap east / west" checked={activePlane.wrapX} onChange={(value) => updateWrap("wrapX", value)} />
               <Toggle scope="Current Map + next generation" label="Wrap north / south" checked={activePlane.wrapY} onChange={(value) => updateWrap("wrapY", value)} />
               {project.settings.resolution === "custom" && (
@@ -1518,6 +1533,19 @@ export function MapMakerApp() {
             </div>
           )}
 
+          {leftTab === "iterate" && <div id="setup-active-panel" className="panel-scroll setup-stack" role="tabpanel" aria-labelledby="setup-tab-iterate">
+            <IterationPanel key={activePlane.id} project={project} planeId={activePlane.id} selectedId={selectedId} catalog={catalog} busy={generationBusy || exportBusy}
+              onCommit={(next, expectedSource) => {
+                if (currentProjectRef.current !== expectedSource) { setToast("The project changed after this preview. Preview the operation again; the current atlas was kept."); return false; }
+                next.updatedAt = new Date().toISOString();
+                if (!commit(next)) return false;
+                if (!next.planes.find(p => p.id === activePlane.id)?.provinces.some(p => p.id === selectedId)) setSelectedId(undefined);
+                setLinkSource(undefined); setGateSource(undefined);
+                setToast("Applied the previewed change. Undo restores the previous atlas.");
+                return true;
+              }}
+              onHighlight={(ids, label) => { setAnalysisSelection({project,keys:ids.map(id=>`${activePlane.id}:${id}`),label,mode:"structural",kind:"iteration"});setTool("select");setLinkSource(undefined);setGateSource(undefined); }} />
+          </div>}
           {leftTab === "scenario" && (
             <div id="setup-active-panel" className="panel-scroll setup-stack" role="tabpanel" aria-labelledby="setup-tab-scenario">
               <SectionHeading kicker="HOST & SCENARIO" title="Game setup" />
@@ -1575,7 +1603,7 @@ export function MapMakerApp() {
           </div>
           <div className="map-stage">
             <MapCanvas key={activePlane.id} plane={activePlane} selectedId={selectedId} previewCondition={preview} markerAnnotations={activePlaneMarkerAnnotations} analysisProvinceIds={analysisProvinceIds} onNavigate={setSelectedId} onActivate={handleProvinceClick} onZoomChange={setZoom} tool={tool} />
-            {currentAnalysis && <div className="analysis-region-banner" role="status"><span>Teal: {currentAnalysis.label}, 2-step region · {currentAnalysis.mode === "structural" ? "potential" : "conservative"} routes · preview only</span><button type="button" onClick={() => setAnalysisSelection(undefined)}>Clear highlight</button></div>}
+            {currentAnalysis && <div className="analysis-region-banner" role="status"><span>Teal: {currentAnalysis.kind === "iteration" ? `${currentAnalysis.label} · selected provinces` : `${currentAnalysis.label}, 2-step region · ${currentAnalysis.mode === "structural" ? "potential" : "conservative"} routes`} · preview only</span><button type="button" onClick={() => setAnalysisSelection(undefined)}>Clear highlight</button></div>}
             {!currentAnalysis && <div className="map-title-card">
               <span>{activePlane.kind}</span>
               <strong>{activePlane.name}</strong>
@@ -1683,6 +1711,7 @@ export function MapMakerApp() {
         onClose={() => !exportBusy && setExportOpen(false)}
         onInstall={() => runExport("install")}
         onZip={() => runExport("zip")}
+        onPlayerZip={() => runExport("player")}
         onProject={() => { downloadProject(project); setToast("Editable project downloaded."); }}
         onPreview={exportPreview}
         onValidate={() => { setExportOpen(false); setValidationOpen(true); }}
@@ -2084,7 +2113,7 @@ function ValidationDrawer({ issues, fairness, onClose, onReview, onSelectIssue }
   </aside></div>;
 }
 
-export function ExportDialog({ project, activePlane, issues, progress, busy, onClose, onInstall, onZip, onProject, onPreview, onValidate }: { project: MapProject; activePlane: Plane; issues: ValidationIssue[]; progress?: ExportProgress; busy: boolean; onClose: () => void; onInstall: () => void; onZip: () => void; onProject: () => void; onPreview: () => void; onValidate: () => void }) {
+export function ExportDialog({ project, activePlane, issues, progress, busy, onClose, onInstall, onZip, onPlayerZip, onProject, onPreview, onValidate }: { project: MapProject; activePlane: Plane; issues: ValidationIssue[]; progress?: ExportProgress; busy: boolean; onClose: () => void; onInstall: () => void; onZip: () => void; onPlayerZip?: () => void; onProject: () => void; onPreview: () => void; onValidate: () => void }) {
   const errors = issues.filter((issue) => issue.severity === "error").length;
   const zipSafety = zipPackageSafety(project);
   const zipBlocked = zipSafety.level === "blocked";
@@ -2111,6 +2140,7 @@ export function ExportDialog({ project, activePlane, issues, progress, busy, onC
         aria-describedby={zipSafety.message ? "zip-memory-safety" : undefined}
         title={zipBlocked ? zipSafety.message : undefined}
       ><span className="option-icon" aria-hidden="true">↓</span><span><strong>Download ready ZIP</strong><small>{zipBlocked ? "Unavailable at this package size; use direct install or Editable project JSON." : "Extract the included folder into your Dominions 6 user-data maps directory."}</small></span></button>
+      {onPlayerZip && <button className="export-option" type="button" onClick={onPlayerZip} disabled={busy || zipBlocked} aria-describedby={zipSafety.message ? "zip-memory-safety" : undefined}><span className="option-icon" aria-hidden="true">↓</span><span><strong>Download player ZIP</strong><small>Same playable files, without editable JSON or host reports. Map files still reveal content if inspected; this is not secrecy protection.</small></span></button>}
     </div>}
     {!errors && zipSafety.message && <div
       id="zip-memory-safety"
@@ -2129,7 +2159,7 @@ export function ExportDialog({ project, activePlane, issues, progress, busy, onC
       aria-valuetext={`${progressMessage}. ${progressPercent}%. Plane ${progressPlane} of ${progressPlaneCount}.`}
     ><div><span>{progressMessage}</span><strong>{progressPercent}%</strong></div><i aria-hidden="true"><b style={{ width: `${progressPercent}%` }} /></i><small>Plane {progressPlane} of {progressPlaneCount}</small></div>}
     <div className="secondary-exports"><button type="button" onClick={onProject} disabled={busy}>Editable project JSON</button><button type="button" onClick={onPreview} disabled={busy || !canRenderPlanePreview(activePlane)} title={!canRenderPlanePreview(activePlane) ? "Fix the plane dimensions before exporting a preview." : undefined}>High-res {activePlane.width}×{activePlane.height} preview of {planeDisplayLabel(project, activePlane)}</button></div>
-    <p className="export-note"><strong>Zero-mod export.</strong> Native <code>.d6m</code> files let Dominions render condition changes. The package also includes host settings, the editable project, and a balance report.</p>
+    <p className="export-note"><strong>Native export.</strong> Native <code>.d6m</code> files let Dominions render condition changes. The host package also includes host settings, the editable project, and a balance report. Custom catalog content may require the host’s mods.</p>
   </section></div>;
 }
 

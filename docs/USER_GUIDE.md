@@ -2,7 +2,7 @@
 
 Pantokrator Atlas is a local-first map maker for Dominions 6. It generates deterministic, multiplayer-oriented atlases with one to eight planes and exports native `.map` and `.d6m` files that Dominions can load directly.
 
-This guide describes the current `main` source: the recommended workflow, interface options, manual editing, validation, installation, and common problems. The hosted GUI and Windows releases can lag behind it; see [Versions and documentation](../README.md#versions-and-documentation) for the dated channel comparison. In particular, September 20's recovery, catalog, custom-border, and preview corrections are source-only until separately published. For the latest source, see [Develop from source](../README.md#develop-from-source).
+This guide includes the development round on **`codex/full-implementation-round-sep20`**, based on `main` revision `958e545`. **Iterate, plane generation preferences, expanded analysis, native inspection, player ZIPs, and guardian fixtures are not yet merged or publicly released.** The hosted app and Windows installer also predate the merged September 20 repairs. Check [Versions and documentation](../README.md#versions-and-documentation) before looking for a missing control. A normal [source installation](../README.md#develop-from-source) uses `main`, not these unmerged changes.
 
 ## Contents
 
@@ -13,6 +13,7 @@ This guide describes the current `main` source: the recommended workflow, interf
 - [Planes tab](#planes-tab)
 - [Planned links and existing gateways](#planned-links-and-existing-gateways)
 - [Scenario tab](#scenario-tab)
+- [Iterate tab](#iterate-tab)
 - [Map tools and navigation](#map-tools-and-navigation)
 - [Province inspector](#province-inspector)
 - [Catalog manager](#catalog-manager)
@@ -76,7 +77,7 @@ Uninstall through **Windows Settings -> Apps -> Installed apps -> Pantokrator At
 
 ## The safest editing workflow
 
-> **Generate before detailed manual editing.** Generate reconstructs province geometry, terrain, economy, sites, guardians, battle settings, province directives, starts, throne preferences, borders, and actual gateways. Plane and Scenario configuration remain, and manually authored province names are deliberately preserved, but most other province-level edits are replaced.
+> **Generate before detailed manual editing.** Full generation rebuilds geography, starts, borders, gateways, and most province content. Plane/Scenario configuration and manually authored names remain. In the development version, field locks can retain compatible content during same-seed generation; they do not make arbitrary regeneration lossless. Use content-only rerolls when geography must stay fixed.
 
 The recommended order is:
 
@@ -84,7 +85,7 @@ The recommended order is:
 2. Add and configure every plane.
 3. Configure planned plane links and Scenario settings.
 4. Generate the atlas.
-5. Make detailed manual changes.
+5. Make detailed manual changes; use Iterate's locks, previews, or content-only rerolls when appropriate.
 6. Validate and export.
 
 On a populated atlas, Generate first shows what will be replaced and offers **Download backup**. After you confirm, the completed generation is still one Undoable project edit.
@@ -96,7 +97,7 @@ Adding a plane to the generation plan preserves every existing actual gateway; t
 The main areas and controls are:
 
 - **Header:** project name, autosave state, New atlas, Save now, Undo, Redo, Validate, and Install / export.
-- **Setup panel:** Find a province, then Generate, Planes, and Scenario tabs.
+- **Setup panel:** Find a province, then Generate, Planes, Scenario, and Iterate tabs.
 - **Map workbench:** the active plane, editing tools, condition preview, zoom, plane strip, and generation/fairness status.
 - **Province inspector:** Terrain, Gameplay, Sites & guardians, and Advanced tabs for the selected province.
 - **Open project:** the fixed button near the lower-left corner imports a saved Atlas project JSON.
@@ -153,7 +154,7 @@ Opens an explicit replacement confirmation for the current project. The dialog l
 
 ### Reset generator defaults
 
-Resets the Generate options, name-reroll counter, plane resolution, and active-plane wrapping without replacing the current atlas. It also turns off **Fresh generated names on open** and restores the fixed example seed `pantokrator-001`; use the seed-shuffle button for another world. It preserves planes, provinces, Scenario settings, gateways, manual edits, manual specific starts, and each plane's **Block generated starts** choice. Generated cave-nation assignments are removed until you generate again. The reset is Undoable and does not itself generate.
+Resets the Generate options, name-reroll counter, plane resolution, and active-plane wrapping without replacing the current atlas. It also turns off **Fresh generated names on open** and restores the fixed example seed `pantokrator-001`; use the seed-shuffle button for another world. It preserves planes, provinces, Scenario settings, gateways, manual edits, manual specific starts, and each plane's **Block generated starts** choice. Generated cave-nation assignments are removed until you generate again. The reset is Undoable and does not itself generate. Per-plane generation preferences have their own reset under Planes; layout/start locks can reject conflicting reset changes.
 
 ### Seed
 
@@ -216,7 +217,7 @@ If the target cannot fit safely, Atlas reports a warning. Increase map size, sim
 
 Range: **0-60%**. Default: **18%**.
 
-This is the requested water share on water-capable generated realms. Generation may raise it to satisfy water/coastal starts, an Oceanic variant, or Island Chains. Flooded Cave/Cavern chambers and the Underworld's Styx are archetype features rather than ordinary overland water-quota results.
+This is the requested water share on water-capable generated realms. Generation may raise it to satisfy water/coastal starts, an Oceanic variant, or Island Chains. A plane's optional [generation preferences](#generation-preferences) can override the inherited request. Flooded Cave/Cavern chambers have a separate preference; the Underworld's Styx is an archetype feature, not an ordinary water-quota result.
 
 ### Overland ocean layout
 
@@ -259,7 +260,7 @@ This affects solid Surface and surface-like Custom planes. Cave-family and spars
 
 **Reroll generated names (preserve manual)** immediately renames generated provinces on every plane without changing geography. Names use plane, terrain, coast, flooded-cave, and Styx context. Names edited in the province inspector and legacy names with no provenance are preserved. The action is Undoable.
 
-**Replace every province name** opens a confirmation and replaces generated, manual, and legacy names. Use it to repair duplicate or poorly matched names in older projects. It is also Undoable.
+**Replace every province name** opens a confirmation and replaces generated, manual, and legacy names, except provinces protected by a name lock. Unlock those names first if they should also change. Use it to repair duplicate or poorly matched names in older projects. It is also Undoable.
 
 Generated names are unique across the atlas and avoid known nation, epithet, home/capital-site, and special-realm names.
 
@@ -314,7 +315,7 @@ Switches to Planes without changing the map. Use it to finish plane planning bef
 
 ### Generate balanced atlas
 
-Rebuilds every planned plane from the seed and settings, including terrain, topology, starts, generated gateways, throne recommendations, independent details, cave-nation assignments, and generated names. Plane/Scenario configuration and manually authored province names remain; most other province edits do not.
+Rebuilds every planned plane from the seed and settings, including terrain, topology, starts, generated gateways, throne recommendations, independent details, cave-nation assignments, and generated names. Plane/Scenario configuration and manually authored province names remain. Compatible field-locked content can survive same-seed generation; most other province edits do not. Layout lock blocks full generation, and conflicting start/field locks reject the result without replacing the atlas.
 
 On a populated atlas, Atlas confirms what will be replaced and offers a project backup. The progress card lets you cancel safely, and generation never installs a partial result. If you edit the project while generation runs, a stale result is discarded. A completed generation is Undoable.
 
@@ -408,6 +409,22 @@ Create movement and ownership seams across the selected axis. Underworld default
 
 When Generate's resolution is Custom, Width and Height appear here for the active plane. Each is 256-3840 and total pixels may not exceed 8,294,400.
 
+### Generation preferences
+
+Development control: expand **Generation preferences · Next generation** on the active plane. Blank values inherit the established generator. Current provinces remain unchanged until Generate; **Reset plane preferences to inherited** removes all overrides for that plane.
+
+| Preference | What it does |
+| --- | --- |
+| Plane water / Cave ocean (%) | Requests 0–60% water on the supported plane family. Cave ocean applies to Cave/Great Cavern. Neither removes the Underworld's edge-to-edge Styx. Starts, ocean style, and topology can override a requested share. |
+| Dry-terrain weights | Values 0–5 bias plains, forest, farm, swamp, waste, highland, and mountains. Blank or 1 retains the normal preference; 0 is not an absolute exclusion because variety and safety repairs take priority. Caves use underground equivalents; farm has no underground effect. Water and cave walls are excluded. |
+| Regional plans | Assign a dry-terrain preference to the north/south/east/west half or central quarter. Up to 16 plans per plane; the first matching plan wins. Normalized bounds scale with map dimensions, and saved recipes can specify custom rectangles. These are generation plans, not saved province selections. |
+| Eligible dry-land border mix | On solid overland planes, road/river/mountain-pass shares total at most 100%; the remainder becomes ordinary borders. Capital exits, water, impassable borders, and mountain barriers are preserved. This overrides the topology policy only on eligible edges. |
+| Guarded share | Requests authored guardians on 0–80% of eligible provinces, outside the two-step capital buffer, using the plane's existing themed pools. |
+| Guardian troop-count multiplier | Inherit, 0.5×, 1×, 1.5×, or 2× squad counts. This is not a calibrated difficulty rating; review commander leadership warnings and test combat in Dominions. |
+| Many-sites share | Requests the Many sites terrain flag outside capital rings. It does not place named sites or guarantee rewards. |
+
+Treat these as preferences, not exact quotas. Locks, terrain variety, ocean constraints, and safe starts take priority. **Current result** summarizes the existing plane, not the ungenerated plan; compare it again after generation.
+
 ### Plane display & native flags
 
 - **Reveal this plane's map image:** Inherit project setting, On, or Off. Controls per-plane `#mapnohide` behavior.
@@ -476,6 +493,66 @@ Scenario options affect export directly and do not require regeneration.
 - **Map-level directives:** advanced commands appended only to plane 1.
 
 Playable nation IDs must be safe integers 5 or greater. Unknown IDs require matching custom content in Dominions.
+
+## Iterate tab
+
+Development-only tools for refining the current atlas. Batch edits, field locks, regions, rerolls, recipes, and candidate replacements show a preview before **Apply previewed change**. Each application is one Undoable edit. Discarding a preview leaves the atlas unchanged; previews tied to an older project are not applied over newer edits. Continue to save JSON backups before major changes.
+
+### Choose provinces and save regions
+
+Work on the active plane. Select **Only the currently selected province**, or combine role, primary terrain, effective terrain flag, name/local number, and named-region filters. **Non-capitals** excludes generic, team, and nation-specific starts; it does not mean the province has no owner. The effective-flag filter includes flags supplied by primary terrain as well as additive flags.
+
+Check the match count and use **Highlight selection** before editing. Up to 64 named regions can remember selected province IDs. Removing a region removes only its bookmark. Regeneration or plane removal can trim or remove bookmarks when their province IDs disappear; bookmarks do not constrain future geography. Use [regional generation plans](#generation-preferences) for a persistent north/south/etc. terrain preference instead.
+
+### Layout, start, and field locks
+
+- **Lock layout, borders, gateways and dimensions:** rejects changes to that structure and blocks full generation. Content-only edits and rerolls remain available.
+- **Lock generic, team and nation starts:** rejects changes to saved start locations/assignments. Unlock before moving starts or generating a different start layout.
+- **Protect authored fields:** select provinces and a field group, then preview **Protect selected** or **Unlock selected**.
+
+| Field group | Protected content |
+| --- | --- |
+| Name | Province name and generated/manual provenance |
+| Terrain | Primary/additive terrain, biome, size, freshwater, and climate markers |
+| Economy | Population, poptype, unrest, ownership, owned PD, fort, temple, and laboratory |
+| Sites | Placed sites, Many sites, site affinities, random-site removal, and throne setup |
+| Guardians | Guardian groups, battle settings, and raw province directives |
+
+Field locks protect batch/reroll tools and compatible same-seed generation. They do not prevent intentional edits in the province inspector, and they do not lock positions. Changing the world seed changes province IDs: full generation is rejected if locked provinces would disappear. Changed sizes, terrain media, or capital safety can also conflict with locks. Use a content-only reroll or unlock explicitly; Atlas does not silently discard protected content.
+
+### Batch editing and content rerolls
+
+Batch operations add/remove terrain flags, replace primary terrain, set population/poptype, change Many sites or climate, or clear guardian groups. Review matched/changed/skipped counts and sample provinces. Relevant locks and protected capitals are skipped; site changes also protect their direct surroundings. Clearing unlocked guardian groups remains possible to repair conflicts. A preview that introduces new export errors cannot be applied. Existing errors still need attention before export.
+
+Content-only rerolls use the **Content / candidate seed** and selected provinces. Choose generated names, population/local recruitment, site flags/affinities, or initial guardians. Geography, borders, starts, and gateways remain fixed; manual names remain intact. Economy/site rerolls exclude capital rings, and guardian rerolls use a two-step buffer. Rerolling site content does not promise a new set of named magic sites or a combat-balanced reward.
+
+### Settings recipes
+
+**Balanced FFA**, **Continental rivalry**, **Naval geography**, and **Strategic frontiers** provide starting settings, not guaranteed balanced maps. They do not choose nations or change the player/start allocation for you. Preview and apply, review the generation plan, then Generate.
+
+**Download settings recipe** saves generation settings, plane configuration/preferences, and declared analysis assumptions. The world seed is optional and excluded by default. Open a recipe file or paste its JSON to preview it; the limit is 256 KiB. Imports match plane configurations by order, preserve existing plane names/content, stage missing planes, and refuse to delete extra existing planes. Changes to archetype, dimensions, or wrapping can update current ownership presentation/borders; layout locks still apply. Full generation follows only when you request it.
+
+A recipe is not a map backup: it omits authored provinces, actual gateways, field locks, and saved selections. Use **Editable project JSON** for an exact atlas copy.
+
+### Compare generated candidates
+
+Generate two or three alternatives in background workers using the world seed plus the content/candidate seed. The current atlas is unchanged until you review a candidate replacement and apply it. Cancel stops the run; no candidate is selected automatically by its score.
+
+Cards show structural score, smallest two-step start region, two-step spread (CV), and export blockers/warnings. A lower CV means more similar region counts, not equivalent economies or combat access. Expand a candidate's preview and select any of its planes to inspect it; maps render only when requested. No displayed score proves practical multiplayer balance. Layout lock blocks candidate generation; field/start locks can reject alternatives that conflict with them. Candidate replacement is Undoable, but save a project backup before accepting a new geography.
+
+### Inspect external native maps
+
+Expand **Inspect external native maps · Read only**. Paste `.map` text, inspect the current plane's compiled native text, or choose a `.map`/`.d6m` file. `.map` input is limited to 16 MiB; `.d6m` input to 40 MiB with additional dimension/structure limits.
+
+The report inventories terrain records, names, starts, neighbors, border modifiers, gates, commanders, units, and unrecognized commands. A D6M report checks supported binary structure. Nothing is executed, followed, uploaded, or added to the atlas. Image references are shown but not opened. Recognition is not full command validation or proof of game compatibility. Lossless editable import of arbitrary native maps, TGA artwork, and custom raster ownership is not supported.
+
+### Isolated guardian test scenario
+
+Choose an authored guardian province and **Prepare separate fixture**. Atlas generates a separate two-player, 48-province map in the background, in the source plane's family, with the copied encounter named **GUARDIAN TEST** outside protected capital zones. The source selection is held while generation runs; **Cancel fixture generation** stops it. Download the fixture's own JSON or ZIP; the current atlas is not replaced and no game saves are written by this tool.
+
+When no matching dry/water/cave target exists, Atlas can adapt a safe target province to the source terrain and displays that limitation in the fixture description. The surrounding test geography is not copied from the source. Preparation fails without changing the source if no safe target fits or the fixture has export errors.
+
+Install the fixture as a separate map and create a new test game. Choose suitable nations, mods, host settings, and attacking armies yourself, including movement abilities needed to reach water/cave targets. Random independents elsewhere still follow game/host rules, and referenced battle assets need separate copying. The fixture is a manual playtest aid, not a combat simulator or proof that a guardian roster is fair.
 
 ## Map tools and navigation
 
@@ -764,6 +841,13 @@ Both models count a gate as one graph hop, ignore blocked provinces, and omit al
 
 Each row shows useful exits, provinces within two/three steps, two-step exclusive/contested access, known population plus the number of unknown provinces, authored guardian provinces, nearby preferred/fixed throne markers, and nearest rival/throne/cross-plane entrance. Exclusive means strictly closer than every competing start; contested includes ties and provinces a rival reaches sooner. Neither predicts ownership. Missing or invalid population values count as unknown rather than inflating the total; invalid values still block playable export. Population is not income/resources; random independents and guardian difficulty remain unknown. Throne markers do not certify final engine placement.
 
+The development analysis also shows:
+
+- **Fractional opportunity:** one share for a distance lead, a split share for rival ties, and zero where a rival is closer. Allies do not compete; do not sum these values as a team economy.
+- **Hostile frontier groups:** distinct opposing team/start regions touching the two-step neighborhood, not a count of gates or enemy armies.
+- **Nearest ally** and **shared direct surroundings:** reveal nearby team support and overlapping capital neighbors; shared surroundings include allies.
+- **Nearest preferred/fixed throne:** separates recommended locations from explicitly placed thrones.
+
 Click a start name to navigate safely to it and highlight its two-step region in teal. The overlay is editor-only, works across plane switches, and is hidden after project edits so it cannot present stale results. **Clear highlight** removes it. PNG and playable exports never include this overlay. `—` means no reachable target, a blocked start, or incomplete analysis.
 
 Analysis is capped at 64 start locations for responsiveness. Larger imported start sets show an incomplete-analysis warning and no exclusive/contested comparison. This is an analysis limit, not a new limit on saved scenario starts.
@@ -772,7 +856,15 @@ Analysis is capped at 64 start locations for responsiveness. Larger imported sta
 
 Under **Game patch and mod assumptions**, record the intended game patch and mod names/versions. These are user-declared notes, not auto-detected compatibility. They are saved in project JSON and the host-facing reports; editing them never changes geography or applies nation compensation.
 
-A missing patch, a mismatch with the selector catalog, or declared mods is explicitly unverified. Even an exact catalog-version match certifies neither nation movement nor combat balance. The model identifier (`structural-inspector-1`) versions these structural assumptions independently of game patches. Reassess nation-specific expectations after any game or mod update.
+A missing patch, a mismatch with the selector catalog, or declared mods is explicitly unverified. Even an exact catalog-version match certifies neither nation movement nor combat balance. The development model identifier (`structural-inspector-2`) versions these structural assumptions independently of game patches. Reassess nation-specific expectations after any game or mod update.
+
+### Optional nation terrain requirements
+
+Development control: **Optional nation terrain requirements · Check only** is inside the start-analysis panel. Declare a patch first, then record a requirement label, nation ID, terrain flag, minimum count (1–20), and graph radius (1–3). These are host requests, not facts about what a nation needs. Up to 64 can be saved with the project and included in host reports.
+
+Each check needs exactly one nation-specific start. Random/team slots alone do not identify a nation. Counts exclude every capital and use potential graph connections, not a nation's real movement or recruiting ability. Results are **met**, **shortfall**, **unassigned**, or **unverified**. Changing patch/mod declarations invalidates the snapshot until you deliberately reconfirm it; reconfirming is a host declaration, not game-data verification.
+
+Atlas never grants automatic terrain, income, resources, or nation bonuses from these requests. If you choose to accommodate one, inspect the start and preview an explicit edit through Iterate, then reassess the whole map.
 
 ## Saving and reopening projects
 
@@ -798,9 +890,9 @@ The header buttons keep up to 30 project snapshots. A new edit clears Redo. Undo
 
 ### Editable project JSON
 
-Projects saved by this version can contain optional analysis notes and generation-input snapshots. This version opens older schema-v1 projects without inventing a generation baseline; older app versions may reject these newly added fields. Keep a pre-upgrade backup if you need to return to an older app.
+Projects saved by this development version can contain optional analysis requirements, generation-input snapshots, per-plane preferences, locks, and saved selections. It opens older schema-v1 projects without inventing a generation baseline; older app versions may reject the new fields. Keep a pre-upgrade backup if you need to return to an older app.
 
-Choose **Install / export -> Editable project JSON** for a portable backup named `<map-name>.atlas.json`. Every playable package also includes `atlas_project.json`.
+Choose **Install / export -> Editable project JSON** for a portable backup named `<map-name>.atlas.json`. Host packages and direct installs also include `atlas_project.json`; player ZIPs deliberately do not.
 
 Choose **Open project** and select either file to reopen it. The importer accepts up to 16 MiB of UTF-8 Atlas schema-v1 JSON with at most 8 planes and 800 provinces per plane. It does not open ZIP, `.map`, `.d6m`, custom catalog JSON, or arbitrary JSON.
 
@@ -814,13 +906,13 @@ Open **Install / export** in the header after validation.
 
 ### Package contents
 
-A playable package contains:
+A host package (**Download ready ZIP** or **Install directly**) contains:
 
 - Main `.map` and `.d6m` files.
 - `_plane2` through `_plane8` `.map` and `.d6m` files as needed.
 - `INSTALL.txt`.
 - `atlas_project.json`.
-- `balance_report.txt`: legacy score, validation, both per-start structural models, and unverified patch/mod assumptions. Treat this as host-facing analysis.
+- `balance_report.txt`: legacy score, validation, both per-start structural models, and unverified patch/mod assumptions/requirements. Treat this as host-facing analysis.
 - `host_settings.txt`: intended host setup and the same declared patch/mod notes.
 - `host_topology.txt` — a host-only spoiler dossier listing every plane, local/global province number, start/throne marker, connection, border type, and gateway endpoint. Do not distribute it to players.
 
@@ -842,7 +934,13 @@ Extract the single contained map folder into the Dominions user-data `maps` dire
 
 If you added custom battle assets manually, back them up before replacing the folder and copy them into the new one afterward.
 
-Large packages may show a ZIP memory warning or disable only **Download ready ZIP**. **Install directly**, **Editable project JSON**, and active-plane preview remain available. Prefer direct installation for large multi-plane 4K atlases.
+Large packages may show a ZIP memory warning or disable both ZIP options. **Install directly**, **Editable project JSON**, and active-plane preview remain available. Prefer direct installation for large multi-plane 4K atlases.
+
+### Download player ZIP
+
+Development option: downloads `<map-name>_players.zip` with the same playable `.map`/`.d6m` files and `PLAYER_README.txt`, but no `atlas_project.json`, balance report, host settings, or host topology dossier. It uses the same validation and ZIP-memory limits as the host ZIP. Extract its single map folder into the Dominions user-data `maps` directory, replacing an older same-named folder instead of merging it.
+
+This reduces accidental spoilers; it is **not secrecy protection**. Native map files still reveal starts, terrain, guardians, and other content when inspected. Keep the host package and editable JSON yourself, and tell players the intended game version, mods, and host settings separately. A player package is not an editable Atlas backup.
 
 ### Editable project JSON
 
@@ -888,6 +986,13 @@ Validation, replacement-confirmation, and export dialogs trap focus. Escape clos
 | Launcher startup fails | For the installer edition, reinstall the latest setup. For a portable copy, keep the extracted release in a writable folder and do not run inside the ZIP. If it still fails, include the complete terminal error in a [GitHub issue](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/issues). |
 | GUI opens on a different local port and the autosave looks empty | Use the same browser profile and exact Atlas address as before. If Atlas is still running there, reopen that instance and export **Editable project JSON** for import at the new address. An old port may now serve another application; do not stop unrelated programs to recover Atlas. If the previous Atlas address is unavailable, use a JSON backup. |
 | Generate is disabled | The five start categories must total Players, each category needs a compatible plane that permits generated starts, and configured cave nations cannot exceed Cave starts. Read the generation-plan summary and correct the allocation, nation list, or plane policy. |
+| Locked layout/start/field conflict | Unlock explicitly in Iterate or use a content-only reroll. Different world seeds change province IDs; field-locked provinces cannot be silently replaced. A rejected edit leaves the current atlas intact. |
+| Batch preview cannot apply | Review newly introduced export blockers, locked/protected skipped provinces, or a zero-change result. Change the operation/selection; existing export errors also still need repair. |
+| Named region disappeared after generation | It was a bookmark of old province IDs, not a geographic generation constraint. Use Planes → Generation preferences → Regional plans for future terrain areas. |
+| Preference did not produce its exact percentage | Safety, topology, ocean style, minimum terrain variety, and locks take priority. Inspect Current result after generation. Blank values inherit the established generator. |
+| Nation requirement is unassigned/unverified | Assign exactly one nation-specific start, or review/reconfirm the request after changing patch/mod declarations. Reconfirmation is not independent verification of the request. |
+| External map will not open as an editable project | Open project accepts Atlas JSON only. Use Iterate's read-only native inspection for `.map`/`.d6m`; arbitrary native raster geometry cannot yet be imported losslessly. |
+| Guardian fixture could not be prepared | No safe encounter province may fit, or the source/fixture has export errors. The source atlas remains unchanged; review the reported error. Any target-media adaptation is separately disclosed in the fixture description. |
 | Compatibility blocker / playable export unavailable | Open Validate and resolve every red Error. Warnings and fairness alone do not block export. |
 | Scale-aware spacing below preferred | The hard three-step floor was retained but the larger preferred target did not fit. Increase provinces/player, simplify start categories, change wrapping, or generate again. |
 | Start connection counts vary | Identical exits could not fit without breaking harder safety rules. Lower the connection target or enlarge the core realms. |
@@ -921,7 +1026,7 @@ Validation, replacement-confirmation, and export dialogs trap focus. Escape clos
 
 ## Dominions engine boundaries
 
-The latest source repairs passed automated and browser checks, but the September 20 test did not establish current-patch in-game behavior. See the [repair verification record](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/REPAIR_VERIFICATION_2026-09-20.md) before treating a generated map as playtested in Dominions.
+The earlier repair pass passed automated and browser checks but did not establish current-patch in-game behavior. See the [implementation-round record](IMPLEMENTATION_ROUND_2026-09-20.md) for the exact scope of subsequent checks. A successful map load, structural seed evaluation, or prepared guardian fixture is not evidence of tested combat balance, post-capture defence, or a full multiplayer game.
 
 Native map data and Atlas's preview have different roles:
 

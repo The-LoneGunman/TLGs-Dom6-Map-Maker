@@ -4,13 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { MAX_IMPORTED_STRING_LENGTH } from "./export";
 
 /** Keep incomplete keystrokes local until they describe a valid number. */
-export function BoundedNumberInput({ value, min, max, describedBy, onChange }: {
-  value: number; min: number; max: number; describedBy?: string; onChange: (value: number) => void;
+export function BoundedNumberInput({ value, min, max, describedBy, id, onChange }: {
+  value: number; min: number; max: number; describedBy?: string; id?: string; onChange: (value: number) => void;
 }) {
   const [draft, setDraft] = useState(String(value));
   const focused = useRef(false);
   useEffect(() => { if (!focused.current) setDraft(String(value)); }, [value]);
-  return <input type="number" value={draft} min={min} max={max} aria-describedby={describedBy}
+  return <input id={id} type="number" value={draft} min={min} max={max} aria-describedby={describedBy}
     onFocus={() => { focused.current = true; }}
     onChange={(event) => {
       const text = event.target.value;

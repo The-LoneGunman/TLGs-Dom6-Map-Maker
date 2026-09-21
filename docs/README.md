@@ -1,11 +1,12 @@
 # Documentation index
 
-Current source documentation reviewed September 20, 2026. See the root [versions and documentation table](../README.md#versions-and-documentation) before assuming a hosted or installed build contains every source feature. Merging `main`, deploying the hosted GUI, and publishing a Windows release are separate actions.
+Development documentation reviewed September 20, 2026. It includes the unmerged `codex/full-implementation-round-sep20` changes. See the root [versions and documentation table](../README.md#versions-and-documentation) before assuming `main`, a hosted build, or an installer contains these controls. Merging, deploying the hosted GUI, and publishing a Windows release are separate actions.
 
 ## Current references
 
-- [User guide](USER_GUIDE.md): installation, generation options, manual editing, recovery, export, and troubleshooting.
+- [User guide](USER_GUIDE.md): installation, generation, safe iteration, inspection, recovery, host/player export, and troubleshooting.
 - [Multiplayer implementation status](MULTIPLAYER_IMPLEMENTATION_STATUS.md): available controls and work that is still planned.
+- [September 20 implementation round](IMPLEMENTATION_ROUND_2026-09-20.md): current changes, non-regression checks, seed evaluation, and actual-use verification boundaries. Testing remains in progress until this record says otherwise.
 - [Content catalog](CONTENT_CATALOG.md): pinned Dominions 6.35 data, numeric IDs, and patch/provenance limits.
 - [Artwork implementation and future asset-pack contract](ILLUSTRATED_ASSET_SPEC.md): what the renderer does now versus future requirements.
 - [Artwork provenance](ASSET_PROVENANCE.md): bundled textures/backdrops and their licenses.
@@ -24,4 +25,4 @@ These records preserve the conditions and evidence at the stated revision/date. 
 | [August audit and remediation](FULL_AUDIT_2026-08-11.md) | Historical findings, fixes, and engine-load observations for older snapshots. |
 | [August playtests](PLAYTEST_NOTES.md) | Historical seed corpora, browser observations, and follow-up ideas. |
 
-The latest repair pass does **not** confirm actual Dominions 6.37 game loading, seasonal visuals, guardian combat, post-capture defence, recruitment, or multiplayer balance. Older engine-load observations do not certify the current source. Raw directives, custom catalogs/mods, and advanced battle assets require host verification as explained in the user guide.
+The earlier repair pass did **not** establish actual Dominions 6.37 game loading. Consult the implementation-round record for subsequent engine checks; do not infer tested seasonal visuals, guardian combat, post-capture defence, recruitment, or multiplayer balance from a successful load alone. Raw directives, custom catalogs/mods, and advanced battle assets require host verification as explained in the user guide.

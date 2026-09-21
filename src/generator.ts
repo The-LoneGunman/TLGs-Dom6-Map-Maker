@@ -37,6 +37,8 @@ import {
 } from "./domain";
 import { computeProvinceTopology, connectionKey, resolvePlaneOwnershipMode } from "./geometry";
 import { regenerateGeneratedProvinceNames } from "./naming";
+import { assertCanRebuildLayout, pruneAuthoringRegions, restoreGenerationLocks } from "./authoringLocks";
+import { applyPlaneContentPreferences, applyPlaneRoutePreferences, assertPlaneGenerationOverrides, preferredDryTerrain } from "./generationControls";
 
 const TAU = Math.PI * 2;
 
@@ -174,7 +176,7 @@ export const THEMED_AQUATIC_POPTYPE_POOLS: Partial<Record<GuardianTheme, readonl
  * and they do not change the initial independent army. Selected non-start
  * provinces therefore receive explicit guardian squads below.
  */
-const ARCHETYPE_PROFILES: Record<PlaneKind, ArchetypeProfile> = {
+export const ARCHETYPE_PROFILES: Readonly<Record<PlaneKind, ArchetypeProfile>> = {
   surface: { defaultVariant: "temperate", sitePaths: ["nature", "earth"], poptypes: ARCHETYPE_POPTYPE_POOLS.surface, populationScale: 1, waterCapable: true, caveFamily: false, manySitesChance: 0.09 },
   cave: { defaultVariant: "fungal", sitePaths: ["earth", "death", "glamour"], poptypes: ARCHETYPE_POPTYPE_POOLS.cave, populationScale: 0.78, waterCapable: false, caveFamily: true, manySitesChance: 0.13 },
   cavern: { defaultVariant: "crystal", sitePaths: ["earth", "astral", "glamour"], poptypes: ARCHETYPE_POPTYPE_POOLS.cavern, populationScale: 0.9, waterCapable: false, caveFamily: true, manySitesChance: 0.15 },
@@ -334,7 +336,7 @@ export function defaultPlaneName(kind: PlaneKind, index: number): string {
   return names[kind] ?? `Plane ${index + 1}`;
 }
 
-export function createDefaultProject(seed = "pantokrator-001"): MapProject {
+export function createDefaultProject(seed = "pantokrator-001", options: { generate?: boolean } = {}): MapProject {
   const now = new Date().toISOString();
   const settings: GenerationSettings = {
     players: 6,
@@ -381,7 +383,7 @@ export function createDefaultProject(seed = "pantokrator-001"): MapProject {
     updatedAt: now,
   };
   project.planes[0]!.provinceTarget = settings.players * settings.provincesPerPlayer;
-  return generateProject(project);
+  return options.generate === false ? project : generateProject(project);
 }
 
 export function applyResolution(project: MapProject, resolution: GenerationSettings["resolution"]): MapProject {
@@ -502,6 +504,8 @@ export function previewProvinceBudget(project: MapProject) {
 }
 
 export function generateProject(project: MapProject): MapProject {
+  assertCanRebuildLayout(project);
+  for (const plane of project.planes) if (plane.generationOverrides) assertPlaneGenerationOverrides(plane.generationOverrides);
   const next = cloneProject(project);
   removeGeneratedCaveSpecificStarts(next);
   next.generationWarnings = [];
@@ -550,7 +554,7 @@ export function generateProject(project: MapProject): MapProject {
     normalized.provinceTarget = budget.planes[index]!.target;
     const requestedWater = next.settings.startDistribution!.water + (next.settings.startDistribution!.coastal ? Math.max(2, next.settings.startDistribution!.coastal) : 0);
     const waterPercent = ARCHETYPE_PROFILES[normalized.kind].waterCapable
-      ? Math.max(next.settings.waterPercent, Math.ceil((requestedWater * 100) / normalized.provinceTarget))
+      ? Math.max(normalized.generationOverrides?.waterPercent ?? next.settings.waterPercent, Math.ceil((requestedWater * 100) / normalized.provinceTarget))
       : 0;
     return generatePlane(normalized, next.settings, `${next.seed}:plane:${index}:v1`, index, {
       deferStrategicFeatures: true,
@@ -570,6 +574,7 @@ export function generateProject(project: MapProject): MapProject {
       `${next.seed}:overland-topology:${plane.id}`,
       next.specificStarts.filter((start) => start.planeId === plane.id).map((start) => start.provinceId),
     );
+    applyPlaneRoutePreferences(next, plane);
   }
   // Gates are movement edges for throne-access balance, so establish them
   // before globally distributing thrones. Throne candidates then exclude the
@@ -598,7 +603,11 @@ export function generateProject(project: MapProject): MapProject {
   // assignment. Reapply the clean-capital invariant as the final strategic
   // mutation so generated and preserved authored starts behave alike.
   clearAllPlayerStartFeatures(next);
+  for (const plane of next.planes) applyPlaneContentPreferences(next, plane, (province, seed) =>
+    guardianFor(plane.kind, plane.variant ?? ARCHETYPE_PROFILES[plane.kind].defaultVariant, province, new SeededRandom(seed), seed));
   appendGuardianCapacityWarnings(next);
+  restoreGenerationLocks(project, next);
+  pruneAuthoringRegions(next);
   regenerateGeneratedProvinceNames(next.planes, next.seed, next.settings.provinceNameSeed);
   next.updatedAt = new Date().toISOString();
   return next;
@@ -927,7 +936,7 @@ function ensureOverlandStartCategoriesOnPlane(
     }
     if (!coastFeasible) continue;
     const forcedWater = new Set([...coastalWater, ...water.map((province) => province.id)]);
-    const waterTarget = Math.max(forcedWater.size, Math.round(plane.provinces.length * project.settings.waterPercent / 100));
+    const waterTarget = Math.max(forcedWater.size, Math.round(plane.provinces.length * (plane.generationOverrides?.waterPercent ?? project.settings.waterPercent) / 100));
     const waterRank = plane.provinces.filter((province) => !dry.has(province.id))
       .sort((a, b) => Number(isWaterProvince(b)) - Number(isWaterProvince(a))
         || field(a.x * 2.1, a.y * 2.3, hashString(`${project.seed}:category-water`) % 97)
@@ -1046,6 +1055,7 @@ export function generatePlane(
   planeIndex: number,
   options: GeneratePlaneOptions = {},
 ): Plane {
+  if (source.generationOverrides) assertPlaneGenerationOverrides(source.generationOverrides);
   const rng = new SeededRandom(stageSeed);
   const authoredNames = new Map(source.provinces
     .filter((province) => province.nameSource !== "generated")
@@ -1066,6 +1076,11 @@ export function generatePlane(
     const y = clamp((gridY + 0.5 + (rng.next() - 0.5) * 0.46) / rows, 0.003, 0.997);
     const climate = climateAt(x, y, hashString(stageSeed));
     const terrainBiome = chooseTerrain(source.kind, source.variant, climate, rng, settings, x, y);
+    const preferred = preferredDryTerrain(source, terrainBiome.terrain, x, y, `${stageSeed}:terrain-preference:${index}`);
+    if (preferred !== terrainBiome.terrain) {
+      terrainBiome.terrain = preferred;
+      terrainBiome.biome = biomeForTerrain(preferred);
+    }
     const profile = ARCHETYPE_PROFILES[source.kind];
     const populationBase = TERRAIN_POPULATION[terrainBiome.terrain];
     const population = populationBase
@@ -1132,7 +1147,7 @@ export function generatePlane(
   enforceWaterQuota(
     provinces,
     source,
-    options.waterPercent ?? settings.waterPercent,
+    options.waterPercent ?? source.generationOverrides?.waterPercent ?? settings.waterPercent,
     stageSeed,
     settings.biomeCohesion,
     normalizeOceanLayout(settings.oceanLayout),
@@ -1833,11 +1848,13 @@ function applySubterraneanWaters(plane: Plane, seed: string) {
   const caveKind = plane.kind;
   const active = plane.provinces.filter((province) => !isBlockedProvince(province));
   if (active.length < 8) return;
-  const target = clamp(
+  const waterPreference = plane.generationOverrides?.caveWaterPercent;
+  const target = waterPreference === undefined ? clamp(
     Math.round(active.length * (plane.kind === "cavern" ? 0.18 : 0.16)),
     Math.min(2, active.length),
     Math.max(2, active.length - 8),
-  );
+  ) : clamp(Math.round(active.length * waterPreference / 100), 0, Math.max(0, active.length - 8));
+  if (!target) return;
   const adjacency = adjacencyFor(plane, { traversableOnly: true });
   const byId = new Map(active.map((province) => [province.id, province]));
   const selected = new Set<string>();
@@ -2107,6 +2124,23 @@ function floodCaveProvince(province: Province, kind: "cave" | "cavern" | "underw
   province.biome = deep ? "deep_ocean" : kind === "underworld" ? "void_reaches" : "living_caves";
   province.population = Math.round((deep ? TERRAIN_POPULATION.deepsea : TERRAIN_POPULATION.sea) * ARCHETYPE_PROFILES[kind].populationScale);
   province.siteBias = kind === "underworld" ? ["death", "water", "earth"] : ["water", "earth", "glamour"];
+}
+
+/** Generate only thematic content for existing geography; callers choose which fields to copy. */
+export function rerollPlaneDetails(plane: Plane, seed: string, sourceProject?: MapProject): Plane {
+  const next = structuredClone(plane);
+  const profile = ARCHETYPE_PROFILES[plane.kind];
+  for (const province of next.provinces) {
+    if (isBlockedProvince(province)) continue;
+    const rng = new SeededRandom(`${seed}:content:${province.id}`);
+    const base = isWaterProvince(province) ? TERRAIN_POPULATION.sea : TERRAIN_POPULATION[province.terrain];
+    province.population = Math.min(50000, Math.max(100, Math.round(base * profile.populationScale * (0.83 + rng.next() * 0.34) / 10) * 10));
+    province.manySites = rng.chance(profile.manySitesChance);
+  }
+  assignArchetypeDetails(next.provinces, next.kind, next.variant, seed);
+  if (sourceProject) applyPlaneContentPreferences({ ...sourceProject, seed }, next, (province, guardianSeed) =>
+    guardianFor(next.kind, next.variant ?? profile.defaultVariant, province, new SeededRandom(guardianSeed), guardianSeed));
+  return next;
 }
 
 function assignArchetypeDetails(provinces: Province[], kind: PlaneKind, variant: PlaneVariant | undefined, seed: string) {

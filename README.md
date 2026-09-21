@@ -10,11 +10,12 @@ Projects, imported catalogs, and generated packages remain in your browser profi
 
 ## Versions and documentation
 
-This README and the user guide describe the current `main` source. The delivery channels are separate; verified on **September 20, 2026**:
+This README and the user guide include the September 20 implementation round on **`codex/full-implementation-round-sep20`**. Its new controls are development-only: this round has not been merged or published. The delivery channels are separate; reviewed on **September 20, 2026**:
 
 | Edition | Verified revision | Availability |
 | --- | --- | --- |
-| GitHub source | Includes repairs in [`bc5fe0a`](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/commit/bc5fe0a18601bd0665770f62fe6a643ef257088d) | All controls and corrections described in this guide; run from source for the latest fixes. |
+| Development checkout | `codex/full-implementation-round-sep20`, based on `958e545` | Adds Iterate, plane preferences, expanded structural diagnostics, native inspection, player ZIPs, and guardian fixtures. Testing is in progress; not a release. |
+| GitHub `main` | [`958e545`](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/commit/958e54564a6062c93689219fb26979ca97bd5499) | Includes September 20 repairs, but not the new development controls listed above. |
 | Hosted GUI | Site version 12, [`c0ab14a`](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/commit/c0ab14ac5da4d52f552872885b493b640b1d123d), published September 19 | Includes the multiplayer workbench and new naming controls, but not the September 20 repairs. |
 | Windows installer / portable release | [v0.1.4](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/tag/v0.1.4), published September 6 | Predates the multiplayer workbench, randomized fresh-project seeds, optional name shuffling on reopen, and subsequent repairs. |
 
@@ -46,6 +47,13 @@ Where browser folder access is supported, use **Install directly**; otherwise us
 - Browser autosave, Undo/Redo, editable JSON backups, direct folder installation, ZIP export, and structural/gameplay validation.
 - Planned-versus-current province budgets, control-scope labels, cross-plane province search, and a per-start structural inspector with temporary region highlights.
 
+The development round adds opt-in tools without changing inherited generation settings:
+
+- **Iterate:** filtered province selections, named bookmarks, field/layout/start locks, previewed batch edits and content rerolls, settings recipes, and comparison of two or three generated candidates.
+- **Plane preferences:** dry-terrain weights and regional plans, water preferences, eligible border mixes, guardian coverage/troop counts, and many-sites preferences.
+- **Inspection and handoff:** read-only native-file inventories, separate guardian test maps, and player ZIPs that omit editable projects and host reports.
+- **Structural review:** fractional expansion opportunity, hostile-frontier exposure, shared capital surroundings, separate objective distances, and optional patch-bound host terrain requirements. These requirements are checks, not automatic nation bonuses.
+
 For every generator, plane, scenario, province, catalog, validation, and export control, use the [user guide](docs/USER_GUIDE.md).
 
 ## Typical workflow
@@ -53,8 +61,8 @@ For every generator, plane, scenario, province, catalog, validation, and export 
 1. Choose player count, provinces per player, start allocation, ocean style, and output size on **Generate**.
 2. Add or customize planes, their sizes, start policies, terrain variants, and links on **Planes**.
 3. Review the next-generation province budget, generate the atlas, then inspect current starts and validation notices.
-4. Inspect or edit provinces, borders, gateways, starts, thrones, guardians, sites, and scenario settings.
-5. Save **Editable project JSON** as a backup, then use **Install directly** or **Download ready ZIP**.
+4. Inspect or edit provinces, borders, gateways, starts, thrones, guardians, sites, and scenario settings. In the development version, use **Iterate** to preview larger changes or compare candidates.
+5. Save **Editable project JSON** as a backup, then use **Install directly** or **Download ready ZIP**. The development version also offers a reduced-spoiler **Download player ZIP**; native map files remain inspectable.
 
 `Players x provinces per player` sizes only core Surface, Cave, Cavern, and surface-like solid Custom realms. Auto-sized bonus planes are added as a configurable percentage of that core total; percentages above 100% are allowed. Manual plane sizes are preserved.
 
@@ -62,7 +70,7 @@ Start provinces and their directly connected neighbors are protected from genera
 
 **Inspect starts** separates export validity, the legacy structural score, and analysis limitations. Compare potential graph connections with conservative dry/water-separated routes; inspect nearby population, authored guardians, thrones, competing starts, and realm entrances. Distances are graph hops, not turns, and unknown population or guardian difficulty remains unknown. These diagnostics do not simulate nation strength or certify multiplayer balance.
 
-Optional game-patch and mod notes travel with project JSON and host reports. They never change generation or enable nation bonuses. Catalog versions are selector snapshots, not balance rulesets; patches and mods can invalidate nation-specific assumptions.
+Optional game-patch and mod notes travel with project JSON and host reports. They never change generation or enable nation bonuses. Development terrain-requirement checks are explicitly host-declared and become unverified when those declarations change. Catalog versions are selector snapshots, not balance rulesets; patches and mods can invalidate nation-specific assumptions.
 
 ## Dominions engine boundaries
 
@@ -79,7 +87,7 @@ Generated maps use native game content. Keep these distinctions in mind:
 
 ## Develop from source
 
-Use source for the latest corrections in `main`; use the hosted GUI or Windows installer for the simpler setup paths above. Source development requires **Node.js 22.13.0 or newer with npm**, plus Git for the clone method:
+Use source for the latest merged corrections; use the hosted GUI or Windows installer for the simpler setup paths above. A normal clone opens `main`, not the unmerged implementation round. Source development requires **Node.js 22.13.0 or newer with npm**, plus Git for the clone method:
 
 ```powershell
 git clone https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker.git
@@ -103,7 +111,7 @@ npm.cmd run licenses:check
 
 `npm test` includes a production build. CI additionally audits the locked dependencies and smoke-tests the local server and Windows launcher.
 
-The September 20 repair verification passed **368 automated tests** and desktop/narrow-screen browser checks. [GitHub CI for the repair commit](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35515033664) also passed. This is not a current-patch in-game or multiplayer-balance certification; see the [verification boundaries](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/REPAIR_VERIFICATION_2026-09-20.md).
+The merged September 20 repair verification passed **368 automated tests** and desktop/narrow-screen browser checks. [GitHub CI for that repair commit](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35515033664) also passed. Those results predate this implementation round; see its [work and verification record](docs/IMPLEMENTATION_ROUND_2026-09-20.md) for current evidence. Automated validation and structural seed evaluation do not certify nation balance, guardian combat, or actual multiplayer play.
 
 ## Documentation and references
 

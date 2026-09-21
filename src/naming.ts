@@ -384,7 +384,7 @@ export function regenerateGeneratedProvinceNames(
 
   for (const plane of planes) {
     for (const province of plane.provinces) {
-      if (province.nameSource === "generated") continue;
+      if (province.nameSource === "generated" && !province.editorLocks?.includes("name")) continue;
       authoredPreserved += 1;
       const key = normalizeProvinceName(province.name);
       if (key) used.add(key);
@@ -396,7 +396,7 @@ export function regenerateGeneratedProvinceNames(
     const coastal = coastalLandIds(plane);
     const ordered = [...plane.provinces].sort((left, right) => left.index - right.index || left.id.localeCompare(right.id));
     for (const province of ordered) {
-      if (province.nameSource !== "generated") continue;
+      if (province.nameSource !== "generated" || province.editorLocks?.includes("name")) continue;
       const vocabulary = namingVocabulary(provinceNameContext(plane, province, coastal));
       const rankKey = vocabulary.key;
       let rank = contextRanks.get(rankKey) ?? 0;
@@ -438,7 +438,7 @@ export function regenerateAllProvinceNames(
   reroll = 0,
 ): ProvinceNamingReport {
   for (const plane of planes) {
-    for (const province of plane.provinces) province.nameSource = "generated";
+    for (const province of plane.provinces) if (!province.editorLocks?.includes("name")) province.nameSource = "generated";
   }
   return regenerateGeneratedProvinceNames(planes, seed, reroll);
 }
