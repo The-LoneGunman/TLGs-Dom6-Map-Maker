@@ -4,7 +4,26 @@ Reviewed September 21, 2026. This record separates source testing from delivery.
 
 ## Delivery
 
-At the verification checkpoint, the tested source is on `codex/underground-visual-polish-sep21`. Merge, hosted deployment and Windows release publication are pending; successful local tests alone do not publish a release. Their results will be recorded here after completion.
+The tested development branch was fast-forward merged into `main` and pushed to both GitHub project remotes. Release source: [`581b2b866674ca4b8853514d7966341f758f4786`](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/commit/581b2b866674ca4b8853514d7966341f758f4786), tagged `v0.1.5`. Subsequent documentation-only delivery updates do not change that release source.
+
+| Channel | Verified result |
+| --- | --- |
+| Source CI | [Development branch](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35648608437) and [merged main](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35649445966) both passed the Linux full suite and Windows launcher gate. |
+| Hosted app | [Public Atlas](https://pantokrator-atlas.mbatlle7.chatgpt.site) deployed successfully as **Site version 13** from the exact release source. Post-deployment browser inspection confirmed the 6.37 catalog, v3/76-profile panel and map rendering, with no captured warnings/errors. |
+| Windows distribution | [v0.1.5](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/tag/v0.1.5) published September 21. The [tagged release workflow](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35649458074) passed all 743 tests, exact portable-ZIP smoke tests, verified runtime/compiler acquisition, and installer compile/install/launch/uninstall checks before publishing four assets. |
+
+The hosted source was also pushed to the publishing service's separate Git repository. Deployment ID: `appgdep_6ab18fe81d70819188c138c7cb7ac538`. Audience remained public. The local build-only archive was validated before upload; no project saves, test logs, source credentials or proprietary game files were packaged.
+
+An independent archive audit confirmed the compressed SHA-256 `1d91e6380e4b444d1aeb8bf5e1b9c8d44beef0d0dd70e4e1c507ae98a4eb8417`, 94 regular build files, safe paths, required worker/assets and 106 resolving relative imports. The published app's existing 96-province project passed compatibility validation; its sole warning concerned normal filename normalization.
+
+Published Windows assets were checked against GitHub's independently reported asset digests and the downloaded `.sha256` sidecars:
+
+| Download | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `Pantokrator-Atlas-Setup-x64.exe` | 46,055,916 | `c7c8f9fb720a834f946776515b3cd0190bec91ce09e1fc1b33b866a752e43ba3` |
+| `Pantokrator-Atlas-Windows.zip` | 46,618,427 | `df0e3419234670aa4f446fa08b5b844e355ce28acf59b4bf1b2de83c0d6d9c18` |
+
+The installer is not code-signed; successful packaging does not suppress Windows publisher warnings. GitHub also emitted non-blocking maintenance notices about the pinned artifact actions' Node runtime and the upcoming hosted-runner image migration. Those notices did not fail any gate; refresh those pins/images in a separately tested maintenance change.
 
 ## Automated and browser checks
 
@@ -30,7 +49,7 @@ The 267-province `Atlas_EightPlane_A6BNs3` package loaded and all eight authored
 
 Observed features included irregular cave chambers, curved/flared corridors, flooded cave links, the Underworld's cross-map Styx, volcanic terrain, wooded Dreamlands and mountain/cloud islands. This verifies rendering of this fixture, not every possible shape or travel route.
 
-Nine successful native hosts advanced the same game from Spring to **Winter in year 0**, confirmed in the game UI. Surface terrain changed to snow-covered scenery while water remained blue. The Caves and Underworld retained their underground floors, mushrooms and water routes without surface snow. A preceding verbose-debug host exceeded the test harness's 90-second limit during battle processing; it was not counted as a pass. Retrying without verbose battle logging completed all nine turns successfully.
+Nine successful native hosts advanced the same game from Spring to **Winter in year 0**, confirmed in the game UI. All eight authored planes were inspected again in winter. Surface terrain changed to snow-covered scenery while water remained blue. The Caves, Underworld, Inferno and Abyss retained underground floors without surface snow; cave water and the Styx remained visible. Dreamlands and Cloud Realm received native snow, while the Elemental Expanse showed mixed snowy, green/desert, volcanic and water terrain. This differs intentionally from Atlas's simplified outer-realm condition preview, not the exported native terrain. A preceding verbose-debug host exceeded the test harness's 90-second limit during battle processing; it was not counted as a pass. Retrying without verbose battle logging completed all nine turns successfully.
 
 Reproduction references:
 
@@ -44,4 +63,4 @@ Reproduction references:
 - Populations **43, 44, 72, 88, 105 and 106** remain unsupported for automatic armies. Shape changes, special leadership, missing commanders or empty rosters need separate treatment. Other eras, patches and mods are not silently accepted.
 - Atlas preview textures/backgrounds are not native D6M artwork. Dominions draws its own scenery; owner-zero underground gaps remain black in-game. The winter check covers the observed fixture, not every terrain/season/temperature combination.
 - No full multiplayer campaign, calibrated nation balance, universal recruitment/PD behavior, or every guardian matchup is certified. The earlier structural corpus's quality-target misses remain documented in [implementation status](MULTIPLAYER_IMPLEMENTATION_STATUS.md).
-- Hosted and Windows delivery require their separate deployment and clean-runner packaging gates. Installer/portable assets must be verified before calling them released.
+- Hosted and Windows delivery passed their separate gates above. Future builds still require independent deployment and clean-runner packaging checks; this record only certifies the listed release artifacts.

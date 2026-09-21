@@ -5,7 +5,7 @@ Documentation for the **0.1.5 source**, reviewed September 21, 2026. See the roo
 ## Current references
 
 - [User guide](USER_GUIDE.md): installation, generation, safe iteration, inspection, recovery, host/player export, and troubleshooting.
-- [0.1.5 release verification](RELEASE_VERIFICATION_0.1.5.md): current release-candidate checks, remaining limits, and delivery status.
+- [0.1.5 release verification](RELEASE_VERIFICATION_0.1.5.md): completed checks, remaining limits, and delivery status.
 - [Multiplayer implementation status](MULTIPLAYER_IMPLEMENTATION_STATUS.md): available controls and work that is still planned.
 - [Content catalog](CONTENT_CATALOG.md): pinned Dominions 6.37 selector data, separate recruitment membership, numeric IDs, and provenance limits.
 - [Population-defender acceptance](research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md): 76 opt-in v3 templates, 161 accepted terrain cases, excluded populations and evidence limits.

@@ -1,6 +1,6 @@
 # Underground visual polish — September 21, 2026
 
-Development branch: `codex/underground-visual-polish-sep21`; target source version **0.1.5**. At this release-preparation checkpoint, the candidate is not yet merged or published. Use [release verification](RELEASE_VERIFICATION_0.1.5.md) for delivery status and the latest consolidated checks.
+Development branch: `codex/underground-visual-polish-sep21`; source version **0.1.5**, integrated into `main` at `581b2b8`. Use [release verification](RELEASE_VERIFICATION_0.1.5.md) for hosted/Windows delivery status and the latest consolidated checks.
 
 This dated work record preserves the early v2 observations as history. Later v3 and guardian-capture acceptance below supersede its earlier coverage and blocked-native-testing statements; they do not establish universal seasonal, PD or combat-balance support.
 
@@ -10,7 +10,7 @@ This dated work record preserves the early v2 observations as history. Later v3 
 - Independent review matched every released profile to the frozen candidates, verified recruitment membership and leadership/habitat constraints including mounts, and checked all accepted cases against the native map/logs. The focused v3 suite passed **196 tests**, including frozen revision data. The subsequent consolidated run passed **743 tests (14 build/integration + 729 TypeScript)**, plus type checking, lint, license and server/launcher checks.
 - Browser acceptance covered imported v2 pinning, explicit v3 adoption, manual Cavemen #84 changes yielding eight troops, unsupported Troglodytes #44 fallback, Undo, and a 390-pixel viewport with a 347-pixel panel and no horizontal overflow or captured console errors.
 - Native creation accepted all eight planes of the multi-plane package, and all eight were visually inspected, including Dreamlands, Cloud and Elemental. A separate [generated Inferno encounter](research/NATIVE_GUARDIAN_CAPTURE_2026-09-21.md) completed the designated guardian battle and capture, followed by completed Lava-born commander/troop recruitment and PD-level-10 inspection. This is one scoped functional encounter, not universal PD or difficulty proof.
-- Seasonal checks and packaging/publication are tracked separately in the release record. Native logs establish template creation and commander survival through a complete turn, not a complete final troop census.
+- The eight-plane fixture was also hosted into winter and every plane inspected again: native surface-like realms can receive snow, while underground realms retained their floors and waterways. Packaging/publication and the exact seasonal observations are tracked in the release record. Native logs establish template creation and commander survival through a complete turn, not a complete final troop census.
 
 ## Implemented
 

@@ -1,6 +1,6 @@
 # Multiplayer workbench implementation
 
-Reviewed September 21, 2026 for the **0.1.5 source release candidate**. Source, hosted GUI and Windows releases are separate delivery channels. Release preparation has not itself merged or published the candidate; see [Versions and documentation](../README.md#versions-and-documentation) and [release verification](RELEASE_VERIFICATION_0.1.5.md).
+Reviewed September 21, 2026 for **0.1.5**, integrated into `main` at `581b2b8`, deployed as hosted Site version 13, and published as Windows release v0.1.5 after its independent packaging gate. See [Versions and documentation](../README.md#versions-and-documentation) and [release verification](RELEASE_VERIFICATION_0.1.5.md) for exact source/artifact references.
 
 This tracks the approved [comparative-research roadmap](MULTIPLAYER_MAPMAKER_RESEARCH_2026-09-06.md). Approval is not proof of delivery or measured balance. Selector catalogs are pinned to 6.37; they are not nation-strength rulesets or automatic update feeds.
 
@@ -48,6 +48,5 @@ Still outstanding:
 - Verified automatic nation accommodations. Host-declared checks are not a substitute for patch-specific evidence.
 - Comprehensive in-engine seasonal, recruitment, post-capture defence, and guardian-combat acceptance beyond the specific completed checks above. Populations 43, 44, 72, 88, 105 and 106 have no released automatic defender template; other eras, patches and mods remain outside v3's scope.
 - Human task studies and actual multiplayer playtests, plus investigation of the seed-corpus quality misses.
-- Completion of the remaining release checks, hosted deployment, and a separately built/tested Windows release. Use the release verification record for their status; passing source tests is not publication.
 
 The general illustrated asset-pack specification also remains a future contract, not a delivered pack-import system. New editing metadata is optional, but older apps can reject projects containing it; retain pre-upgrade JSON backups.
