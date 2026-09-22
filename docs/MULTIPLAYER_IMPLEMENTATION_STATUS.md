@@ -44,7 +44,7 @@ This tracks the approved [comparative-research roadmap](MULTIPLAYER_MAPMAKER_RES
 
 ## Verification and remaining work
 
-**Audit-repair follow-up:** **1,028 local automated tests (14 build/integration + 1,014 TypeScript)** passed, alongside type checking, lint, licenses, dependency audit and launcher/server checks. Real browser use verified rejected/accepted numeric edits, plane switching, Undo/Redo, generation, saved reload and narrow-screen layout. [The repair record](AUDIT_REPAIRS_2026-09-22.md) distinguishes compatibility evidence from remaining limits.
+**Audit-repair follow-up:** **1,029 local automated tests (14 build/integration + 1,015 TypeScript)** passed, alongside type checking, lint, licenses, dependency audit and launcher/server checks. Real browser use verified rejected/accepted numeric edits, plane switching, Undo/Redo, generation, saved reload and narrow-screen layout. [The repair record](AUDIT_REPAIRS_2026-09-22.md) distinguishes compatibility evidence from remaining limits.
 
 **Natural-landform baseline:** `464ff03` passed [merged-main CI](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35738115402): **1,010 automated tests (14 build/integration + 996 TypeScript)**. Browser use covered continental, island and inland-sea generation, mixed starts, terrain editing/Undo and saved geometry. The [natural-landform record](NATURAL_LANDFORMS_2026-09-22.md#final-checks) gives the fixtures and limits.
 

@@ -98,6 +98,21 @@ test("authored nation starts keep their plane references, protected features and
   assert.throws(() => generateProject(project), /locked/i);
 });
 
+test("dangling references cannot alias temporary canonical plane IDs during generation", () => {
+  const project = generateProject(configured("dangling-reference", "cave"));
+  const plane = project.planes[0]!, missing = plane.generationKey!, provinceId = plane.provinces[0]!.id;
+  assert.notEqual(missing, plane.id);
+  project.specificStarts = [{ nation: 15, planeId: missing, provinceId }];
+  project.authoring = { regions: [{ id: "stale-region", name: "Missing plane", planeId: missing, provinceIds: [provinceId] }] };
+  project.settings.planeConnections = [{ a: missing, b: project.planes[1]!.id, pairs: 3, enabled: true }];
+  const before = JSON.stringify(project), next = generateProject(project);
+  assert.equal(JSON.stringify(project), before);
+  assert.deepEqual(next.specificStarts, project.specificStarts, "a missing-plane start stays unresolved, never rebound");
+  assert.deepEqual(next.authoring?.regions, [], "missing-plane bookmarks are pruned, not moved to another plane");
+  assert.deepEqual(next.settings.planeConnections, [], "invalid planned links are dropped, not turned into valid ones");
+  assert.ok(validateProject(next).some(issue => issue.severity === "error"));
+});
+
 test("applied identity survives seed edits, recipe preview, reload and content-only rerolls", () => {
   const project = generateProject(configured("persisted-art", "cave"));
   const geometry = project.planes.map(p => computeProvinceTopology(p).cells), sampled = owners(project);

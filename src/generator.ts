@@ -539,6 +539,16 @@ export function generateProject(project: MapProject): MapProject {
   // Keep the applied identity for rendering after restoring reference IDs.
   const working = cloneProject(project);
   const ids = new Map(project.planes.map((plane, index) => [plane.id, idFor(project.seed, "plane", index)]));
+  // Keep dangling references outside the temporary plane-ID namespace. A
+  // missing saved plane may happen to have a canonical seed/slot ID; allowing
+  // that alias would silently assign its starts or bookmarks to a real plane.
+  const references = [
+    ...project.specificStarts.map(start => start.planeId),
+    ...project.gates.flatMap(gate => gate.endpoints.map(endpoint => endpoint.planeId)),
+    ...(project.settings.planeConnections ?? []).flatMap(link => [link.a, link.b]),
+    ...(project.authoring?.regions ?? []).map(region => region.planeId),
+  ];
+  for (const id of references) if (!ids.has(id)) ids.set(id, `unresolved-generation-plane-${ids.size}`);
   remapGenerationPlaneIds(working, ids);
   const generated = generateProjectWithIdentities(working);
   remapGenerationPlaneIds(generated, new Map([...ids].map(([from, to]) => [to, from])));
