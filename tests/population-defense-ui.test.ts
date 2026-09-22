@@ -173,7 +173,7 @@ test("Host and scenario integrates the policy through undoable project mutation 
   assert.match(app.slice(panel, panel + 500), /project=\{project\} catalog=\{catalog\}/);
   assert.match(app.slice(panel, panel + 500), /onPolicyChange=\{policy => mutate\(draft => \{ draft\.populationDefense = policy;/);
   assert.match(app.slice(panel, panel + 500), /onContextChange=\{context => mutate\(draft => \{ draft\.analysisContext = context;/);
-  assert.match(app, /zipPackageSafety\(project, catalog\)/);
+  assert.match(app, /zipPackageSafety\(project, catalog, artwork\)/);
   assert.match(app, /<ExportDialog\s+project=\{project\}\s+catalog=\{catalog\}/);
   assert.match(app, /estimatedPackageBytes\(project, catalog\)/);
   assert.match(app, /<PopulationDefenseProvinceStatus project=\{project\} catalog=\{catalog\} planeId=\{activePlane\.id\} provinceId=\{selected\.id\}/);

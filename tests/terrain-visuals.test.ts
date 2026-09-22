@@ -130,7 +130,7 @@ test("native exports update all terrain bits and relief, without putting unsuppo
   assert.equal(terrainMask(first) & TERRAIN_BITS.farm, 0n);
 });
 
-test("the shared PNG painter changes for each added flag and restores the original after removal", async () => {
+test("the existing vector PNG painter changes for each added flag and restores the original after removal", async () => {
   const priorDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
   const calls: unknown[][] = [];
   class Context {
@@ -173,10 +173,14 @@ test("the shared PNG painter changes for each added flag and restores the origin
     assert.equal(await trace("winter"), combined, "cave terrain receives no winter snow, including its feature glyphs");
     province.terrainFlags = ["forest"];
     assert.notEqual(await trace("winter"), await trace(), "eligible surface land receives winter cover");
-    plane.kind = "hell";
+    // Built-in Hell now uses the procedural painter, covered byte-for-byte in
+    // sky-png.test.ts. An infernal Custom plane retains this vector path.
+    plane.kind = "custom";
+    plane.variant = "infernal";
     plane.ownershipMode = "solid";
     assert.equal(await trace("winter"), await trace(), "outer realms retain their normal palette and feature colors");
     plane.kind = "surface";
+    plane.variant = "temperate";
     province.terrainFlags = [];
     assert.equal(await trace(), plain);
     for (const [wrapX, wrapY] of [[true, false], [false, true], [true, true]]) {

@@ -9,6 +9,7 @@ import {
 } from "../src/export";
 import { createDefaultProject } from "../src/generator";
 import { BUILTIN_DOM6_CATALOG, createCatalogTemplate, mergeCatalogBundles } from "../src/catalog";
+import { IMAGE_SUFFIXES, imageFileStem, nativeFileStem } from "../src/illustratedMap";
 
 const obsoleteNames = (root: string, firstPlane: number) => {
   const names: string[] = [];
@@ -28,6 +29,7 @@ class MemoryDirectory {
   readonly files = new Map<string, Uint8Array>();
   readonly events: string[] = [];
   failWrite?: (name: string) => unknown;
+  failRemove?: (name: string) => unknown;
   readOverride?: (name: string, data: Uint8Array) => Uint8Array;
 
   constructor(initial: Record<string, string> = {}) {
@@ -36,6 +38,8 @@ class MemoryDirectory {
 
   async removeEntry(name: string) {
     this.events.push(`remove:${name}`);
+    const failure = this.failRemove?.(name);
+    if (failure) throw failure;
     if (!this.files.delete(name)) throw notFound();
   }
 
@@ -549,4 +553,293 @@ test("package includes replace-folder instructions and reports vertical-only wra
   assert.match(install, /Do not merge/i);
   assert.match(host, /Wrap: north\/south/);
   assert.doesNotMatch(host, /Wrap: none \+/);
+});
+
+function illustratedInstallProject(planeCount = 1) {
+  const project = smallInstallProject(planeCount);
+  for (const plane of project.planes) plane.kind = "cloud";
+  return project;
+}
+
+async function imageHash(data: Uint8Array): Promise<string> {
+  return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", data.slice().buffer)), byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+const illustratedInstall = (project: ReturnType<typeof smallInstallProject>) => installPackage(project, undefined, undefined, "illustrated");
+
+test("native export remains the default and produces no artwork manifest or images", async () => {
+  const project = smallInstallProject();
+  const implicit = await buildPackageFiles(project);
+  const explicit = await buildPackageFiles(project, undefined, undefined, "host", undefined, "native");
+  assert.deepEqual(implicit, explicit);
+  assert.equal(implicit.some(file => file.name.endsWith(".tga") || file.name === "atlas_artwork.json"), false);
+});
+
+test("illustrated host and player packages share all image variants, maps, and ownership records", async () => {
+  const project = illustratedInstallProject();
+  const host = await buildPackageFiles(project, undefined, undefined, "host", undefined, "illustrated");
+  const player = await buildPackageFiles(project, undefined, undefined, "player", undefined, "illustrated");
+  const gameplay = (files: typeof host) => files.filter(file => /\.(map|tga|d6m)$/.test(file.name) || file.name === "atlas_artwork.json");
+  assert.deepEqual(gameplay(host), gameplay(player));
+  assert.deepEqual(host.filter(file => file.name.endsWith(".tga")).map(file => file.name),
+    IMAGE_SUFFIXES.map(suffix => `${imageFileStem(project, 0)}${suffix}.tga`));
+  assert.equal(host.some(file => file.name.endsWith(".d6m")), false);
+  const manifest = JSON.parse(new TextDecoder().decode(host.find(file => file.name === "atlas_artwork.json")!.data));
+  assert.equal(manifest.mapRoot, "Safety_Atlas");
+  assert.equal(manifest.images.length, IMAGE_SUFFIXES.length);
+  for (const record of manifest.images) assert.equal(record.sha256, await imageHash(host.find(file => file.name === record.name)!.data));
+  assert.match(new TextDecoder().decode(host.find(file => file.name === "INSTALL.txt")!.data), /all TGA variants/);
+});
+
+test("a mixed illustrated package preserves the native surface binary and uses independent realm image names", async () => {
+  const project = illustratedInstallProject(2);
+  project.planes[0]!.kind = "surface";
+  const native = await buildPackageFiles(project);
+  const mixed = await buildPackageFiles(project, undefined, undefined, "host", undefined, "illustrated");
+  assert.deepEqual(mixed.find(file => file.name === "Safety_Atlas.d6m"), native.find(file => file.name === "Safety_Atlas.d6m"));
+  assert.equal(mixed.some(file => file.name === "Safety_Atlas_plane2.d6m"), false);
+  assert.equal(mixed.filter(file => file.name.endsWith(".map")).length, 2);
+  assert.match(new TextDecoder().decode(mixed.find(file => file.name === "Safety_Atlas_plane2.map")!.data), /#imagefile Safety_Atlas_realm2\.tga/);
+  assert.equal(mixed.filter(file => file.name.endsWith(".tga")).length, IMAGE_SUFFIXES.length);
+});
+
+test("an illustrated-first atlas aliases later native binaries without changing geography bytes", async () => {
+  const project = illustratedInstallProject(2);
+  project.planes[1]!.kind = "surface";
+  const native = await buildPackageFiles(project);
+  const mixed = await buildPackageFiles(project, undefined, undefined, "host", undefined, "illustrated");
+  const alias = `${nativeFileStem(project, 1, "illustrated")}.d6m`;
+  assert.equal(alias, "Safety_Atlas_realm2.d6m");
+  assert.deepEqual(mixed.find(file => file.name === alias)!.data, native.find(file => file.name === "Safety_Atlas_plane2.d6m")!.data);
+  assert.equal(mixed.some(file => file.name === "Safety_Atlas_plane2.d6m"), false);
+  assert.match(new TextDecoder().decode(mixed.find(file => file.name === "Safety_Atlas_plane2.map")!.data), /#imagefile Safety_Atlas_realm2\.d6m/);
+  const manifest = JSON.parse(new TextDecoder().decode(mixed.find(file => file.name === "atlas_artwork.json")!.data));
+  assert.equal(manifest.images.find((record: { name: string }) => record.name === alias).sha256,
+    await imageHash(mixed.find(file => file.name === alias)!.data));
+  assert.equal(mixed.filter(file => file.name.endsWith(".map")).length, 2);
+});
+
+test("illustrated-first install refuses an unowned native-recipe alias before staging", async () => {
+  const project = illustratedInstallProject(2);
+  project.planes[1]!.kind = "surface";
+  const alias = `${nativeFileStem(project, 1, "illustrated")}.d6m`;
+  const directory = new MemoryDirectory(atlasOwnedFiles(project, { [alias]: "user-authored recipe" }));
+  await assert.rejects(withDirectoryPicker(directory, () => illustratedInstall(project)), /not an unchanged Atlas-owned artwork file.*No files were changed/);
+  assert.equal(directory.events.some(event => event.startsWith("write:") || event.startsWith("remove:")), false);
+  assert.deepEqual(directory.files.get(alias), encode("user-authored recipe"));
+});
+
+test("native mode cleanup removes only the owned illustrated-first recipe alias", async () => {
+  const project = illustratedInstallProject(2);
+  project.planes[1]!.kind = "surface";
+  const alias = `${nativeFileStem(project, 1, "illustrated")}.d6m`;
+  const directory = new MemoryDirectory();
+  await withDirectoryPicker(directory, async () => {
+    assert.equal(await illustratedInstall(project), "installed");
+    const recipe = directory.files.get(alias)!.slice();
+    directory.files.set("Safety_Atlas_realm8.d6m", encode("unowned unused recipe"));
+    assert.equal(await installPackage(project), "installed");
+    assert.equal(directory.files.has(alias), false);
+    assert.deepEqual(directory.files.get("Safety_Atlas_plane2.d6m"), recipe);
+    assert.deepEqual(directory.files.get("Safety_Atlas_realm8.d6m"), encode("unowned unused recipe"));
+    assert.match(new TextDecoder().decode(directory.files.get("Safety_Atlas_plane2.map")), /#imagefile Safety_Atlas_plane2\.d6m/);
+    const manifest = JSON.parse(new TextDecoder().decode(directory.files.get("atlas_artwork.json")));
+    assert.equal(manifest.images.find((record: { name: string }) => record.name === alias).sha256, await imageHash(recipe));
+  });
+});
+
+test("illustrated ZIP safety accounts for variants and blocks large packages before rendering", async () => {
+  const project = illustratedInstallProject();
+  const native = zipPackageSafety(project);
+  const illustrated = zipPackageSafety(project, undefined, "illustrated");
+  assert.ok(illustrated.estimatedPackageBytes - native.estimatedPackageBytes > 256 * 256 * 50);
+  const files = await buildPackageFiles(project, undefined, undefined, "host", undefined, "illustrated");
+  assert.ok(illustrated.estimatedPackageBytes >= files.reduce((sum, file) => sum + file.data.length, 0));
+  project.planes[0]!.width = 3840;
+  project.planes[0]!.height = 2160;
+  assert.equal(zipPackageSafety(project, undefined, "illustrated").level, "blocked");
+  await assert.rejects(downloadPackage(project, undefined, undefined, "host", "illustrated"), /safe memory limit/);
+});
+
+test("illustrated install refuses a legacy folder's unowned target TGA before staging", async () => {
+  const project = illustratedInstallProject();
+  const name = `${imageFileStem(project, 0)}.tga`;
+  const directory = new MemoryDirectory(atlasOwnedFiles(project, { [name]: "user artwork", "Safety_Atlas.map": "old map" }));
+  await assert.rejects(withDirectoryPicker(directory, () => illustratedInstall(project)), /not an unchanged Atlas-owned artwork file.*No files were changed/);
+  assert.equal(directory.events.some(event => event.startsWith("write:") || event.startsWith("remove:")), false);
+  assert.deepEqual(directory.files.get(name), encode("user artwork"));
+});
+
+test("artwork manifests cannot authorize traversal, foreign, duplicate, or malformed image records", async () => {
+  const project = illustratedInstallProject();
+  const good = { name: `${imageFileStem(project, 0)}.tga`, sha256: "a".repeat(64) };
+  for (const override of [
+    { mapRoot: "Foreign_Atlas" },
+    { images: [{ ...good, name: "../other.tga" }] },
+    { images: [{ ...good, name: "Safety_Atlas_battle.tga" }] },
+    { images: [{ ...good, sha256: "not a hash" }] },
+    { images: [good, good] },
+    { unexpected: "field" },
+  ]) {
+    const manifest = { schemaVersion: 1, mapRoot: "Safety_Atlas", artwork: "illustrated", images: [good], ...override };
+    const directory = new MemoryDirectory(atlasOwnedFiles(project, { "atlas_artwork.json": JSON.stringify(manifest) }));
+    await assert.rejects(withDirectoryPicker(directory, () => illustratedInstall(project)), /invalid or foreign artwork ownership record.*No files were changed/);
+    assert.equal(directory.events.some(event => event.startsWith("write:") || event.startsWith("remove:")), false);
+  }
+});
+
+test("illustrated direct install publishes every variant before map references and preserves unowned images", async () => {
+  const project = illustratedInstallProject();
+  const directory = new MemoryDirectory(atlasOwnedFiles(project, {
+    "Safety_Atlas.d6m": "old native binary", "Safety_Atlas_plane2.tga": "unowned old-style image",
+    "Safety_Atlas_realm8.tga": "unowned unused-realm image", "battlefield.tga": "unrelated",
+  }));
+  assert.equal(await withDirectoryPicker(directory, () => illustratedInstall(project)), "installed");
+  const mapWrite = directory.events.indexOf("write:Safety_Atlas.map");
+  for (const suffix of IMAGE_SUFFIXES) {
+    const name = `${imageFileStem(project, 0)}${suffix}.tga`;
+    assert.ok(directory.events.indexOf(`write:${name}`) < mapWrite);
+    assert.ok(directory.files.has(name));
+  }
+  assert.equal(directory.files.has("Safety_Atlas.d6m"), false);
+  assert.deepEqual(directory.files.get("Safety_Atlas_plane2.tga"), encode("unowned old-style image"));
+  assert.deepEqual(directory.files.get("Safety_Atlas_realm8.tga"), encode("unowned unused-realm image"));
+  assert.deepEqual(directory.files.get("battlefield.tga"), encode("unrelated"));
+  assert.equal([...directory.files.keys()].some(name => name.startsWith(".__pantokrator_atlas_install__")), false);
+});
+
+test("switching back to native removes only manifest-proven artwork and retains retry provenance", async () => {
+  const project = illustratedInstallProject();
+  const directory = new MemoryDirectory();
+  await withDirectoryPicker(directory, async () => {
+    assert.equal(await illustratedInstall(project), "installed");
+    directory.files.set("Safety_Atlas_realm8.tga", encode("unowned unused image"));
+    assert.equal(await installPackage(project), "installed");
+  });
+  for (const suffix of IMAGE_SUFFIXES) assert.equal(directory.files.has(`${imageFileStem(project, 0)}${suffix}.tga`), false);
+  assert.ok(directory.files.has("Safety_Atlas.d6m"));
+  assert.deepEqual(directory.files.get("Safety_Atlas_realm8.tga"), encode("unowned unused image"));
+  const manifest = JSON.parse(new TextDecoder().decode(directory.files.get("atlas_artwork.json")));
+  assert.equal(manifest.artwork, "native");
+  assert.equal(manifest.images.length, IMAGE_SUFFIXES.length);
+});
+
+test("shrinking an illustrated atlas removes every obsolete owned variant and numbered map", async () => {
+  const project = illustratedInstallProject(2);
+  const directory = new MemoryDirectory();
+  await withDirectoryPicker(directory, async () => {
+    assert.equal(await illustratedInstall(project), "installed");
+    const oldStem = imageFileStem(project, 1);
+    project.planes.pop();
+    assert.equal(await illustratedInstall(project), "installed");
+    assert.equal(directory.files.has("Safety_Atlas_plane2.map"), false);
+    for (const suffix of IMAGE_SUFFIXES) assert.equal(directory.files.has(`${oldStem}${suffix}.tga`), false);
+  });
+});
+
+test("an illustrated variant staging failure leaves an existing native installation untouched", async () => {
+  const project = illustratedInstallProject();
+  const initial = atlasOwnedFiles(project, { "Safety_Atlas.map": "old map", "Safety_Atlas.d6m": "old native" });
+  const directory = new MemoryDirectory(initial);
+  directory.failWrite = name => name.includes("__stage__") && name.endsWith("_forest.tga.tmp") ? new Error("variant quota failure") : undefined;
+  await assert.rejects(withDirectoryPicker(directory, () => illustratedInstall(project)), /variant quota failure/);
+  for (const [name, data] of Object.entries(initial)) assert.deepEqual(directory.files.get(name), encode(data));
+  assert.equal(directory.files.size, Object.keys(initial).length);
+});
+
+test("a failed illustrated map publish rolls back native files and all newly published images", async () => {
+  const project = illustratedInstallProject();
+  const initial = atlasOwnedFiles(project, { "Safety_Atlas.map": "old map", "Safety_Atlas.d6m": "old native" });
+  const directory = new MemoryDirectory(initial);
+  let failed = false;
+  directory.failWrite = name => {
+    if (!failed && name === "Safety_Atlas.map") { failed = true; return new Error("map publish failed"); }
+  };
+  await assert.rejects(withDirectoryPicker(directory, () => illustratedInstall(project)), /map publish failed/);
+  for (const [name, data] of Object.entries(initial)) assert.deepEqual(directory.files.get(name), encode(data));
+  assert.equal(directory.files.size, Object.keys(initial).length);
+});
+
+test("a failed illustrated image update restores prior image and manifest bytes", async () => {
+  const project = illustratedInstallProject();
+  const directory = new MemoryDirectory();
+  await withDirectoryPicker(directory, async () => {
+    assert.equal(await illustratedInstall(project), "installed");
+    const originals = new Map([...directory.files].map(([name, bytes]) => [name, bytes.slice()]));
+    project.planes[0]!.provinces[0]!.terrain = "forest";
+    let failed = false;
+    directory.failWrite = name => {
+      if (!failed && name === `${imageFileStem(project, 0)}_forest.tga`) { failed = true; return new Error("image publish failed"); }
+    };
+    await assert.rejects(illustratedInstall(project), /image publish failed/);
+    assert.deepEqual(directory.files, originals);
+  });
+});
+
+test("modified previously owned artwork is never overwritten or deleted", async () => {
+  const project = illustratedInstallProject();
+  const directory = new MemoryDirectory();
+  await withDirectoryPicker(directory, async () => {
+    assert.equal(await illustratedInstall(project), "installed");
+    const name = `${imageFileStem(project, 0)}_winter.tga`;
+    directory.files.set(name, encode("manual artwork edit"));
+    directory.events.length = 0;
+    await assert.rejects(installPackage(project), /not an unchanged Atlas-owned artwork file/);
+    assert.equal(directory.events.some(event => event.startsWith("write:") || event.startsWith("remove:")), false);
+    assert.deepEqual(directory.files.get(name), encode("manual artwork edit"));
+  });
+});
+
+test("failed stale-image cleanup retains hash ownership and can be retried safely", async () => {
+  const project = illustratedInstallProject();
+  const directory = new MemoryDirectory();
+  await withDirectoryPicker(directory, async () => {
+    assert.equal(await illustratedInstall(project), "installed");
+    const name = `${imageFileStem(project, 0)}_forest.tga`;
+    directory.failRemove = candidate => candidate === name ? new Error("cleanup denied") : undefined;
+    await assert.rejects(installPackage(project), /current atlas was installed.*could not remove/);
+    assert.ok(directory.files.has(name));
+    const manifest = JSON.parse(new TextDecoder().decode(directory.files.get("atlas_artwork.json")));
+    assert.equal(manifest.images.find((image: { name: string }) => image.name === name).sha256, await imageHash(directory.files.get(name)!));
+    directory.failRemove = undefined;
+    assert.equal(await installPackage(project), "installed");
+    assert.equal(directory.files.has(name), false);
+  });
+});
+
+test("a concurrent image writer is preserved during illustrated rollback with its old backup retained", async () => {
+  const project = illustratedInstallProject();
+  const directory = new MemoryDirectory();
+  await withDirectoryPicker(directory, async () => {
+    assert.equal(await illustratedInstall(project), "installed");
+    const name = `${imageFileStem(project, 0)}.tga`;
+    const original = directory.files.get(name)!.slice();
+    project.planes[0]!.provinces[0]!.terrain = "forest";
+    directory.failWrite = candidate => {
+      if (candidate === "Safety_Atlas.map") {
+        directory.files.set(name, encode("outside artwork writer"));
+        return new Error("interrupted map publication");
+      }
+    };
+    await assert.rejects(illustratedInstall(project), /backup temporary files were retained/);
+    assert.deepEqual(directory.files.get(name), encode("outside artwork writer"));
+    const backup = [...directory.files].find(([candidate]) => candidate.includes("__backup__") && candidate.endsWith(`${name}.tmp`));
+    assert.ok(backup);
+    assert.deepEqual(backup[1], original);
+    assert.equal([...directory.files.keys()].some(candidate => candidate.includes("__stage__")), false);
+  });
+});
+
+test("a changing artwork manifest cannot replace the ownership record accepted at preflight", async () => {
+  const project = illustratedInstallProject();
+  const directory = new MemoryDirectory();
+  await withDirectoryPicker(directory, async () => {
+    assert.equal(await illustratedInstall(project), "installed");
+    directory.events.length = 0;
+    let reads = 0;
+    directory.readOverride = (name, data) => name === "atlas_artwork.json" && ++reads === 2
+      ? encode('{"concurrent":"ownership change"}') : data;
+    await assert.rejects(illustratedInstall(project), /ownership record changed.*No files were changed/);
+    assert.equal(directory.events.some(event => event.startsWith("write:") || event.startsWith("remove:")), false);
+  });
 });

@@ -1,10 +1,10 @@
 # Pantokrator Atlas User Guide
 
-Pantokrator Atlas is a local-first map maker for Dominions 6. It generates deterministic, multiplayer-oriented atlases with one to eight planes and exports native `.map` and `.d6m` files that Dominions can load directly.
+Pantokrator Atlas is a local-first map maker for Dominions 6. It generates deterministic, multiplayer-oriented atlases with one to eight planes and exports playable packages that Dominions can load directly. Native `.map`/`.d6m` scenery remains the default; the development source also offers illustrated realm images.
 
 The package version described here remains **0.1.5**. It includes **Iterate, plane generation preferences, expanded analysis, native inspection, player ZIPs, guardian fixtures, underground visual polish, and population-matched initial defenders**; later additions are explicitly marked **unreleased development**. The hosted GUI and Windows release can contain an earlier source revision. Check [Versions and documentation](../README.md#versions-and-documentation) before looking for a missing control; a normal clone selects the default branch, not an unmerged candidate.
 
-Automatic [connected-region layouts](#province-layout) and procedural [Cloud/Air editor and PNG artwork](#sky-realm-appearance-in-dominions) below are **unreleased development additions**, not part of the published 0.1.5 build. Keep a pre-upgrade JSON backup; regenerating a sparse realm deliberately creates a different movement graph from the earlier generator.
+Automatic [connected-region layouts](#province-layout), [procedural realm artwork](#procedural-realm-appearance), and the [Illustrated realms export](#in-game-artwork) below are **unreleased development additions**, not part of the published 0.1.5 build from `581b2b8`. Keep a pre-upgrade JSON backup; regenerating a sparse realm deliberately creates a different movement graph from the earlier generator.
 
 The [release verification record](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/RELEASE_VERIFICATION_0.1.5.md) separates completed tests from remaining limits and delivery. Native testing covers specific map-loading, winter appearance, defender-template and guardian-capture cases; it does not certify every seasonal visual, PD roster or multiplayer matchup. Supplemental evidence and catalog links open GitHub and require internet access; the installed Windows edition bundles this guide and the README for offline use.
 
@@ -77,7 +77,7 @@ Uninstall through **Windows Settings -> Apps -> Installed apps -> Pantokrator At
 5. Review the map, generation notice, fairness report, and **Validate** results.
 6. Make province, border, site, guardian, throne, and actual-gateway edits.
 7. Resolve every red validation error.
-8. Choose **Install / export** and either install directly into the Dominions user-data `maps` folder or download the ready ZIP.
+8. Choose **Install / export**, select the desired **In-game artwork** in development builds, and either install directly into the Dominions user-data `maps` folder or download the ready ZIP.
 
 ## The safest editing workflow
 
@@ -108,7 +108,7 @@ The main areas and controls are:
 
 Selecting a plane in the Planes list or the strip below the map makes it active. Selecting a province opens it in the inspector.
 
-**Find a province** searches all planes by province name, plane name, or number. Numbers (with or without `#`) match either the global export number or the local province number. Add a plane-name word to narrow ambiguous local numbers. The first 30 matches are shown with both numbers. Selecting a result switches to **Select** and cancels any armed border/gateway endpoint; it does not edit the map.
+**Find a province** searches all planes by province name, plane name, or number. Numbers (with or without `#`) match either the editor's global number or the local province number; these match Native scenery export. Illustrated image provinces can have different in-game numbers; use the mapping in `host_settings.txt` to cross-reference them. Add a plane-name word to narrow ambiguous local numbers. The first 30 matches are shown with both editor numbers. Selecting a result switches to **Select** and cancels any armed border/gateway endpoint; it does not edit the map.
 
 Control labels identify their scope: **Next generation**, **Current Map**, **Current Map + next generation**, **Host / export**, **Preview only**, **Saved note only**, or **On project open**. Current-map changes are reflected in later exports; they do not alter a map already installed in Dominions. Biome and patch notes are descriptive, while primary terrain and terrain flags affect artwork and game rules.
 
@@ -364,15 +364,15 @@ The in-game plane name. Untouched generated names can update to a suitable uniqu
 | Archetype | Generated character |
 |---|---|
 | Surface | Solid overland with ordinary land and water; dense multiplayer topology. |
-| Cave | Sparse native-style chambers, fungal defaults, cave populations, and some flooded Sea + Cave chambers. |
-| Great cavern | Broader and more connected underground vaults with crystal-oriented defaults. |
+| Cave | Sparse native-style chambers, fungal defaults, cave populations, some flooded Sea + Cave chambers, and textured rock/fungal preview art. |
+| Great cavern | Broader and more connected underground vaults with crystal-oriented defaults and textured crystal preview art. |
 | Cloud realm | Sparse aerial islands and routes with Air/Glamour themes; editor/PNG previews use procedural floating islands and cloud banks. |
 | Air plane | Stronger aerial, storm, and Astral themes with the same procedural editor/PNG sky renderer. |
-| Underworld | Sparse death realm, undead/spectral guardians, cave-appropriate vanilla recruitment, and a connected River Styx dividing two dry banks with one or two crossings. |
-| Infernal realm | Hot Waste/Highland cave-family realm with Fire, Death, Blood, demons, and strong special defenders. |
-| Abyss | Hostile void realm with Death/Astral themes, horrors/demons, branching corridors, and sparse ownerless space. |
-| Dream realm | Glamour/Astral/Nature terrain with fay and magical defenders. |
-| Elemental | Fire, Air, Water, and Earth extremes with themed elementals. |
+| Underworld | Sparse death realm, undead/spectral guardians, cave-appropriate vanilla recruitment, and a connected River Styx dividing two dry banks with controlled crossings; preview art uses tomb-like stones and mist. |
+| Infernal realm | Hot Waste/Highland cave-family realm with Fire, Death, Blood, demons, and ember-lit preview art. |
+| Abyss | Hostile void realm with Death/Astral themes, horrors/demons, branching corridors, and obsidian preview art. |
+| Dream realm | Glamour/Astral/Nature terrain with fay, magical defenders, mist, and enchanted-vegetation preview art. |
+| Elemental | Fire, Air, Water, and Earth extremes with themed elementals and variant-led preview accents. |
 | Custom | Neutral solid overland profile for manual combinations; variants can supply special themes. |
 
 Surface and ordinary Custom default to full province ownership. Other archetypes use sparse chambers, junctions, routes, and native owner-zero negative space. Cave, Great Cavern, Underworld, Infernal and Abyss shapes use irregular chamber contours, softly curved passages where clearance permits, and smoother native elevation. Styx water routes and explicit bridge crossings retain their controlled geometry. These visual updates can change an older project's rendered appearance without changing its authored movement links.
@@ -401,6 +401,8 @@ Unreleased development feature; not available in the published 0.1.5 build.
 
 Sparse realms automatically use **Connected regions & passages**: adjacent province masses joined by broad passage provinces. The Planes panel explains the current layout; there is no classic-layout selector. **Generate** builds the corresponding clustered movement graph and remains a separate, confirmed regeneration step. Merely opening an existing map does not replace province IDs, contents, starts or movement links.
 
+Cloud and Air use broader, wind-shaped floating-island groups with irregular coastlines and gently curved, variable-width causeways. Passage provinces remain playable, and neighboring provinces in each group share substantial borders. These outlines update compatible current maps without regeneration; province centers, links, guardians and starts stay unchanged. The editor, Preview PNG, native geography and illustrated export all use the same click areas. Choose **Illustrated realms** to carry the cloud background and floating-island artwork into the game; native scenery still uses the game's art.
+
 The Underworld uses its dedicated **River Styx layout** to preserve its water barrier and controlled crossings. Solid planes retain full province ownership.
 
 Some older or manually linked planes have nonlocal connections that cannot be represented by adjacent regional provinces. Atlas retains compatibility geometry and displays a notice instead of silently deleting or rewriting those links. Keep the authored map, or back up and **Generate** for the new regional layout; normal regeneration can replace province content as described above. Compatibility geometry is a preservation safeguard, not another selectable generation style.
@@ -409,11 +411,13 @@ Atlas checks native-resolution ownership before displaying regional geometry. De
 
 Old project and recipe `sparseLayout` fields remain readable as compatibility metadata but cannot select the removed layout. Layout locks still protect geometry, and older generation snapshots are marked pending where the generator's effective layout has changed. Isolated guardian fixtures use the same automatic layout rule.
 
-### Sky-realm appearance in Dominions
+### Procedural realm appearance
 
-In this development source, Cloud and Air planes use a procedural sky renderer in the editor and **Preview PNG**. It draws groups of floating terrain islands over cloud banks rather than only coloring ordinary sparse footprints. Forested, Submerged, Wasted, and Farmland previews update eligible province terrain, and Frozen/winter adds illustrative snow to eligible dry islands. Water and cave terrain remain unsnowed. This art is generated locally from the current plane and does not reuse third-party map artwork.
+In this development source, the editor and **Preview PNG** render Cloud/Air as floating islands over clouds; Cave/Cavern with textured rock and fungal or crystal details; the Underworld with tomb-like stones and mist around the Styx; Infernal with ember fissures; Abyss with obsidian forms; Dream with mist and enchanted vegetation; and Elemental realms with variant-led accents. The pixels are generated locally and deterministically from project data, without external artwork, downloads, or new dependencies.
 
-Playable packages remain native `.map`/`.d6m`. Dominions supplies their strategic-map scenery and may show black ownerless space; Atlas does not install the procedural sky pixels. A research fixture proved that a separately registered image plane can load alongside D6M planes, but it is not a supported exporter and did not pass ownership, remapping, variant, packaging, or in-game GUI acceptance. The province **Skybox** setting changes battle scenery only. See the [dated rendering investigation](research/SKY_RENDERING_OPTIONS_2026-09-21.md) for protocol details.
+Primary terrain, additional flags, realm presets, and the selected Condition preview still determine the effective appearance. Actual Sea remains blue and receives aquatic-colored details, including the Styx and mixed water terrain on Infernal or Abyss planes; realm theming cannot repaint it as dry ground. Frozen/winter adds illustrative snow only where the existing preview policy allows it. Cloud/Air dry islands can receive snow, while the newly illustrated Cave/Cavern, Underworld, Infernal, Abyss, Dream, and Elemental realms retain their normal palette.
+
+The default **Native scenery** export uses `.map`/`.d6m`; Dominions supplies its scenery and may show black ownerless space. To carry these procedural landscapes into the game, choose **Install / export → In-game artwork → Illustrated realms (custom artwork)**. Atlas includes the generated TGA art, terrain/winter sheets and province ownership areas automatically, while Surface and Custom planes retain native scenery. The province **Skybox** setting still changes battle scenery only. See [In-game artwork](#in-game-artwork) and the [September 22 verification record](ILLUSTRATED_EXPORT_2026-09-22.md).
 
 ### Auto-size from player count and Province target
 
@@ -460,7 +464,7 @@ Treat these as preferences, not exact quotas. Locks, terrain variety, ocean cons
 
 ### Themed backdrops
 
-Sparse-plane art appears behind ownerless areas in the editor and PNG preview, while terrain materials adapt to province size and shape. Cloud/Air go further by rendering the playable terrain itself as procedural floating islands over clouds. These are preview features: Dominions renders owner-zero space and terrain with its native presentation.
+Sparse-plane art appears behind ownerless areas in the editor and PNG preview, while terrain materials adapt to province size, shape, effective flags, and realm. Procedural landscape treatment applies to the playable terrain in the named sky, underground, Underworld, Infernal/Abyss, Dream, and Elemental archetypes. These are preview features: Dominions renders owner-zero space and terrain with its native presentation.
 
 ### Remove this plane
 
@@ -632,9 +636,9 @@ Toggles the **Many sites** terrain bit. It does not place a named magic site; us
 
 ### Condition preview
 
-Options are Normal, Frozen/winter, Forested, Submerged, Wasted, and Farmland. These change only the editor and exported PNG preview. They do not modify terrain or create alternate files. Native D6M terrain lets Dominions render actual condition changes.
+Options are Normal, Frozen/winter, Forested, Submerged, Wasted, and Farmland. This selector changes only the editor and exported PNG preview, not project terrain or the starting conditions of a game. Native D6M lets Dominions render actual condition changes. The optional Illustrated realms exporter independently builds its complete terrain/winter image set; you do not need to select or export each preview condition.
 
-These previews are illustrative, not simulations of temperature or game events. Winter cover skips water and caves. Cloud/Air dry islands receive their own winter treatment; other special realms keep their normal winter palette. Warmer and Colder flags adjust cover on eligible dry land. Submerged adds water while retaining cave identity and turning forest cover into kelp. Forested, Wasted, and Farmland replace incompatible vegetation instead of leaving the original symbols underneath; Farmland does not turn seas or caves into fields.
+These previews are illustrative, not simulations of temperature or game events. Winter cover skips water and caves. Cloud/Air dry islands receive their existing winter treatment; the newly illustrated Underworld, Infernal, Abyss, Dream, and Elemental realms do not gain snow. Warmer and Colder flags adjust cover only on eligible dry land. Submerged adds water while retaining cave identity and turning forest cover into kelp. Forested, Wasted, and Farmland replace incompatible vegetation instead of leaving the original symbols underneath; Farmland does not turn seas or caves into fields.
 
 ### Pan, zoom, Fit, and plane switching
 
@@ -689,9 +693,9 @@ Heartland, Wildwood, Marshlands, Sunscorched, High country, Tundra, Archipelago,
 
 Sea, Highland, Swamp, Wasteland, Forest, Farm, Deep sea, Cave, Mountains, and Impassable cave wall can be combined additively.
 
-Changes repaint the map immediately and appear in the [high-resolution PNG preview](#preview-png). Mixed terrain combines its colors, materials, and symbols: Farm adds field rows, Forest adds trees (kelp under water), and Cave adds a cave arch. Mountains, hills, marshes, waste, and water have their own marks. Details fit within the province and remain clipped on irregular, narrow, and wrapped shapes; zoom in on small provinces. Fresh water adds a water marker without turning land into a sea. Deep sea only has an effect when Sea is also present.
+Changes repaint the map immediately and appear in the [high-resolution PNG preview](#preview-png). Mixed terrain combines its colors, materials, and symbols: Farm adds field rows, Forest adds trees (kelp under water), and Cave adds cave details. Mountains, hills, marshes, waste, and water have their own marks. Details fit within the province and remain clipped on irregular, narrow, and wrapped shapes; zoom in on small provinces. Fresh water adds a water marker without turning land into a sea. Deep sea only has an effect when Sea is also present.
 
-Download or install the package again after editing; a new Dominions game uses the updated terrain mask and elevation. You do not need to regenerate the atlas or edit image files. The game draws its own native terrain artwork, so it will not be pixel-identical to Atlas's preview. The [official D6M specification](https://www.illwinter.com/dom6/dom6fileformats.pdf) separates geography in `.d6m` from terrain in `.map`; Atlas exports both from the current province flags. Existing games do not automatically adopt terrain edits.
+Download or install the package again after editing; a new Dominions game uses the updated terrain flags. You do not need to regenerate the atlas or edit image files. Native scenery carries geography/elevation in `.d6m` and terrain in `.map`, then lets Dominions draw its own art. Illustrated realms also rebuilds the supported realms' custom images from the current flags. It does not bake editor labels, selection or analysis overlays into the game image. Existing games do not automatically adopt terrain edits; use a new game when changing export mode or province numbering.
 
 Useful combinations:
 
@@ -816,6 +820,8 @@ Appended inside that province's `#land` or `#setland` block after structured fea
 - Raw commands are not syntax-checked, deduplicated, or reconciled with structured controls.
 - Command order and scope are your responsibility.
 - They do not install mods or package referenced assets.
+
+Any active raw `#` command, whether at map, plane or province level, blocks **Illustrated realms** export. Its numeric province references cannot be safely inferred after image-based renumbering. Use **Native scenery**, or move the command's intent into supported structured controls. Comment-only raw notes do not trigger this restriction.
 
 Use the official map manual. Rare scenario commands such as `#god`, `#dominionstr`, and `#scale` belong at map level. Leave mandatory generated commands such as `#dom2title`, `#imagefile`, dimensions, and structured geography to the program.
 
@@ -944,19 +950,37 @@ Project JSON is editable source, not a playable map. Custom catalogs are stored 
 
 Open **Install / export** in the header after validation.
 
+### In-game artwork
+
+This selector is an **unreleased development feature**:
+
+| Choice | Playable output |
+| --- | --- |
+| **Native scenery (existing exporter)** — default | `.map`/`.d6m` for every plane; Dominions draws terrain and seasonal scenery. Atlas's custom realm pixels are not embedded. |
+| **Illustrated realms (custom artwork)** | Generated TGA landscapes and exact province ownership for Cloud, Air, Cave, Great Cavern, Underworld, Infernal, Abyss, Dream and Elemental planes. Surface and Custom remain native. No extra mod or image assembly is required. |
+
+Illustrated export produces 18 sheets per supported plane: base and winter, plus forest, waste, farm, swamp, highland, plain, kelp and water, each with a winter counterpart. The engine chooses the appropriate areas during play. Cloud/Air winter sheets add snow on eligible dry islands; the other illustrated realms intentionally retain their palette in winter. Sheets preserve province silhouettes and click areas; they do not imply that every terrain/season transition has been visually tested in-game.
+
+Image-based province numbers follow Dominions' white-pixel scan order. Atlas remaps structured starts, guardians, sites, neighbors and gateways automatically without changing the editable project or its analysis. The editor, `balance_report.txt` and `host_topology.txt` retain editor numbers; `host_settings.txt` includes the editor-local/global → in-game-local/global mapping for every province.
+
+**Start a new game when changing artwork modes.** Do not replace a running game's files with a differently numbered export. Keep the same complete package for host and players. Active advanced raw commands block illustrated export; they remain available with Native scenery.
+
+Illustrated packages take longer to render and can be much larger. The dialog's size and memory checks change with the selected mode. Prefer **Install directly** for large illustrated maps; it stages one image at a time. [Verification and remaining limits](ILLUSTRATED_EXPORT_2026-09-22.md#verification-and-limits) distinguish actual native-game observations from automated checks.
+
 ### Package contents
 
 A host package (**Download ready ZIP** or **Install directly**) contains:
 
-- Main `.map` and `.d6m` files.
-- `_plane2` through `_plane8` `.map` and `.d6m` files as needed.
+- Main `.map` and `_plane2` through `_plane8` `.map` files as needed.
+- Native planes' corresponding `.d6m` files. If the first plane is illustrated, later native planes use `_realmN.d6m` aliases instead of `_planeN.d6m`; Atlas writes the matching references automatically.
+- With Illustrated realms: 18 TGA images for each supported plane, named `<map-name>_realmN.tga`, `<map-name>_realmN_winter.tga`, and terrain variants, plus `atlas_artwork.json` ownership records. These image names are intentional; do not rename them to `_planeN`.
 - `INSTALL.txt`.
 - `atlas_project.json`.
 - `balance_report.txt`: legacy score, validation, both per-start structural models, declared patch/era/mod assumptions and requirements, plus enabled population-defender coverage. Treat this as host-facing analysis.
-- `host_settings.txt`: intended host setup, the same patch/era/mod declarations, and enabled population-defender revision/coverage notes.
-- `host_topology.txt` — a host-only spoiler dossier listing every plane, local/global province number, start/throne marker, connection, border type, and gateway endpoint. Do not distribute it to players.
+- `host_settings.txt`: intended host setup, the same patch/era/mod declarations, enabled population-defender revision/coverage notes, and the illustrated-number mapping when applicable.
+- `host_topology.txt` — a host-only spoiler dossier listing every plane, editor local/global province number, start/throne marker, connection, border type, and gateway endpoint. Do not distribute it to players.
 
-The first plane uses the normalized map name with no suffix. Later plane display names do not change the `_planeN` file convention.
+The first `.map` uses the normalized map name with no suffix. Later plane display names do not change the `_planeN.map` convention. Illustrated images use the separate `_realmN` stem to avoid mixed-format lookup ambiguity; the package remains one selectable atlas, without auxiliary selectable maps.
 
 ### Install directly
 
@@ -968,9 +992,11 @@ An existing nonempty map folder must contain a valid `atlas_project.json` identi
 
 Back up an existing same-named map folder before an important reinstall. Atlas stages the package and attempts to restore touched files if installation fails; follow any recovery message before hosting the map.
 
+Illustrated updates additionally verify `atlas_artwork.json` and SHA-256 hashes before overwriting or deleting TGA images and any `_realmN.d6m` aliases. An existing, unrecorded file with a generated target name, or an edited previously owned file, causes a refusal rather than silent replacement. Choose a new project name, or back up and move the conflicting file yourself. Atlas preserves unrelated files. When you remove planes or return to Native scenery, it cleans up only unchanged, previously owned artwork after the new package is published. The ownership record can retain hashes for deleted files so an interrupted cleanup can be retried safely; it is not an editable project backup.
+
 ### Download ready ZIP
 
-Extract the single contained map folder into the Dominions user-data `maps` directory. When replacing an older export, delete or replace the old same-named folder first. Do not merge the ZIP into it, because stale numbered plane files would remain active.
+Extract the single contained map folder into the Dominions user-data `maps` directory. When replacing an older export, back up and replace the old same-named folder first. Do not merge the ZIP into it, because stale numbered planes or terrain images can change the map. Keep all supplied image variants and ownership records together.
 
 If you added custom battle assets manually, back them up before replacing the folder and copy them into the new one afterward.
 
@@ -978,9 +1004,9 @@ Large packages may show a ZIP memory warning or disable both ZIP options. **Inst
 
 ### Download player ZIP
 
-Downloads `<map-name>_players.zip` with the same playable `.map`/`.d6m` files and `PLAYER_README.txt`, but no `atlas_project.json`, balance report, host settings, or host topology dossier. It uses the same validation and ZIP-memory limits as the host ZIP. Extract its single map folder into the Dominions user-data `maps` directory, replacing an older same-named folder instead of merging it.
+Downloads `<map-name>_players.zip` with the same playable `.map`/`.d6m` files, illustrated TGAs and `atlas_artwork.json` when applicable, and `PLAYER_README.txt`, but no `atlas_project.json`, balance report, host settings, or host topology dossier. It uses the same artwork mode, validation and ZIP-memory limits as the host ZIP. Extract its single map folder into the Dominions user-data `maps` directory, replacing an older same-named folder instead of merging it.
 
-This reduces accidental spoilers; it is **not secrecy protection**. Native map files still reveal starts, terrain, guardians, and other content when inspected. Keep the host package and editable JSON yourself, and tell players the intended game version, mods, and host settings separately. A player package is not an editable Atlas backup.
+This reduces accidental spoilers; it is **not secrecy protection**. Playable map files still reveal starts, terrain, guardians, and other content when inspected. Keep the host package and editable JSON yourself, and tell players the intended game version, mods, and host settings separately. A player package is not an editable Atlas backup.
 
 ### Editable project JSON
 
@@ -988,11 +1014,11 @@ Downloads the portable source backup described above.
 
 ### Preview PNG
 
-Choose the **High-res … preview of …** button in **Install / export**. It exports the active plane at its configured resolution using the currently selected Condition preview. The PNG includes combined terrain materials and symbols, shape-safe procedural detail, sparse-plane backdrops, and procedural floating islands/clouds for Cloud and Air. It is not the native playable D6M and is not installed with the map package.
+Choose the **High-res … preview of …** button in **Install / export**. It exports the active plane at its configured resolution using the currently selected Condition preview. The PNG includes combined terrain materials and symbols, shape-safe procedural detail, sparse-plane backdrops, and the procedural realm landscape used by the editor. It remains a standalone preview, not a playable map asset, and is not installed with the package. Illustrated export separately generates the game-ready TGA set with the required numbering markers and ownership areas.
 
 ### Filename normalization
 
-Folder and file stems use safe ASCII letters, digits, and underscores, with a maximum of 64 characters. Unsafe characters and reserved Windows filenames are normalized automatically; the export dialog shows the exact result before writing. A normalization warning does not block export.
+The normalized project root uses safe ASCII letters, digits, and underscores, with a maximum of 64 characters. Automatic plane, realm and condition suffixes are added after that root. Unsafe characters and reserved Windows filenames are normalized automatically; the export dialog shows the exact result before writing. A normalization warning does not block export.
 
 ### Browser limitations
 
@@ -1051,6 +1077,8 @@ Validation, replacement-confirmation, and export dialogs trap focus. Escape clos
 | Gate is too close to a start | Generated gates prefer endpoints at least two moves away, but a constrained fallback can produce a warning. Move the endpoint, enlarge the plane, reduce the gate count, or regenerate. |
 | Direct folder access unavailable | Use Download ready ZIP. If ZIP is disabled by the memory ceiling, lower resolution/plane count or move the project to a supported browser for direct install. Editable project JSON remains available. |
 | Direct reinstall refuses an existing folder | A nonempty folder needs a valid `atlas_project.json` matching its normalized name. Atlas leaves it untouched. Use a different project name, or back up and move the conflicting folder before retrying. |
+| Artwork file is not an unchanged Atlas-owned file | Its name collides with a generated image or its bytes no longer match `atlas_artwork.json`. Back up and move that file yourself, or choose a new atlas name. Do not delete the ownership record to bypass the check. |
+| Illustrated export rejects raw commands | Any active map/plane/province raw command can contain unsafe numeric references. Use Native scenery or supported structured controls. |
 | Map does not appear in Dominions | Confirm `user data/maps/<Map_Name>/<Map_Name>.map`; avoid the game installation or doubled folder nesting. |
 | Removed planes still appear | Delete/replace the old folder before extracting a new ZIP, or use direct reinstall. |
 | ZIP is slow or memory-heavy | Use direct install, lower resolution, or reduce plane sizes/count. |
@@ -1061,8 +1089,9 @@ Validation, replacement-confirmation, and export dialogs trap focus. Escape clos
 | Filename changed | Export normalized it. Use the folder/file stem shown in the package summary. |
 | Unknown catalog ID | Enable matching custom content. Catalog metadata does not install a mod. |
 | Skybox/battle-map asset warning | Copy referenced `.tga`, `.rgb`, or `.d3m` files beside the map files. |
-| Cloud/Air art or backdrop differs in Dominions | Expected: procedural floating islands, clouds, and other backdrops are editor/PNG-only; native D6M owner-zero space and terrain are game-rendered. |
-| Terrain looks unchanged after editing | Biome is metadata only; change Primary terrain or Additional terrain flags. For Dominions, export/install the package again and start a new game. Atlas's PNG artwork is not embedded in native D6M. |
+| Realm art or backdrop differs in Dominions | Native scenery intentionally uses the game's renderer. In a development build, select Illustrated realms and install the complete package to use custom art on supported planes. Surface/Custom and editor-only overlays still differ. |
+| Terrain looks unchanged after editing | Biome is metadata only; change Primary terrain or Additional terrain flags. Export/install the package again and start a new game. The selected artwork mode determines whether supported realms use generated TGA art or native scenery. |
+| In-game province numbers differ from the editor | Expected for Illustrated realms: image markers determine numbering. Use the table in the host package's `host_settings.txt`. Do not swap artwork modes in a running game. |
 | Province labels are hidden or cut off at the screen edge | Names appear from 135% zoom and can be omitted to avoid collisions. Pan to bring a province into view, or hover/select it for the complete name and marker details. |
 | Preview colors differ from the game | Condition previews are illustrative. They do not simulate temperature, events, army movement, or the game's exact artwork. |
 | Guardians cannot be added to a start | Intentional protection for the nation's starting army and pretender. |
@@ -1071,17 +1100,19 @@ Validation, replacement-confirmation, and export dialogs trap focus. Escape clos
 
 Current-source native checks include loading and visual inspection of all eight planes, [161 accepted population-template terrain cases](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md), and one [generated Inferno battle/capture followed by recruitment and PD inspection](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/research/NATIVE_GUARDIAN_CAPTURE_2026-09-21.md). See [release verification](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/RELEASE_VERIFICATION_0.1.5.md) for the current scope and remaining checks. These observations do not establish every seasonal visual, nation/population PD combination, calibrated guardian difficulty or a full multiplayer game.
 
+The development illustrated exporter has separate [September 22 evidence](ILLUSTRATED_EXPORT_2026-09-22.md): custom Cloud art was seen in Dominions 6.37, and an eight-plane exported fixture retained province coordinates, adjacency and a Dreamlands nation start. Those checks do not establish all realm/season visuals or a complete multiplayer playthrough.
+
 Native map data and Atlas's preview have different roles:
 
 - **Initial guardians vs persistent PD:** guardian groups create initial independents. Persistent post-capture rosters come from a nation/poptype and wholly new rosters require `.dm` modding.
 - **Population types:** `#poptype` controls local recruitment; it is not a separate PD-roster ID and does not replace the initial random army.
 - **Gate direction:** all provinces sharing a `#gate` number are connected bidirectionally.
-- **Sparse and sky preview art:** native D6M has no custom image layer behind owner-zero space. Backdrops and procedural Cloud/Air islands are editor/PNG-only; a successful hybrid loading prototype is not yet a production illustrated exporter.
-- **Condition preview:** editor/PNG visualization only. Actual seasonal/submerged/forested/etc. rendering is driven by native terrain data in Dominions.
+- **Procedural realm art:** Native scenery has no Atlas raster layer. The optional Illustrated realms export supplies custom TGA art and ownership areas for nine realm types, keeping Surface and Custom native. It does not export every editor texture or overlay.
+- **Condition preview:** changes only the editor/PNG. Illustrated export separately includes every supported terrain/winter sheet for the engine to select; this is not a simulation of game events or climate.
 - **External battle assets:** supported by directives but not bundled automatically.
 - **Custom catalogs:** metadata for the editor, not installed game content.
 - **Steam Workshop:** package upload, banner, visibility, and publishing remain outside ordinary local installation.
-- **Raw directives:** powerful but not syntax-checked. A project can pass structured validation and still contain an invalid raw command.
+- **Raw directives:** powerful but not syntax-checked in Native scenery. Active raw commands are blocked in Illustrated realms because arbitrary province references cannot be safely renumbered.
 
 ## License and bundled data
 

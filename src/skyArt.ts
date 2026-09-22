@@ -1,6 +1,6 @@
 import { effectiveProvinceTerrainFlags, type Plane, type PreviewCondition, type TerrainFlag } from "./domain";
 
-/** Candidate image-sheet names; these do not enable a playable image export. */
+/** Terrain/winter sheet variants shared by the preview and illustrated exporter. */
 export const SKY_ART_VARIANTS = Object.freeze([
   "default", "winter", "forest", "forestw", "waste", "wastew", "farm", "farmw",
   "swamp", "swampw", "highland", "highlandw", "plain", "plainw", "kelp", "kelpw", "water", "waterw",

@@ -7,6 +7,16 @@ import { assertPlaneGenerationOverrides } from "./generationControls";
 import { buildInitialDefensePlan, type InitialDefensePlan, type VerifiedPopulationDefenseProfile } from "./populationDefenders";
 import { VERIFIED_POPULATION_DEFENSE_PROFILES } from "./populationDefenseProfiles";
 import {
+  createIllustratedExport,
+  illustratedExportError,
+  illustratedPackageBytes,
+  illustratedNumberingReport,
+  imageFileStem,
+  nativeFileStem,
+  IMAGE_SUFFIXES,
+  type ExportArtwork,
+} from "./illustratedMap";
+import {
   compileMapText,
   encodeD6m,
   estimatedD6mBytes,
@@ -44,18 +54,23 @@ type ProgressCallback = (progress: ExportProgress) => void;
 
 export type PackageAudience = "host" | "player";
 
+export type { ExportArtwork } from "./illustratedMap";
+
 /** Registry override supports internal verification fixtures; project imports cannot supply trusted profiles. */
 export async function buildPackageFiles(project: MapProject, onProgress?: ProgressCallback, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG, audience: PackageAudience = "host",
-  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES): Promise<PackageFile[]> {
+  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES, artwork: ExportArtwork = "native"): Promise<PackageFile[]> {
+  assertArtworkExportSupported(project, artwork);
+  const illustrated = artwork === "illustrated" ? createIllustratedExport(project) : undefined;
   const base = sanitizeMapName(project.name);
   const encoder = new TextEncoder();
   const files: PackageFile[] = [];
   onProgress?.({ stage: "preparing", plane: 0, planeCount: project.planes.length, percent: 0, message: "Compiling Dominions map directives…" });
   for (let index = 0; index < project.planes.length; index += 1) {
     const suffix = index === 0 ? "" : `_plane${index + 1}`;
-    files.push({ name: `${base}${suffix}.map`, data: encoder.encode(compileMapText(project, index, catalog, populationProfiles)) });
+    files.push({ name: `${base}${suffix}.map`, data: encoder.encode(illustrated
+      ? await illustrated.mapText(index, catalog, populationProfiles) : compileMapText(project, index, catalog, populationProfiles)) });
   }
-  if (audience === "host") files.push(...supportFiles(project, catalog, populationProfiles));
+  if (audience === "host") files.push(...supportFiles(project, catalog, populationProfiles, artwork));
   else files.push({ name: "PLAYER_README.txt", data: encoder.encode([
     "PANTOKRATOR ATLAS — PLAYER MAP PACKAGE", "",
     "Extract this entire folder into your Dominions 6 user-data maps directory.",
@@ -63,13 +78,31 @@ export async function buildPackageFiles(project: MapProject, onProgress?: Progre
     "For an update, replace the old map folder instead of merging; stale plane files can change the map.",
     "Use the game version, mods and settings specified by your host.", "",
     "This handoff omits the editable project, seed dossier, balance report and host topology/settings reports.",
-    "Native .map/.d6m files are identical to the host package. They still contain map content, including starts and guardians.",
+    artwork === "native" ? "Native .map/.d6m files are identical to the host package. They still contain map content, including starts and guardians."
+      : "Playable .map/.tga/.d6m files and artwork ownership records are identical to the host package. They still contain map content, including starts and guardians.",
     "This is a reduced-spoiler handoff, NOT encryption or protection against inspecting map files.",
   ].join("\r\n")) });
 
+  const imageRecords: ArtworkImageRecord[] = [];
   for (let index = 0; index < project.planes.length; index += 1) {
     const plane = project.planes[index]!;
     const suffix = index === 0 ? "" : `_plane${index + 1}`;
+    if (illustrated?.isIllustrated(index)) {
+      let completed = 0;
+      const seenSuffixes = new Set<string>();
+      for await (const image of illustrated.images(index)) {
+        assertImageVariant(image.suffix, seenSuffixes);
+        const name = `${imageFileStem(project, index)}${image.suffix}.tga`;
+        files.push({ name, data: image.data });
+        imageRecords.push({ name, sha256: await bytesFingerprint(image.data) });
+        completed += 1;
+        onProgress?.({ stage: "rasterizing", plane: index + 1, planeCount: project.planes.length,
+          percent: Math.round(((index + completed / IMAGE_SUFFIXES.length) / project.planes.length) * 92),
+          message: `Rendering ${plane.name}: artwork ${completed}/${IMAGE_SUFFIXES.length}…` });
+      }
+      assertCompleteImages(seenSuffixes);
+      continue;
+    }
     const data = await encodeD6m(plane, `${project.seed}:d6m:${index}`, (progress: D6mProgress) => {
       const planeFraction = progress.totalRows ? progress.completedRows / progress.totalRows : 0;
       const totalFraction = (index + planeFraction) / project.planes.length;
@@ -81,16 +114,19 @@ export async function buildPackageFiles(project: MapProject, onProgress?: Progre
         message: `Rendering ${plane.name} at ${plane.width}×${plane.height}…`,
       });
     });
-    files.push({ name: `${base}${suffix}.d6m`, data });
+    const name = `${nativeFileStem(project, index, artwork)}.d6m`;
+    files.push({ name, data });
+    if (name !== `${base}${suffix}.d6m`) imageRecords.push({ name, sha256: await bytesFingerprint(data) });
   }
+  if (illustrated) files.push({ name: ARTWORK_MANIFEST_NAME, data: encodeArtworkManifest(base, artwork, imageRecords) });
   onProgress?.({ stage: "done", plane: project.planes.length, planeCount: project.planes.length, percent: 100, message: "Dominions package ready." });
   return files;
 }
 
-export async function downloadPackage(project: MapProject, onProgress?: ProgressCallback, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG, audience: PackageAudience = "host") {
-  const safety = zipPackageSafety(project, catalog);
+export async function downloadPackage(project: MapProject, onProgress?: ProgressCallback, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG, audience: PackageAudience = "host", artwork: ExportArtwork = "native") {
+  const safety = zipPackageSafety(project, catalog, artwork);
   if (safety.level === "blocked") throw new Error(safety.message);
-  const files = await buildPackageFiles(project, onProgress, catalog, audience);
+  const files = await buildPackageFiles(project, onProgress, catalog, audience, VERIFIED_POPULATION_DEFENSE_PROFILES, artwork);
   const root = sanitizeMapName(project.name);
   onProgress?.({ stage: "packaging", plane: project.planes.length, planeCount: project.planes.length, percent: 96, message: "Packing the ready-to-install map folder…" });
   const zip = createStoredZip(files.map((file) => ({ ...file, name: `${root}/${file.name}` })));
@@ -116,7 +152,8 @@ export async function removeObsoletePlaneArtifacts(
   }
 }
 
-export async function installPackage(project: MapProject, onProgress?: ProgressCallback, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG): Promise<"installed" | "unsupported" | "cancelled"> {
+export async function installPackage(project: MapProject, onProgress?: ProgressCallback, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG, artwork: ExportArtwork = "native"): Promise<"installed" | "unsupported" | "cancelled"> {
+  assertArtworkExportSupported(project, artwork);
   const picker = (window as typeof window & {
     showDirectoryPicker?: (options?: { mode?: "read" | "readwrite"; id?: string }) => Promise<FileSystemDirectoryHandle>;
   }).showDirectoryPicker;
@@ -131,22 +168,51 @@ export async function installPackage(project: MapProject, onProgress?: ProgressC
     const root = sanitizeMapName(project.name);
     const mapDirectory = await mapsDirectory.getDirectoryHandle(root, { create: true });
     const safety = await assertSafeInstallDirectory(mapDirectory, root);
+    const previousArtworkRead = await readArtworkManifest(mapDirectory, root);
+    const previousArtwork = previousArtworkRead?.manifest;
+    const illustrated = artwork === "illustrated" ? createIllustratedExport(project) : undefined;
+    const imageRecords = new Map((previousArtwork?.images ?? []).map(record => [record.name, record]));
+    const imageTargetNames = project.planes.flatMap((_, index) => illustrated?.isIllustrated(index)
+      ? IMAGE_SUFFIXES.map(suffix => `${imageFileStem(project, index)}${suffix}.tga`)
+      : nativeFileStem(project, index, artwork) === imageFileStem(project, index) ? [`${imageFileStem(project, index)}.d6m`] : []);
     const originals = new Map<string, string | null>();
-    for (const name of knownAtlasInstallTargetNames(root)) originals.set(name, await fileFingerprint(mapDirectory, name));
+    const possibleTargets = new Set([...knownAtlasInstallTargetNames(root), ...imageRecords.keys(), ...imageTargetNames]);
+    for (const name of possibleTargets) originals.set(name, await fileFingerprint(mapDirectory, name));
+    if (originals.get(ARTWORK_MANIFEST_NAME) !== (previousArtworkRead?.fingerprint ?? null)) {
+      throw new Error("The artwork ownership record changed while Atlas was preparing the installation. No files were changed.");
+    }
+    for (const name of new Set([...imageRecords.keys(), ...imageTargetNames])) {
+      const current = originals.get(name) ?? null;
+      if (current !== null && imageRecords.get(name)?.sha256 !== current) {
+        throw new Error(`Direct install refused to overwrite or remove ${name}: it is not an unchanged Atlas-owned artwork file. Choose a new project name or move the conflicting file yourself. No files were changed.`);
+      }
+    }
     const encoder = new TextEncoder();
     const transactionId = nextInstallTransactionId();
-    const support = supportFiles(project, catalog);
-    const textArtifacts: InstallArtifact[] = project.planes.map((_, index) => {
+    const support = supportFiles(project, catalog, VERIFIED_POPULATION_DEFENSE_PROFILES, artwork);
+    const textArtifacts: InstallArtifact[] = [];
+    for (let index = 0; index < project.planes.length; index += 1) {
       const suffix = index === 0 ? "" : `_plane${index + 1}`;
-      return installArtifact(root, transactionId, `${root}${suffix}.map`, encoder.encode(compileMapText(project, index, catalog)));
-    });
+      textArtifacts.push(installArtifact(root, transactionId, `${root}${suffix}.map`, encoder.encode(illustrated
+        ? await illustrated.mapText(index, catalog, VERIFIED_POPULATION_DEFENSE_PROFILES) : compileMapText(project, index, catalog))));
+    }
     textArtifacts.push(...support.map((file) => installArtifact(root, transactionId, file.name, file.data)));
-    const d6mArtifacts = project.planes.map((_, index) => {
-      const suffix = index === 0 ? "" : `_plane${index + 1}`;
-      return installArtifact(root, transactionId, `${root}${suffix}.d6m`);
+    const binaryArtifactsByPlane = project.planes.map((_, index) => {
+      return illustrated?.isIllustrated(index)
+        ? IMAGE_SUFFIXES.map(imageSuffix => installArtifact(root, transactionId, `${imageFileStem(project, index)}${imageSuffix}.tga`))
+        : [installArtifact(root, transactionId, `${nativeFileStem(project, index, artwork)}.d6m`)];
     });
-    const allArtifacts = [...d6mArtifacts, ...textArtifacts];
-    const temporaryNames = knownAtlasInstallTemporaryNames(root, transactionId);
+    const binaryArtifacts = binaryArtifactsByPlane.flat();
+    const artworkArtifact = illustrated || previousArtwork ? installArtifact(root, transactionId, ARTWORK_MANIFEST_NAME) : undefined;
+    if (artworkArtifact) textArtifacts.push(artworkArtifact);
+    const allArtifacts = [...binaryArtifacts, ...textArtifacts];
+    const temporaryNames = new Set(allArtifacts.flatMap(artifact => [artifact.stageName, artifact.backupName]));
+    const currentTargetNames = new Set(allArtifacts.map(artifact => artifact.targetName));
+    const obsoleteNames = [...possibleTargets].filter(name => {
+      if (currentTargetNames.has(name)) return false;
+      if (name.endsWith(".tga")) return imageRecords.has(name);
+      return name.endsWith(".map") || name.endsWith(".d6m");
+    });
     const backups = new Map<string, string | null>();
     const touchedTargets: string[] = [];
     const stagedFingerprints = new Map<string, string>();
@@ -157,11 +223,30 @@ export async function installPackage(project: MapProject, onProgress?: ProgressC
     };
 
     try {
-      // Stage each raster independently so an all-plane update never retains
-      // every D6M in RAM and no playable file changes during rendering.
+      // Stage each raster independently; no set of terrain variants is retained
+      // in RAM and no playable file changes during rendering.
       for (let index = 0; index < project.planes.length; index += 1) {
         const plane = project.planes[index]!;
-        const artifact = d6mArtifacts[index]!;
+        if (illustrated?.isIllustrated(index)) {
+          const artifacts = new Map(binaryArtifactsByPlane[index]!.map(artifact => [artifact.targetName, artifact]));
+          let completed = 0;
+          const seenSuffixes = new Set<string>();
+          for await (const image of illustrated.images(index)) {
+            assertImageVariant(image.suffix, seenSuffixes);
+            const name = `${imageFileStem(project, index)}${image.suffix}.tga`;
+            const artifact = artifacts.get(name);
+            if (!artifact) throw new Error(`Unexpected illustrated export artifact ${name}.`);
+            await writeFile(mapDirectory, artifact.stageName, image.data);
+            imageRecords.set(name, { name, sha256: await bytesFingerprint(image.data) });
+            completed += 1;
+            onProgress?.({ stage: "rasterizing", plane: index + 1, planeCount: project.planes.length,
+              percent: Math.round(((index + completed / IMAGE_SUFFIXES.length) / project.planes.length) * 84),
+              message: `Staging ${plane.name}: artwork ${completed}/${IMAGE_SUFFIXES.length}…` });
+          }
+          assertCompleteImages(seenSuffixes);
+          continue;
+        }
+        const artifact = binaryArtifactsByPlane[index]![0]!;
         const data = await encodeD6m(plane, `${project.seed}:d6m:${index}`, (progress) => {
           const planeFraction = progress.totalRows ? progress.completedRows / progress.totalRows : 0;
           onProgress?.({
@@ -174,7 +259,9 @@ export async function installPackage(project: MapProject, onProgress?: ProgressC
         });
         onProgress?.({ stage: "writing", plane: index + 1, planeCount: project.planes.length, percent: 86, message: `Staging ${plane.name} safely…` });
         await writeFile(mapDirectory, artifact.stageName, data);
+        if (imageTargetNames.includes(artifact.targetName)) imageRecords.set(artifact.targetName, { name: artifact.targetName, sha256: await bytesFingerprint(data) });
       }
+      if (artworkArtifact) artworkArtifact.data = encodeArtworkManifest(root, artwork, [...imageRecords.values()]);
 
       // Map/support compilation already succeeded above. Staging these small
       // files detects quota or permission failures before current files move.
@@ -200,12 +287,11 @@ export async function installPackage(project: MapProject, onProgress?: ProgressC
       // A first install gets its ownership/recovery marker before playable files.
       const marker = textArtifacts.find((artifact) => artifact.targetName === "atlas_project.json")!;
       if (!safety.hasMarker) await publish(marker);
-      // Publish binaries first. Only after all current D6Ms exist do .map and
+      // Publish binaries first. Only after all current images exist do .map and
       // support files begin referencing them.
-      for (let index = 0; index < d6mArtifacts.length; index += 1) {
-        const artifact = d6mArtifacts[index]!;
+      for (let index = 0; index < binaryArtifactsByPlane.length; index += 1) {
         onProgress?.({ stage: "writing", plane: index + 1, planeCount: project.planes.length, percent: 90 + Math.round(((index + 1) / project.planes.length) * 5), message: `Publishing ${project.planes[index]!.name}…` });
-        await publish(artifact);
+        for (const artifact of binaryArtifactsByPlane[index]!) await publish(artifact);
       }
       for (const artifact of textArtifacts) {
         if (!safety.hasMarker && artifact === marker) continue;
@@ -232,13 +318,13 @@ export async function installPackage(project: MapProject, onProgress?: ProgressC
     // numbered planes remain available until every current file is published.
     const cleanupErrors = await cleanupInstallArtifacts(mapDirectory, temporaryNames);
     try {
-      for (let plane = project.planes.length + 1; plane <= 8; plane += 1) {
-        for (const extension of ["map", "d6m"]) {
-          const name = `${root}_plane${plane}.${extension}`;
-          await assertInstallFileUnchanged(mapDirectory, name, originals.get(name) ?? null);
-        }
+      // Check the full removal set before deleting any stale artifact. Image
+      // names require manifest provenance; native names retain legacy ownership.
+      for (const name of obsoleteNames) await assertInstallFileUnchanged(mapDirectory, name, originals.get(name) ?? null);
+      for (const name of obsoleteNames) {
+        await assertInstallFileUnchanged(mapDirectory, name, originals.get(name) ?? null);
+        await removeFileIfExists(mapDirectory, name);
       }
-      await removeObsoletePlaneArtifacts(mapDirectory, root, project.planes.length);
     } catch (error) {
       cleanupErrors.push(error);
     }
@@ -765,7 +851,9 @@ function assertProjectTextSize(text: string): void {
 }
 
 export function estimatedPackageBytes(project: MapProject, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG,
-  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES): number {
+  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES, artwork: ExportArtwork = "native"): number {
+  if (artwork === "illustrated") return illustratedPackageBytes(project)
+    + estimatedTextPackageBytes(project, catalog, populationProfiles) + 64 * 1024;
   return project.planes.reduce((sum, plane) => sum + estimatedD6mBytes(plane), 0)
     + estimatedTextPackageBytes(project, catalog, populationProfiles);
 }
@@ -812,9 +900,11 @@ export function estimatedTextPackageBytes(project: MapProject, catalog: Dom6Cata
   return mapBytes + projectJsonBytes + supportTextBytes + zipDirectoryOverhead;
 }
 
-export function zipPackageSafety(project: MapProject, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG): ZipPackageSafety {
-  const estimatedBytes = estimatedPackageBytes(project, catalog);
-  const estimatedPeakBytes = estimatedBytes * 3 + 16 * 1024 * 1024;
+export function zipPackageSafety(project: MapProject, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG, artwork: ExportArtwork = "native"): ZipPackageSafety {
+  const estimatedBytes = estimatedPackageBytes(project, catalog, VERIFIED_POPULATION_DEFENSE_PROFILES, artwork);
+  const renderingWorkspaceBytes = artwork === "illustrated"
+    ? Math.max(0, ...project.planes.map(plane => plane.width * plane.height)) * 16 : 0;
+  const estimatedPeakBytes = estimatedBytes * 3 + 16 * 1024 * 1024 + renderingWorkspaceBytes;
   if (estimatedPeakBytes >= ZIP_MEMORY_LIMIT_PEAK_BYTES) {
     return {
       level: "blocked",
@@ -828,7 +918,8 @@ export function zipPackageSafety(project: MapProject, catalog: Dom6CatalogBundle
       level: "warning",
       estimatedPackageBytes: estimatedBytes,
       estimatedPeakBytes,
-      message: "This ZIP may use substantial browser memory. Direct install is safer and streams one plane at a time.",
+      message: artwork === "native" ? "This ZIP may use substantial browser memory. Direct install is safer and streams one plane at a time."
+        : "This illustrated ZIP may use substantial browser memory. Direct install is safer and stages one image variant at a time.",
     };
   }
   return { level: "safe", estimatedPackageBytes: estimatedBytes, estimatedPeakBytes };
@@ -981,8 +1072,9 @@ function utf8StringBytes(value: string): number {
 }
 
 function supportFiles(project: MapProject, catalog: Dom6CatalogBundle,
-  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES): PackageFile[] {
+  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES, artwork: ExportArtwork = "native"): PackageFile[] {
   const encoder = new TextEncoder();
+  const numberingNote = artwork === "illustrated" ? ["Province numbers in this report are editor IDs. See the mapping in host_settings.txt for in-game image province numbers.", ""] : [];
   const fairness = calculateFairness(project);
   const issues = validateProject(project, catalog, populationProfiles);
   const populationDefenseNotes = project.populationDefense?.enabled ? [
@@ -993,6 +1085,7 @@ function supportFiles(project: MapProject, catalog: Dom6CatalogBundle,
   const report = [
     "PANTOKRATOR ATLAS — DOMINIONS 6 MAP REPORT",
     "",
+    ...numberingNote,
     `Map: ${project.name}`,
     `Seed: ${project.seed}`,
     `Planes: ${project.planes.length}`,
@@ -1023,7 +1116,8 @@ function supportFiles(project: MapProject, catalog: Dom6CatalogBundle,
     "Place this entire folder inside the Dominions 6 user data 'maps' directory.",
     "In Dominions 6, use Tools & Manuals > Open User Data Directory to locate it.",
     "When updating from a ZIP, replace the old folder completely instead of merging it; stale _planeN files would keep removed planes active.",
-    "The .d6m files let Dominions render winter and terrain transformations natively.",
+    artwork === "native" ? "The .d6m files let Dominions render winter and terrain transformations natively."
+      : "Illustrated planes include custom TGA scenery, winter/terrain sheets and exact province ownership. Native .d6m planes retain engine-rendered scenery. Keep every supplied image and the atlas_artwork.json ownership record together.",
     `This package declares Dominions ${formatDomVersion(project.targetVersion)} or newer.`,
     "",
     "NOTE ABOUT PROVINCE DEFENSE",
@@ -1045,6 +1139,7 @@ function supportFiles(project: MapProject, catalog: Dom6CatalogBundle,
     "",
     ...analysisContextLines(project, catalog.gameVersion.slice(0,256)),
     ...populationDefenseNotes,
+    ...(artwork === "illustrated" ? ["", illustratedNumberingReport(project)] : []),
   ].join("\r\n");
   const install = [
     "PANTOKRATOR ATLAS - INSTALLATION",
@@ -1053,18 +1148,20 @@ function supportFiles(project: MapProject, catalog: Dom6CatalogBundle,
     `Main map file: ${sanitizeMapName(project.name)}.map`,
     "",
     "Direct install",
-    "Choose the Dominions 6 user-data maps folder. Pantokrator Atlas stages and backs up its own files, publishes current D6Ms before their map references, then removes temporary and obsolete plane files last.",
+    artwork === "native" ? "Choose the Dominions 6 user-data maps folder. Pantokrator Atlas stages and backs up its own files, publishes current D6Ms before their map references, then removes temporary and obsolete plane files last."
+      : "Choose the Dominions 6 user-data maps folder. Pantokrator Atlas stages each image separately, backs up its own files, publishes artwork before map references, then removes temporary and obsolete owned files last. Modified or unowned artwork collisions are refused.",
     "",
     "ZIP install or update",
     "Before extracting, remove any existing map folder with the same name, then extract this entire folder into the Dominions 6 maps directory.",
-    "Do not merge it into an older copy: obsolete _planeN.map and _planeN.d6m files would keep removed planes active.",
+    artwork === "native" ? "Do not merge it into an older copy: obsolete _planeN.map and _planeN.d6m files would keep removed planes active."
+      : "Do not merge it into an older copy: stale planes and terrain images can change the map. Copy all TGA variants and atlas_artwork.json with the map files.",
   ].join("\r\n");
   return [
     { name: "INSTALL.txt", data: encoder.encode(install) },
     { name: "atlas_project.json", data: encoder.encode(serializeProject(project, true)) },
     { name: "balance_report.txt", data: encoder.encode(report) },
     { name: "host_settings.txt", data: encoder.encode(host) },
-    { name: "host_topology.txt", data: encoder.encode(buildHostTopologyReport(project, catalog, populationProfiles)) },
+    { name: "host_topology.txt", data: encoder.encode(numberingNote.join("\r\n") + buildHostTopologyReport(project, catalog, populationProfiles)) },
   ];
 }
 
@@ -1105,6 +1202,84 @@ interface InstallArtifact {
 
 const INSTALL_TEMP_PREFIX = ".__pantokrator_atlas_install__";
 const SUPPORT_FILE_NAMES = ["INSTALL.txt", "atlas_project.json", "balance_report.txt", "host_settings.txt", "host_topology.txt"] as const;
+const ARTWORK_MANIFEST_NAME = "atlas_artwork.json";
+const MAX_ARTWORK_MANIFEST_BYTES = 1024 * 1024;
+
+interface ArtworkImageRecord {
+  name: string;
+  sha256: string;
+}
+
+interface ArtworkManifest {
+  schemaVersion: 1;
+  mapRoot: string;
+  artwork: ExportArtwork;
+  images: ArtworkImageRecord[];
+}
+
+function assertArtworkExportSupported(project: MapProject, artwork: ExportArtwork): void {
+  if (artwork !== "native" && artwork !== "illustrated") throw new Error("Unknown map artwork export mode.");
+  const error = artwork === "illustrated" ? illustratedExportError(project) : undefined;
+  if (error) throw new Error(error);
+}
+
+function assertImageVariant(suffix: string, seen: Set<string>): void {
+  if (!IMAGE_SUFFIXES.includes(suffix) || seen.has(suffix)) throw new Error("Illustrated export produced an unknown or duplicate terrain image.");
+  seen.add(suffix);
+}
+
+function assertCompleteImages(seen: ReadonlySet<string>): void {
+  if (seen.size !== IMAGE_SUFFIXES.length) throw new Error("Illustrated export did not produce every required terrain image.");
+}
+
+function knownArtworkTargetNames(root: string): string[] {
+  return Array.from({ length: 8 }, (_, index) => [
+    ...IMAGE_SUFFIXES.map(suffix => `${root}_realm${index + 1}${suffix}.tga`),
+    ...(index > 0 ? [`${root}_realm${index + 1}.d6m`] : []),
+  ]).flat();
+}
+
+function encodeArtworkManifest(root: string, artwork: ExportArtwork, images: readonly ArtworkImageRecord[]): Uint8Array {
+  const manifest: ArtworkManifest = { schemaVersion: 1, mapRoot: root, artwork,
+    images: [...images].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0) };
+  return new TextEncoder().encode(JSON.stringify(manifest, null, 2));
+}
+
+async function readArtworkManifest(directory: FileSystemDirectoryHandle, root: string): Promise<{ manifest: ArtworkManifest; fingerprint: string } | undefined> {
+  let value: unknown;
+  let bytes: Uint8Array;
+  try {
+    const handle = await directory.getFileHandle(ARTWORK_MANIFEST_NAME);
+    const file = await handle.getFile();
+    if (file.size > MAX_ARTWORK_MANIFEST_BYTES) throw new Error("the artwork record is too large");
+    bytes = new Uint8Array(await file.arrayBuffer());
+    value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "NotFoundError") return undefined;
+    throw new Error("Direct install refused the existing artwork ownership record. No files were changed.", { cause: error });
+  }
+  const known = new Set(knownArtworkTargetNames(root));
+  const seen = new Set<string>();
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw invalidArtworkManifest();
+  const record = value as Record<string, unknown>;
+  if (Object.keys(record).sort().join(",") !== "artwork,images,mapRoot,schemaVersion" || record.schemaVersion !== 1
+    || record.mapRoot !== root || (record.artwork !== "native" && record.artwork !== "illustrated")
+    || !Array.isArray(record.images) || record.images.length > known.size) throw invalidArtworkManifest();
+  for (const entry of record.images) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw invalidArtworkManifest();
+    const image = entry as Record<string, unknown>;
+    if (Object.keys(image).sort().join(",") !== "name,sha256" || typeof image.name !== "string"
+      || !known.has(image.name) || seen.has(image.name) || typeof image.sha256 !== "string"
+      || !/^[a-f0-9]{64}$/.test(image.sha256)) throw invalidArtworkManifest();
+    seen.add(image.name);
+  }
+  return { manifest: value as ArtworkManifest, fingerprint: await bytesFingerprint(bytes) };
+}
+
+function invalidArtworkManifest(): Error {
+  return new Error("Direct install refused an invalid or foreign artwork ownership record. No files were changed.");
+}
+
 function nextInstallTransactionId(): string {
   return globalThis.crypto.randomUUID();
 }
@@ -1123,7 +1298,7 @@ function installArtifact(root: string, transactionId: string, targetName: string
 }
 
 function knownAtlasInstallTargetNames(root: string): string[] {
-  const targets: string[] = [...SUPPORT_FILE_NAMES];
+  const targets: string[] = [...SUPPORT_FILE_NAMES, ARTWORK_MANIFEST_NAME];
   for (let planeNumber = 1; planeNumber <= 8; planeNumber += 1) {
     const suffix = planeNumber === 1 ? "" : `_plane${planeNumber}`;
     targets.push(`${root}${suffix}.map`, `${root}${suffix}.d6m`);
@@ -1131,17 +1306,17 @@ function knownAtlasInstallTargetNames(root: string): string[] {
   return targets;
 }
 
-function knownAtlasInstallTemporaryNames(root: string, transactionId: string): Set<string> {
-  return new Set(knownAtlasInstallTargetNames(root).flatMap((target) => [
-    temporaryInstallName(root, transactionId, "stage", target),
-    temporaryInstallName(root, transactionId, "backup", target),
-  ]));
-}
-
 async function readFileIfExists(directory: FileSystemDirectoryHandle, name: string): Promise<Uint8Array | undefined> {
   try {
     const handle = await directory.getFileHandle(name);
     const file = await handle.getFile();
+    if ((name === ARTWORK_MANIFEST_NAME || name.endsWith(`${ARTWORK_MANIFEST_NAME}.tmp`))
+      && file.size > MAX_ARTWORK_MANIFEST_BYTES) throw new Error("The artwork ownership record exceeds the safe read limit.");
+    // Generated TGA files fit below 32 MiB at the maximum supported resolution.
+    // Refuse an unexpected oversized collision before loading it into memory.
+    if (/(?:\.tga|_realm[2-8]\.d6m)(?:\.tmp)?$/.test(name) && file.size > 64 * 1024 * 1024) {
+      throw new Error(`Artwork file ${name} exceeds the safe 64 MiB read limit.`);
+    }
     return new Uint8Array(await file.arrayBuffer());
   } catch (error) {
     if (error instanceof DOMException && error.name === "NotFoundError") return undefined;
@@ -1166,7 +1341,7 @@ async function assertSafeInstallDirectory(directory: FileSystemDirectoryHandle, 
   let hasEntries = false;
   let onlyStages = true;
   const stagePrefix = `${INSTALL_TEMP_PREFIX}${root}__`;
-  const stageTargets = new Set(knownAtlasInstallTargetNames(root));
+  const stageTargets = new Set([...knownAtlasInstallTargetNames(root), ...knownArtworkTargetNames(root)]);
   for await (const entry of values.call(directory)) {
     hasEntries = true;
     const parts = entry.name.startsWith(stagePrefix) ? entry.name.slice(stagePrefix.length).split("__stage__") : [];

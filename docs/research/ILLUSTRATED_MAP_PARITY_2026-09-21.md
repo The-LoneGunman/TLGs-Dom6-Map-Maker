@@ -1,5 +1,7 @@
 # Custom-map artwork parity — September 21, 2026
 
+> Historical checkpoint. The September 22 development work now implements an optional illustrated exporter and has displayed generated realm artwork in Dominions 6.37. See [current implementation and verification](../ILLUSTRATED_EXPORT_2026-09-22.md). Follow-up tests also showed the diagnostic's auxiliary `.map` was unnecessary: an independent image basename without `_planeN` permits clean hybrid loading. The incomplete status and helper requirement below describe the earlier experiment, not the current source.
+
 ## Outcome
 
 Atlas does **not yet match illustrated custom maps in its exported in-game artwork**. Its native package carries real province geography, terrain, connections, gates and scenario data, but the custom Cloud/Air pixels remain editor/PNG-only. A visually attractive preview is not completion of the requested game feature.

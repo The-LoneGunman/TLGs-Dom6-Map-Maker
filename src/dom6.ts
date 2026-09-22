@@ -206,11 +206,20 @@ export interface CompiledTextFile {
   mime: string;
 }
 
+/** Image marker order differs from editor numbering; never mutate the project. */
+export interface MapTextOptions {
+  numbering?: ReadonlyMap<string, ReadonlyMap<string, number>>;
+  imageFile?: string;
+  winterImageFile?: string;
+}
+
 /** The optional registry override is for internal verification fixtures, never imported project data. */
 export function compileMapText(project: MapProject, planeIndex: number, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG,
-  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES): string {
+  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES, options: MapTextOptions = {}): string {
   const plane = project.planes[planeIndex];
   if (!plane) throw new Error(`Plane ${planeIndex + 1} does not exist.`);
+  const localNumber = (province: Province) => options.numbering?.get(plane.id)?.get(province.id) ?? province.index;
+  const edgeNumber = (id: string) => options.numbering?.get(plane.id)?.get(id) ?? provinceIndex(plane, id);
   const defensePlan = project.populationDefense?.enabled
     ? buildInitialDefensePlan(project, catalog, project.populationDefense, populationProfiles) : undefined;
   const derivedAt = (province: Province) => {
@@ -230,7 +239,8 @@ export function compileMapText(project: MapProject, planeIndex: number, catalog:
   // The map manual requires #dom2title to be the first command in every
   // plane's .map file, including _plane2 through _plane8.
   lines.push(`#dom2title ${safeBare(project.name)}`);
-  lines.push(`#imagefile ${fileStem}.d6m`);
+  lines.push(`#imagefile ${options.imageFile ?? `${fileStem}.d6m`}`);
+  if (options.winterImageFile) lines.push(`#winterimagefile ${options.winterImageFile}`);
   lines.push(`#mapsize ${plane.width} ${plane.height}`);
   lines.push(`#domversion ${Math.max(600, project.targetVersion)}`);
   if (plane.wrapX && plane.wrapY) lines.push("#wraparound");
@@ -269,29 +279,33 @@ export function compileMapText(project: MapProject, planeIndex: number, catalog:
   }
 
   for (const province of plane.provinces) {
-    if (province.name) lines.push(`#landname ${province.index} ${quote(province.name)}`);
-    lines.push(`#terrain ${province.index} ${terrainMask(province).toString()}`);
-    if (province.start) lines.push(`#start ${province.index}`);
-    if (province.teamStart !== undefined) lines.push(`#teamstart ${province.index} ${Math.max(0, Math.round(province.teamStart))}`);
-    for (const gateNumber of gateAssignments.get(province.id) ?? []) lines.push(`#gate ${province.index} ${gateNumber}`);
+    const number = localNumber(province);
+    if (province.name) lines.push(`#landname ${number} ${quote(province.name)}`);
+    lines.push(`#terrain ${number} ${terrainMask(province).toString()}`);
+    if (province.start) lines.push(`#start ${number}`);
+    if (province.teamStart !== undefined) lines.push(`#teamstart ${number} ${Math.max(0, Math.round(province.teamStart))}`);
+    for (const gateNumber of gateAssignments.get(province.id) ?? []) lines.push(`#gate ${number} ${gateNumber}`);
   }
 
   if (planeIndex === 0) {
     for (const start of project.specificStarts) {
       if (!isPlayerNationId(start.nation)) continue;
-      const global = provinceGlobalNumber(project, start.planeId, start.provinceId);
+      const targetPlane = project.planes.findIndex(candidate => candidate.id === start.planeId);
+      const mapped = options.numbering?.get(start.planeId)?.get(start.provinceId);
+      const global = mapped === undefined ? provinceGlobalNumber(project, start.planeId, start.provinceId)
+        : mapped + project.planes.slice(0, targetPlane).reduce((sum, candidate) => sum + candidate.provinces.length, 0);
       if (global !== undefined) lines.push(`#specstart ${start.nation} ${global}`);
     }
   }
 
   lines.push("", "-- Province connections");
   for (const edge of [...plane.edges].sort((a, b) => {
-    const leftA = provinceIndex(plane, a.a);
-    const leftB = provinceIndex(plane, b.a);
-    return leftA - leftB || provinceIndex(plane, a.b) - provinceIndex(plane, b.b);
+    const leftA = edgeNumber(a.a);
+    const leftB = edgeNumber(b.a);
+    return leftA - leftB || edgeNumber(a.b) - edgeNumber(b.b);
   })) {
-    const a = provinceIndex(plane, edge.a);
-    const b = provinceIndex(plane, edge.b);
+    const a = edgeNumber(edge.a);
+    const b = edgeNumber(edge.b);
     if (!a || !b) continue;
     lines.push(`#neighbour ${a} ${b}`);
     const special = edgeSpecial(edge);
@@ -310,7 +324,7 @@ export function compileMapText(project: MapProject, planeIndex: number, catalog:
     // #land is forbidden on every kind of start: it can erase the starting
     // army and god. #setland keeps the province contents intact.
     if (derived?.profile) lines.push(`-- Population-matched initial defenders: poptype ${derived.profile.poptypeId}; profile ${safeComment(derived.profile.revision)}; host snapshot ${safeComment(derived.profile.gameVersion)}`);
-    lines.push(`${replacesIndependents && !isProtectedStart ? "#land" : "#setland"} ${province.index}`);
+    lines.push(`${replacesIndependents && !isProtectedStart ? "#land" : "#setland"} ${localNumber(province)}`);
     if (province.owner !== undefined) lines.push(`#owner ${province.owner}`);
     if (province.poptype !== undefined) lines.push(`#poptype ${province.poptype}`);
     if (province.killRandomSites) lines.push("#killfeatures");
