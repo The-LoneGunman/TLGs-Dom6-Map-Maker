@@ -483,7 +483,11 @@ export function createLocalStorageDriver(
     },
     async removeIfRevision(expectedRevision) {
       if (!lockManager) {
-        return { removed: false, current: storage.getItem(LEGACY_PROJECT_AUTOSAVE_KEY) };
+        const current = storage.getItem(LEGACY_PROJECT_AUTOSAVE_KEY);
+        // Nothing stored and nothing expected: there is nothing to delete or
+        // race against, so report success rather than a false tab conflict.
+        if (current === null && expectedRevision === null) return { removed: true, current: null };
+        return { removed: false, current };
       }
       return lockManager.request(LEGACY_PROJECT_AUTOSAVE_KEY, () => {
         const current = storage.getItem(LEGACY_PROJECT_AUTOSAVE_KEY);

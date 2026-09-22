@@ -977,10 +977,11 @@ function rawDirectiveOutputUpperBound(raw: string): number {
   if (!raw) return 0;
   let newlines = 0;
   for (let index = 0; index < raw.length; index += 1) {
-    if (raw.charCodeAt(index) === 10) newlines += 1;
+    const code = raw.charCodeAt(index);
+    if (code === 10 || code === 13) newlines += 1;
   }
   // appendRaw trims and filters lines, then joins with CRLF. Counting the
-  // original UTF-8 payload plus one extra CR byte per LF is an upper bound.
+  // original UTF-8 payload plus one extra byte per CR or LF is an upper bound.
   return utf8StringBytes(raw) + newlines + 2;
 }
 

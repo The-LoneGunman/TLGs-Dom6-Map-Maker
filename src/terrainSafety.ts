@@ -18,11 +18,11 @@ export function clearBlockedTerrainContent(province: Province, catalog: Dom6Cata
 }
 
 export function hasRawIndependentDefenderDirectives(raw: string): boolean {
-  return raw.split(/\r?\n/).some(line => /^\s*#(?:commander|comname|bodyguards|units|xp|randomequip|additem|clearmagic|mag_[a-z_]+)\b/i.test(line));
+  return raw.split(/\r\n?|\n/).some(line => /^\s*#(?:commander|comname|bodyguards|units|xp|randomequip|additem|clearmagic|mag_[a-z_]+)\b/i.test(line));
 }
 
 function hasRawThroneSite(raw: string, catalog: Dom6CatalogBundle): boolean {
-  return raw.split(/\r?\n/).some(line => {
+  return raw.split(/\r\n?|\n/).some(line => {
     const match = /^\s*#(?:knownfeature|feature)\s+(?:"([^"]+)"|([+-]?\d+)\b)/i.exec(line);
     return match !== null && isThroneSite(match[1] ?? String(Number(match[2])), catalog);
   });

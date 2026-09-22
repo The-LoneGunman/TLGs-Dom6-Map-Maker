@@ -177,7 +177,11 @@ async function waitForServer(url, child, timeoutMs = 45_000) {
   while (Date.now() < deadline) {
     if (exited !== null) throw new Error(`The local server stopped before it was ready (exit ${exited}).`);
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(1_500) });
+      // The first "/" render can take several seconds on slow or busy CPUs.
+      // Aborting early would not stop that render and would only stack more
+      // renders behind it, so allow each check to run up to the deadline.
+      const remaining = Math.max(1_000, Math.min(20_000, deadline - Date.now()));
+      const response = await fetch(url, { signal: AbortSignal.timeout(remaining) });
       if (response.ok) return;
     } catch {
       // The production server is still starting.

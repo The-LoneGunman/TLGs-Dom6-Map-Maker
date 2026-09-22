@@ -252,7 +252,7 @@ function rawDirectiveStats(project: MapProject): RawDirectiveStats {
 }
 
 function directiveLineCount(value: string): number {
-  return value.split(/\r?\n/).filter((line) => line.trim().length > 0).length;
+  return value.split(/\r\n?|\n/).filter((line) => line.trim().length > 0).length;
 }
 
 function wrapDescription(plane: Plane): string {

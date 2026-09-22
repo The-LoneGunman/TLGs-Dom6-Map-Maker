@@ -102,7 +102,7 @@ export function restoreGenerationLocks(previous: MapProject, next: MapProject): 
         if (JSON.stringify(p[key]) !== JSON.stringify(safe[key])) throw new Error(`Locked ${group} at ${plane.name} #${p.index} conflicts with capital safety. Unlock it or keep the original starts.`);
       }
       const key = `${plane.id}:${p.id}`;
-      const rawGuardians = p.rawDirectives.split(/\r?\n/).some(line => /^\s*#(?:commander|comname|bodyguards|units|xp|randomequip|additem|clearmagic|mag_[a-z_]+)\b/i.test(line));
+      const rawGuardians = p.rawDirectives.split(/\r\n?|\n/).some(line => /^\s*#(?:commander|comname|bodyguards|units|xp|randomequip|additem|clearmagic|mag_[a-z_]+)\b/i.test(line));
       const placedThrone = p.sites.some(site => findCatalogEntry(BUILTIN_DOM6_CATALOG.sites, site.value)?.tags?.includes("throne"));
       if ((protectedGuardians.has(key) && (p.defenders.length || rawGuardians))
         || (protectedSites.has(key) && (p.throne === "preferred" || p.throne === "fixed" || placedThrone))) {

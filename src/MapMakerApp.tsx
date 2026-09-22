@@ -460,6 +460,7 @@ export function MapMakerApp() {
   const importGuardRef = useRef(createProjectImportGuard());
   const catalogImportSessionRef = useRef(createCatalogImportSession());
   const rangeEditStartRef = useRef<MapProject | undefined>(undefined);
+  const playersEditBaseRef = useRef<{ players: number; distribution: StartDistribution } | undefined>(undefined);
   const autosaveRevisionRef = useRef<AutosaveRevision | null>(null);
   const autosaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const actionErrorSequenceRef = useRef(0);
@@ -830,12 +831,13 @@ export function MapMakerApp() {
     const index = source.planes.findIndex((plane) => plane.id === planeId);
     if (index < 0) return;
     const nextId = source.planes[index === 0 ? 1 : index - 1]?.id;
-    mutate((draft) => {
+    const removed = mutate((draft) => {
       draft.planes = draft.planes.filter((plane) => plane.id !== planeId);
       draft.gates = withoutPlaneGateEndpoints(draft.gates, planeId);
       draft.specificStarts = draft.specificStarts.filter((start) => start.planeId !== planeId);
       draft.settings.planeConnections = draft.settings.planeConnections?.filter((rule) => rule.a !== planeId && rule.b !== planeId);
     });
+    if (!removed) return;
     setActivePlaneId(nextId ?? "");
     setSelectedId(undefined);
     setLinkSource(undefined);
@@ -929,12 +931,13 @@ export function MapMakerApp() {
     if (!projectTopologyIssueCount) return;
     const removed = topologyAudits.reduce((sum, item) => sum + item.audit.extra.length, 0);
     const added = topologyAudits.reduce((sum, item) => sum + item.audit.missing.length, 0);
-    mutate((draft) => {
+    const synchronized = mutate((draft) => {
       draft.planes = draft.planes.map((plane, planeIndex) => synchronizePlaneEdges(
         plane,
         `${draft.seed}:plane:${planeIndex}:border-sync`,
       ));
     });
+    if (!synchronized) return;
     setLinkSource(undefined);
     setToast(`Visible borders synchronized: added ${added}, removed ${removed}.`);
   };
@@ -1030,14 +1033,21 @@ export function MapMakerApp() {
         setGateSource(undefined);
         return;
       }
-      mutate((draft) => {
+      const linked = mutate((draft) => {
         const nextNumber = Math.max(0, ...draft.gates.map((gate) => gate.gateNumber)) + 1;
+        // Gate numbers can be edited, so the number alone may repeat an
+        // existing gate's ID; suffix until the ID is unused.
+        const usedIds = new Set(draft.gates.map((gate) => gate.id));
+        const baseId = `gate-manual-${nextNumber}-${hashString(draft.seed).toString(36)}`;
+        let id = baseId;
+        for (let suffix = 2; usedIds.has(id); suffix += 1) id = `${baseId}-${suffix}`;
         draft.gates.push({
-          id: `gate-manual-${nextNumber}-${hashString(draft.seed).toString(36)}`,
+          id,
           gateNumber: nextNumber,
           endpoints: [gateSource, { planeId: activePlane.id, provinceId }],
         });
       });
+      if (!linked) return;
       const samePlane = gateSource.planeId === activePlane.id;
       setGateSource(undefined);
       setToast(samePlane ? "Same-plane gateway linked." : "Cross-plane gateway linked.");
@@ -1107,7 +1117,10 @@ export function MapMakerApp() {
         return;
       }
       const next = prepareProjectForOpening(opened);
-      if (!commit(next)) return;
+      // Opening a file replaces the atlas rather than editing it, so the
+      // current atlas's locks must not be compared against the new project.
+      pruneAuthoringRegions(next);
+      if (!commit(next, true, false)) return;
       setActivePlaneId(next.planes[0]?.id ?? "");
       setSelectedId(undefined);
       setLinkSource(undefined);
@@ -1277,14 +1290,23 @@ export function MapMakerApp() {
               </Field>
               <p className="field-note">New atlases start with a random seed. Saved projects keep theirs. Changing this seed takes effect when you Generate; use a name reroll to keep the current map.</p>
               <div className="field-grid two">
-                <NumberField scope="Next generation" label="Players" value={project.settings.players} min={2} max={32} onChange={(value) => mutate((draft) => {
-                  draft.settings.startDistribution = resizeStartDistribution(
-                    draft.settings.startDistribution ?? defaultStartDistribution(draft.settings.players),
-                    draft.settings.players,
-                    value,
-                  );
-                  draft.settings.players = value;
-                })} />
+                <NumberField scope="Next generation" label="Players" value={project.settings.players} min={2} max={32}
+                  onEditStart={() => {
+                    const { settings } = currentProjectRef.current;
+                    playersEditBaseRef.current = { players: settings.players, distribution: settings.startDistribution ?? defaultStartDistribution(settings.players) };
+                  }}
+                  onEditEnd={() => { playersEditBaseRef.current = undefined; }}
+                  onChange={(value) => mutate((draft) => {
+                    // Resize from the allocation present when typing began, so an
+                    // intermediate keystroke ("2" while typing "20") cannot
+                    // permanently shrink coastal, water, or cave starts.
+                    const base = playersEditBaseRef.current ?? {
+                      players: draft.settings.players,
+                      distribution: draft.settings.startDistribution ?? defaultStartDistribution(draft.settings.players),
+                    };
+                    draft.settings.startDistribution = resizeStartDistribution(base.distribution, base.players, value);
+                    draft.settings.players = value;
+                  })} />
                 <NumberField scope="Next generation" label="Provinces / player" value={project.settings.provincesPerPlayer} min={8} max={30} onChange={(value) => mutate((draft) => { draft.settings.provincesPerPlayer = value; })} />
               </div>
               <GenerationPlanSummary project={project} onReview={() => setBalanceOpen(true)} />
@@ -1394,7 +1416,7 @@ export function MapMakerApp() {
                 </select>
               </Field>
               <div className="resolution-card">
-                <span>{activePlane.width.toLocaleString()} × {activePlane.height.toLocaleString()}</span>
+                <span>{activePlane.width.toLocaleString("en-US")} × {activePlane.height.toLocaleString("en-US")}</span>
                 <small>Native or illustrated game export</small>
               </div>
               <Toggle scope="Current Map + next generation" label="Wrap east / west" checked={activePlane.wrapX} onChange={(value) => updateWrap("wrapX", value)} />
@@ -2190,7 +2212,7 @@ function Divider() { return <div className="divider" />; }
 type ControlScope = "Next generation" | "Current Map" | "Current Map + next generation" | "Host / export" | "Preview only" | "Saved note only" | "On project open";
 function ScopeBadge({ scope = "Current Map" }: { scope?: ControlScope }) { return <small className="scope-badge">{scope}</small>; }
 function Field({ label, children, scope }: { label: string; children: ReactNode; scope?: ControlScope }) { return <label className="field"><span>{label} <ScopeBadge scope={scope} /></span>{children}</label>; }
-function NumberField({ label, value, min, max, describedBy, onChange, scope }: { label: string; value: number; min: number; max: number; describedBy?: string; onChange: (value: number) => boolean | void; scope?: ControlScope }) { return <Field label={label} scope={scope}><BoundedNumberInput value={value} min={min} max={max} describedBy={describedBy} onChange={onChange} /></Field>; }
+function NumberField({ label, value, min, max, describedBy, onChange, onEditStart, onEditEnd, scope }: { label: string; value: number; min: number; max: number; describedBy?: string; onChange: (value: number) => boolean | void; onEditStart?: () => void; onEditEnd?: () => void; scope?: ControlScope }) { return <Field label={label} scope={scope}><BoundedNumberInput value={value} min={min} max={max} describedBy={describedBy} onChange={onChange} onEditStart={onEditStart} onEditEnd={onEditEnd} /></Field>; }
 function OptionalNumberField({ label, value, min, max, disabled = false, onChange, scope }: { label: string; value?: number; min: number; max?: number; disabled?: boolean; onChange: (value?: number) => void; scope?: ControlScope }) { return <Field label={label} scope={scope}><input type="number" value={value ?? ""} min={min} max={max} disabled={disabled} placeholder="Auto" onChange={(event) => {
   if (!event.target.value.trim()) onChange(undefined);
   else onChange(boundedInteger(event.target.value, min, min, max ?? Number.MAX_SAFE_INTEGER));

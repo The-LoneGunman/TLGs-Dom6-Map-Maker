@@ -68,6 +68,15 @@ export async function stageWindowsInstaller({ projectRoot, nodeRoot, outputDirec
   }
 
   await cp(path.join(project, "dist"), path.join(output, "dist"), { recursive: true });
+  // The production server and launcher are ESM in .js/.mjs files. Without a
+  // payload package.json, Node would inherit the module type from whatever
+  // package.json sits above the install folder (for example, a CommonJS one
+  // in the user's profile) and refuse to load the server.
+  await writeFile(
+    path.join(output, "package.json"),
+    `${JSON.stringify({ name: "pantokrator-atlas-runtime", private: true, type: "module" }, null, 2)}\n`,
+    "utf8",
+  );
   await mkdir(path.join(output, "runtime"), { recursive: true });
   await cp(nodeExecutable, path.join(output, "runtime", "node.exe"));
   await cp(nodeLicense, path.join(output, "runtime", "NODE_LICENSE.txt"));

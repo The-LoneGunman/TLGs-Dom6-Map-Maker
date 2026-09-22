@@ -101,6 +101,7 @@ const EDGE_KIND_SET = new Set<EdgeKind>([
 export const ADVANCED_COMMANDS = [
   { command: "#dom2title", scope: "plane", description: "Required first command in every plane file" },
   { command: "#imagefile", scope: "plane", description: "D6M or TGA geography file" },
+  { command: "#winterimagefile", scope: "plane", description: "Winter TGA geography file (illustrated export)" },
   { command: "#mapsize", scope: "plane", description: "Plane pixel dimensions" },
   { command: "#wraparound / #hwraparound / #vwraparound", scope: "plane", description: "Full or axis-specific wrapping" },
   { command: "#domversion", scope: "map", description: "Required game version" },
@@ -820,7 +821,6 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
 
     for (const province of plane.provinces) {
       if (!TERRAIN_KEY_SET.has(province.terrain)) add("error", `${province.name}: unknown terrain ${String(province.terrain)}.`, plane.id, province.id);
-      const degree = adjacency.get(province.id)?.length ?? 0;
       const isStartProvince = protectedStartIds.has(province.id);
       const adjacentStartId = isStartProvince
         ? undefined
@@ -834,10 +834,12 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
         if (isBlockedProvince(province)) add("error", `${province.name} is a start on blocked terrain.`, plane.id, province.id);
         const targetDegree = project.settings.startDegreeTarget ?? 4;
         const hardMinimumDegree = Math.min(targetDegree, 4);
-        if (degree < hardMinimumDegree) {
-          add("error", `${province.name} is a start with ${degree} connections; at least ${hardMinimumDegree} are required.`, plane.id, province.id);
-        } else if (degree < targetDegree) {
-          add("warning", `${province.name} achieved ${degree} connections; the requested ${targetDegree} is a best-effort preference above four.`, plane.id, province.id);
+        // Cave Walls and impassable borders are declared neighbours but not exits.
+        const startDegree = traversableAdjacency.get(province.id)?.length ?? 0;
+        if (startDegree < hardMinimumDegree) {
+          add("error", `${province.name} is a start with ${startDegree} traversable connections; at least ${hardMinimumDegree} are required.`, plane.id, province.id);
+        } else if (startDegree < targetDegree) {
+          add("warning", `${province.name} achieved ${startDegree} traversable connections; the requested ${targetDegree} is a best-effort preference above four.`, plane.id, province.id);
         }
         const blockingEdges = plane.edges.filter((edge) => (edge.a === province.id || edge.b === province.id) && blocksReliableStartMovement(edge));
         if (blockingEdges.length) add("error", `${province.name} has ${blockingEdges.length} blocking or condition-dependent start border${blockingEdges.length === 1 ? "" : "s"}.`, plane.id, province.id);
@@ -1129,6 +1131,24 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
   }
 
   const gateNumbers = new Set<number>();
+  const gateGroupsByEndpoint = new Map<string, { plane: Plane; province: Province; groups: number[] }>();
+  // Start sets and adjacency depend only on the plane; build them once instead
+  // of once per gate endpoint so large imported gate tables stay responsive.
+  const gatePlaneContext = new Map<string, { protectedStarts: Set<string>; adjacency: Map<string, string[]> }>();
+  const gateContextFor = (plane: Plane) => {
+    let context = gatePlaneContext.get(plane.id);
+    if (!context) {
+      const specificStartIds = new Set(project.specificStarts.filter((start) => start.planeId === plane.id).map((start) => start.provinceId));
+      context = {
+        protectedStarts: new Set(plane.provinces
+          .filter((item) => item.start || item.teamStart !== undefined || specificStartIds.has(item.id))
+          .map((item) => item.id)),
+        adjacency: adjacencyFor(plane),
+      };
+      gatePlaneContext.set(plane.id, context);
+    }
+    return context;
+  };
   for (const gate of project.gates) {
     if (!Number.isSafeInteger(gate.gateNumber) || gate.gateNumber < 1) add("error", "Gate numbers must be positive safe integers.");
     if (gateNumbers.has(gate.gateNumber)) add("error", `Gate number ${gate.gateNumber} is duplicated across link groups.`);
@@ -1143,18 +1163,20 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
       if (!plane || !province) add("error", `Gate ${gate.gateNumber} references a missing province.`);
       if (!plane || !province) continue;
       resolvedEndpoints.push({ plane, province });
+      const endpointKey = `${plane.id}:${province.id}`;
+      const usage = gateGroupsByEndpoint.get(endpointKey) ?? { plane, province, groups: [] };
+      if (!usage.groups.includes(gate.gateNumber)) usage.groups.push(gate.gateNumber);
+      gateGroupsByEndpoint.set(endpointKey, usage);
       if (isBlockedProvince(province)) {
         add("error", `Gate ${gate.gateNumber} endpoint ${province.name} is on blocked terrain.`, plane.id, province.id);
         continue;
       }
-      const protectedStarts = new Set(plane.provinces
-        .filter((item) => item.start || item.teamStart !== undefined || project.specificStarts.some((start) => start.planeId === plane.id && start.provinceId === item.id))
-        .map((item) => item.id));
+      const { protectedStarts, adjacency: gateAdjacency } = gateContextFor(plane);
       if (protectedStarts.has(province.id)) {
         add("warning", `Gate ${gate.gateNumber} is in start province ${province.name}; regenerate or move it when the plane has another valid endpoint.`, plane.id, province.id);
         continue;
       }
-      const adjacentStart = adjacencyFor(plane).get(province.id)?.find((provinceId) => protectedStarts.has(provinceId));
+      const adjacentStart = gateAdjacency.get(province.id)?.find((provinceId) => protectedStarts.has(provinceId));
       if (adjacentStart) {
         const startName = plane.provinces.find((item) => item.id === adjacentStart)?.name ?? "a start";
         add("warning", `Gate ${gate.gateNumber} in ${province.name} is adjacent to start province ${startName}; prefer an endpoint at least two connections away.`, plane.id, province.id);
@@ -1173,6 +1195,10 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
         add("error", `Gate ${gate.gateNumber} mixes a dry endpoint with an aquatic surface-to-subterranean endpoint; move both ends to matching water status or regenerate the link.`);
       }
     }
+  }
+  for (const { plane, province, groups } of gateGroupsByEndpoint.values()) {
+    if (groups.length < 2) continue;
+    add("warning", `${province.name} is an endpoint of gates ${groups.join(", ")}; the generator uses one gate per province and Dominions' handling of several #gate lines on one province is unverified.`, plane.id, province.id);
   }
   if (project.planes.length > 1) {
     const connectedPlanes = new Set<string>([project.planes[0]!.id]);
@@ -1375,16 +1401,18 @@ function quote(value: string): string {
 }
 
 function safeBare(value: string): string {
-  return value.replace(/[\r\n#]+/g, " ").replace(/--/g, "-").trim() || "Untitled";
+  // Collapse whole runs so "a---b" cannot leave a "--" comment marker behind;
+  // quotes and "//" would otherwise start a string or comment in native parsers.
+  return value.replace(/[\r\n#]+/g, " ").replace(/-{2,}/g, "-").replace(/\/{2,}/g, "/").replace(/"/g, "'").trim() || "Untitled";
 }
 
 function safeComment(value: string): string {
-  return value.replace(/[\r\n]+/g, " ").replace(/--/g, "-").trim();
+  return value.replace(/[\r\n]+/g, " ").replace(/-{2,}/g, "-").trim();
 }
 
 function appendRaw(lines: string[], raw: string) {
   const clean = raw
-    .split(/\r?\n/)
+    .split(/\r\n?|\n/)
     .map((line) => line.trim())
     .filter((line) => line.startsWith("#") || line.startsWith("--"));
   if (clean.length) lines.push(...clean);
@@ -1470,8 +1498,9 @@ function powerfulGuardianForce(province: Province): boolean {
 
 function blocksReliableStartMovement(edge: Edge): boolean {
   // Bits 1, 2, and 4 are pass, river, and impassable respectively. Combined
-  // special codes such as 33 and 36 retain the same movement behavior.
-  return (edgeSpecial(edge) & 0b111) !== 0;
+  // special codes such as 33 and 36 retain the same movement behavior. Named
+  // mountain borders match the generator's start-edge rule.
+  return edge.kind === "mountain_border" || (edgeSpecial(edge) & 0b111) !== 0;
 }
 
 function classifyStart(plane: Plane, province: Province): StartType {

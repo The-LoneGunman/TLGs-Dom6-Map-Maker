@@ -96,7 +96,14 @@ async function assetResponse(request) {
 }
 
 function requestUrl(request, host, port) {
-  return new URL(request.url || "/", `http://${host}:${port}`).href;
+  // Keep only the path and query. Targets such as "//other.host/x",
+  // "/\other.host/x" or absolute-form URLs must not change the host the
+  // application sees.
+  const parsed = new URL(request.url || "/", `http://${host}:${port}`);
+  const url = new URL(`http://${host}:${port}/`);
+  url.pathname = parsed.pathname;
+  url.search = parsed.search;
+  return url.href;
 }
 
 function webRequestFromNode(request, host, port) {
@@ -128,6 +135,12 @@ async function sendWebResponse(response, outgoing) {
     body.once("error", reject);
     outgoing.once("error", reject);
     outgoing.once("finish", resolve);
+    // A client that disconnects mid-download never emits "finish". Release the
+    // source stream (and its file handle) instead of leaving it open.
+    outgoing.once("close", () => {
+      if (!outgoing.writableFinished) body.destroy();
+      resolve();
+    });
     body.pipe(outgoing);
   });
 }

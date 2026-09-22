@@ -65,7 +65,7 @@ export function illustratedExportError(project: MapProject): string | undefined 
   // Raw directives may contain local/global province references or replace the
   // image itself. Never guess a remapping for arbitrary map-language input.
   if ([project.rawDirectives, ...project.planes.flatMap(plane => [plane.rawDirectives, ...plane.provinces.map(p => p.rawDirectives)])]
-    .some(raw => raw.split(/\r?\n/).some(line => /^\s*#/.test(line)))) {
+    .some(raw => raw.split(/\r\n?|\n/).some(line => /^\s*#/.test(line)))) {
     return "Illustrated export cannot safely renumber advanced raw directives. Use Native scenery, or move those commands into the supported editor fields.";
   }
   try {
