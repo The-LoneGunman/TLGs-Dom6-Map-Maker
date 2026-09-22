@@ -1,4 +1,4 @@
-import { BUILTIN_DOM6_CATALOG } from "./catalog/builtin";
+import { BUILTIN_DOM6_CORE_CATALOG } from "./catalog/builtinCore";
 import { DISTINCTIVE_TERRAIN_NAMES, distinctiveRealmNames } from "./nameVocabulary";
 import {
   effectiveProvinceTerrainFlags,
@@ -184,18 +184,18 @@ export function normalizeProvinceName(value: string): string {
 
 function generatedReservedNames(): string[] {
   const names: string[] = [];
-  for (const nation of BUILTIN_DOM6_CATALOG.nations) {
+  for (const nation of BUILTIN_DOM6_CORE_CATALOG.nations) {
     if (!nation.era) continue;
     names.push(nation.name);
     if (nation.subtitle) names.push(nation.subtitle);
   }
-  for (const site of BUILTIN_DOM6_CATALOG.sites) {
+  for (const site of BUILTIN_DOM6_CORE_CATALOG.sites) {
     if (site.tags?.includes("nation-home-site")) names.push(site.name);
   }
-  for (const plane of BUILTIN_DOM6_CATALOG.planes) names.push(plane.name);
+  for (const plane of BUILTIN_DOM6_CORE_CATALOG.planes) names.push(plane.name);
   // The pinned tables expose Nexus as poptype 106 and Dreamlands as a nation
   // epithet/site; include those factual labels without importing a map list.
-  for (const poptype of BUILTIN_DOM6_CATALOG.poptypes) if (poptype.id === 106) names.push(poptype.name);
+  for (const poptype of BUILTIN_DOM6_CORE_CATALOG.poptypes) if (poptype.id === 106) names.push(poptype.name);
   names.push(...APP_REALM_NAMES);
   return [...new Map(names
     .filter(Boolean)

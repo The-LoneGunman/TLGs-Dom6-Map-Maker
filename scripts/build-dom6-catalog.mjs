@@ -243,14 +243,20 @@ if (units.filter(([, , flags]) => (flags & UNIT_INTERNAL_RECORD) !== 0).length !
 if (nationHomeSiteIds.size !== 208) throw new Error(`Expected 208 referenced nation home/future sites, found ${nationHomeSiteIds.size}.`);
 if (poptypes.length !== 82 || poptypes[0][0] !== 25 || poptypes.at(-1)[0] !== 106) throw new Error("Poptype table is incomplete.");
 
-const output = {
+// The bundle is split in two files. The core file holds every collection except
+// units and is all the background map generator needs (province-name
+// reservations and site tags); the 4,091-row unit table is only loaded by the
+// editor, which assembles both into the complete built-in catalog. Both files
+// carry the same source identity so a mismatched pair is rejected at load time.
+const COMPACT_CATALOG_FORMAT_VERSION = 4;
+const core = {
   format: "pantokrator-atlas/compact-catalog",
-  formatVersion: 3,
+  formatVersion: COMPACT_CATALOG_FORMAT_VERSION,
   gameVersion: SOURCE_GAME_VERSION,
   sourceRevision: SOURCE_REVISION,
   sourceDate: SOURCE_DATE,
   sourceFileSha256: SOURCE_SHA256,
-  units,
+  unitsFile: `dom6-${SOURCE_GAME_VERSION}-units.json`,
   sites,
   nations,
   poptypes,
@@ -258,9 +264,17 @@ const output = {
   planes,
   siteTerrainTypes,
 };
+const unitTable = {
+  format: "pantokrator-atlas/compact-catalog-units",
+  formatVersion: COMPACT_CATALOG_FORMAT_VERSION,
+  gameVersion: SOURCE_GAME_VERSION,
+  sourceRevision: SOURCE_REVISION,
+  units,
+};
 
 await mkdir(outputRoot, { recursive: true });
-await writeFile(path.join(outputRoot, `dom6-${SOURCE_GAME_VERSION}.json`), `${JSON.stringify(output)}\n`, "utf8");
+await writeFile(path.join(outputRoot, `dom6-${SOURCE_GAME_VERSION}.json`), `${JSON.stringify(core)}\n`, "utf8");
+await writeFile(path.join(outputRoot, core.unitsFile), `${JSON.stringify(unitTable)}\n`, "utf8");
 console.log(JSON.stringify({
   units: units.length,
   nationRecruitableLeaders: leaderIds.size,

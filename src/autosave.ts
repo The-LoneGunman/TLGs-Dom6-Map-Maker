@@ -1,5 +1,5 @@
 import type { MapProject } from "./domain";
-import { parseProject, serializeProject } from "./export";
+import { parseProject, serializeProject } from "./projectFile";
 
 export const LEGACY_PROJECT_AUTOSAVE_KEY = "pantokrator-atlas-project-v1";
 

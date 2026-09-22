@@ -1,9 +1,9 @@
 import type { VerifiedPopulationDefenseProfile } from "./populationDefenders";
 import nativeBatchV3 from "./catalog/data/population-defense-6.37-v3.json";
+import { registerVerifiedPopulationDefenseProfiles } from "./populationDefenseRegistry";
 
 /** Revisions are immutable: saved maps must not silently adopt new army templates. */
-// v1 was exposed with an empty registry. Do not add armies to that saved revision.
-export const POPULATION_DEFENSE_PROFILE_REVISION = "dom6-6.37-native-2026-09-21-v3";
+export { POPULATION_DEFENSE_PROFILE_REVISION } from "./populationDefenseRegistry";
 
 /** Membership and native army acceptance are documented for every released revision. */
 export const VERIFIED_POPULATION_DEFENSE_PROFILES: readonly VerifiedPopulationDefenseProfile[] = [{
@@ -28,3 +28,7 @@ export const VERIFIED_POPULATION_DEFENSE_PROFILES: readonly VerifiedPopulationDe
     }],
   }],
 }, ...nativeBatchV3 as VerifiedPopulationDefenseProfile[]];
+
+// Loading this data module is what makes the profiles available to callers
+// that use the registry default (see ./populationDefenseRegistry).
+registerVerifiedPopulationDefenseProfiles(VERIFIED_POPULATION_DEFENSE_PROFILES);

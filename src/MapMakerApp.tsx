@@ -78,20 +78,19 @@ import { createFreshProject, createProjectImportGuard, prepareProjectForOpening,
 import { createCatalogImportSession } from "./catalog/importSession";
 import { assertProjectLocks, pruneAuthoringRegions } from "./authoringLocks";
 import { connectedRegionLayoutNotice } from "./connectedRegions";
-import { illustratedExportError, type ExportArtwork } from "./illustratedMap";
+import { illustratedExportError, type ExportArtwork } from "./illustratedArtworkPlan";
 import {
-  downloadPackage,
   downloadProject,
-  estimatedPackageBytes,
-  installPackage,
   MAX_PROJECT_IMPORT_BYTES,
   MAX_IMPORTED_STRING_LENGTH,
   MAX_IMPORTED_DIRECTIVE_LENGTH,
   parseProject,
   serializeProject,
-  zipPackageSafety,
-  type ExportProgress,
-} from "./export";
+} from "./projectFile";
+import { estimatedPackageBytes, zipPackageSafety } from "./packageEstimate";
+// Package building is loaded on demand; only its progress type is needed here.
+import type { ExportProgress } from "./export";
+import { loadPackageExporter, prefetchPackageExporter } from "./packageExporterLoader";
 import {
   isGenerationAbort,
   prepareConnectedRegionsInBackground,
@@ -104,9 +103,9 @@ import { MapCanvas, canRenderPlanePreview, renderPlanePng, type ProvinceMarkerAn
 import { GenerationPlanSummary, ProvinceExplorer, StartBalancePanel } from "./WorkbenchPanels";
 import { IterationPanel } from "./IterationPanel";
 import { PlanePreferencesPanel } from "./PlanePreferencesPanel";
-import { PopulationDefensePanel, PopulationDefenseProvinceStatus } from "./PopulationDefensePanel";
+import { PopulationDefensePanel, PopulationDefenseProvinceStatus, usePopulationDefenseProfiles } from "./PopulationDefensePanel";
 import { buildInitialDefensePlan } from "./populationDefenders";
-import { VERIFIED_POPULATION_DEFENSE_PROFILES } from "./populationDefenseProfiles";
+import { loadVerifiedPopulationDefenseProfiles } from "./populationDefenseRegistry";
 import { recordGenerationInputs, type AnalysisMode, type ProvinceReference } from "./workbench";
 import { CatalogCombobox } from "./catalog/CatalogCombobox";
 import { BoundedNumberInput, ItemListInput } from "./EditorInputs";
@@ -534,17 +533,21 @@ export function MapMakerApp() {
   // renders first and these panels refresh in a follow-up render; they only
   // display results. Export is gated on the current project's validation below.
   const analysisProject = useDeferredValue(project);
+  // Verified population templates load on demand: while the policy is on or
+  // Scenario is open. Opening a project or autosave with the policy on waits
+  // for them, so its first render already uses the real templates.
+  const populationProfiles = usePopulationDefenseProfiles(project.populationDefense?.enabled === true || leftTab === "scenario").profiles;
   const fairness = useMemo(() => calculateFairness(analysisProject), [analysisProject]);
-  const deferredIssues = useMemo(() => validateProject(analysisProject, catalog), [analysisProject, catalog]);
+  const deferredIssues = useMemo(() => validateProject(analysisProject, catalog, populationProfiles), [analysisProject, catalog, populationProfiles]);
   // Export actions exist only in the export dialog: while it is open, never let
   // a lagging validation enable an export that the current project would block.
-  const currentExportIssues = useMemo(() => exportOpen && analysisProject !== project ? validateProject(project, catalog) : undefined,
-    [analysisProject, catalog, exportOpen, project]);
+  const currentExportIssues = useMemo(() => exportOpen && analysisProject !== project ? validateProject(project, catalog, populationProfiles) : undefined,
+    [analysisProject, catalog, exportOpen, populationProfiles, project]);
   const issues = currentExportIssues ?? deferredIssues;
   // Only the Scenario summary needs this count, and only while the policy is on.
-  const populationDefenderCount = useMemo(() => leftTab === "scenario" && project.populationDefense?.enabled
-    ? buildInitialDefensePlan(project, catalog, project.populationDefense, VERIFIED_POPULATION_DEFENSE_PROFILES).counts.derived
-    : undefined, [catalog, leftTab, project]);
+  const populationDefenderCount = useMemo(() => leftTab === "scenario" && project.populationDefense?.enabled && populationProfiles
+    ? buildInitialDefensePlan(project, catalog, project.populationDefense, populationProfiles).counts.derived
+    : undefined, [catalog, leftTab, populationProfiles, project]);
   const topologyAudits = useMemo(() => project.planes.map((plane) => ({
     planeId: plane.id,
     audit: auditPlaneTopology(plane),
@@ -588,6 +591,9 @@ export function MapMakerApp() {
     let preparation: ConnectedRegionPreparationTask | undefined;
     const timeout = window.setTimeout(() => {
       void loadProjectAutosave().then(async (result) => {
+        // A saved policy that is on needs its templates before the first render.
+        // A failed load is retried by the editor; it never discards the autosave.
+        if (result.project?.populationDefense?.enabled) await loadVerifiedPopulationDefenseProfiles().catch(() => undefined);
         if (cancelled) return;
         let next = result.project ?? createFreshProject();
         if (result.project) {
@@ -634,6 +640,11 @@ export function MapMakerApp() {
   useEffect(() => {
     currentProjectRef.current = project;
   }, [project]);
+
+  // The package exporter loads on demand; fetch it as soon as its dialog opens.
+  useEffect(() => {
+    if (exportOpen) prefetchPackageExporter();
+  }, [exportOpen]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -1226,6 +1237,7 @@ export function MapMakerApp() {
     setExportBusy(true);
     setExportProgress({ stage: "preparing", plane: 0, planeCount: project.planes.length, percent: 0, message: "Preparing the atlas…" });
     try {
+      const { downloadPackage, installPackage } = await loadPackageExporter();
       if (kind === "install") {
         const result = await installPackage(project, setExportProgress, catalog, exportArtwork);
         if (result === "unsupported") {
@@ -1269,6 +1281,7 @@ export function MapMakerApp() {
     const importStatus = importGuardRef.current.begin();
     try {
       const opened = await parseProjectImportFile(file);
+      if (opened.populationDefense?.enabled) await loadVerifiedPopulationDefenseProfiles().catch(() => undefined);
       if (importStatus() !== "current") {
         if (importStatus() === "changed") setToast("Project not opened because the current atlas changed while the file was being read. Open the file again when ready.");
         return;

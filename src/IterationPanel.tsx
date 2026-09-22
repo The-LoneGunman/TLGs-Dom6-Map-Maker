@@ -7,7 +7,9 @@ import { addAuthoredRegion, previewBatchEdit, previewContentReroll, selectProvin
 import { applyBuiltinRecipe, applySettingsRecipe, BUILTIN_RECIPES, createSettingsRecipe, MAX_RECIPE_BYTES, parseSettingsRecipe } from "./recipes";
 import { type Dom6CatalogBundle } from "./catalog";
 import { calculateFairness } from "./generator";
-import { startProjectGeneration, isGenerationAbort, type ProjectGenerationTask } from "./generationWorker";
+import { isGenerationAbort, type ProjectGenerationTask } from "./generationWorker";
+import { createGenerationWorkerSession } from "./generationWorkerSession";
+import { prefetchVerifiedPopulationDefenseProfiles } from "./populationDefenseRegistry";
 import { validateProject } from "./dom6";
 import { analyzeStarts, recordGenerationInputs } from "./workbench";
 import { MapCanvas } from "./MapCanvas";
@@ -118,6 +120,8 @@ export function IterationPanel({ project, planeId, selectedId, catalog, busy, on
   };
   const propose = (section: IterationSection, title: string, next: MapProject, detail: string, result?: EditPreview, highlight?: { ids: string[]; label: string }) => {
     previewTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // A preview that turns population-matched defenders on (for example, a recipe) is applied later; load the templates now.
+    if (next.populationDefense?.enabled) prefetchVerifiedPopulationDefenseProfiles();
     setPreview({source:project,next,title,detail,section,result});
     previewHighlighted.current = !!highlight?.ids.length;
     if (highlight?.ids.length) onHighlight(highlight.ids, highlight.label);
@@ -133,12 +137,15 @@ export function IterationPanel({ project, planeId, selectedId, catalog, busy, on
     const source = project;
     const token = ++request.current;
     const projects: MapProject[] = [];
+    // One background worker generates the candidates in turn and is released when the comparison ends.
+    // Cancelling terminates it mid-candidate; a failed worker is never reused.
+    const session = createGenerationWorkerSession();
     setError(undefined); setCandidates({source,running:true,message:"Preparing candidates…",projects:[]});
     try {
       for (let i=0; i<candidateCount; i++) {
         if (request.current !== token) return;
         const input = cloneProject(source); input.seed = `${source.seed}:candidate:${contentSeed}:${i+1}`;
-        task.current = startProjectGeneration(input,{onProgress:p=>setCandidates({source,running:true,message:`Candidate ${i+1}/${candidateCount}: ${p.message}`,projects:[...projects]})});
+        task.current = session.start(input,{onProgress:p=>setCandidates({source,running:true,message:`Candidate ${i+1}/${candidateCount}: ${p.message}`,projects:[...projects]})});
         const result = await task.current.promise;
         if (request.current !== token) return;
         projects.push(recordGenerationInputs(result));
@@ -149,7 +156,7 @@ export function IterationPanel({ project, planeId, selectedId, catalog, busy, on
         if (!isGenerationAbort(e)) fail("candidates", e, "Candidate generation failed.");
         setCandidates({source,running:false,message:"Stopped; current atlas is unchanged.",projects});
       }
-    } finally { if (request.current === token) task.current = undefined; }
+    } finally { session.dispose(); if (request.current === token) task.current = undefined; }
   };
   /** Errors and the Apply/Discard card appear directly below the section that produced them. */
   const feedback = (section: IterationSection) => <>

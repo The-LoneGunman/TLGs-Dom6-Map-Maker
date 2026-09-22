@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { findCatalogEntry, type Dom6CatalogBundle } from "./catalog";
 import { GAME_ERA_LABELS, type GameEra, type MapProject } from "./domain";
 import {
@@ -9,7 +9,32 @@ import {
   type PopulationDefensePolicy,
   type VerifiedPopulationDefenseProfile,
 } from "./populationDefenders";
-import { POPULATION_DEFENSE_PROFILE_REVISION, VERIFIED_POPULATION_DEFENSE_PROFILES } from "./populationDefenseProfiles";
+import {
+  POPULATION_DEFENSE_PROFILE_REVISION,
+  populationDefenseRegistryState,
+  prefetchVerifiedPopulationDefenseProfiles,
+  subscribePopulationDefenseRegistry,
+  type PopulationDefenseRegistryState,
+} from "./populationDefenseRegistry";
+
+/**
+ * The verified templates load on demand. While `needed`, start loading them;
+ * the returned state re-renders the caller once they are available (or the
+ * load failed, which a later call retries).
+ */
+export function usePopulationDefenseProfiles(needed: boolean): PopulationDefenseRegistryState {
+  const state = useSyncExternalStore(subscribePopulationDefenseRegistry, populationDefenseRegistryState, populationDefenseRegistryState);
+  useEffect(() => {
+    if (needed && !state.profiles && !state.failed) prefetchVerifiedPopulationDefenseProfiles();
+  }, [needed, state]);
+  return state;
+}
+
+function PopulationDefenseLoading({ failed, label }: { failed?: boolean; label: string }) {
+  return failed
+    ? <p role="alert" className="warning-copy">Verified population templates could not be loaded. Native initial armies are unchanged. <button type="button" className="button quiet" onClick={prefetchVerifiedPopulationDefenseProfiles}>Retry</button></p>
+    : <p role="status" aria-live="polite">Loading verified population templates for {label}…</p>;
+}
 
 /** Toggling never silently upgrades the templates pinned in a saved project. */
 export function populationDefensePolicyForToggle(
@@ -30,10 +55,21 @@ export interface PopulationDefensePanelProps {
   profiles?: readonly VerifiedPopulationDefenseProfile[];
 }
 
-export function PopulationDefensePanel({
-  project, catalog, busy = false, onPolicyChange, onContextChange, onOpenAssumptions,
-  profiles = VERIFIED_POPULATION_DEFENSE_PROFILES,
-}: PopulationDefensePanelProps) {
+export function PopulationDefensePanel(props: PopulationDefensePanelProps) {
+  const registry = usePopulationDefenseProfiles(props.profiles === undefined);
+  const profiles = props.profiles ?? registry.profiles;
+  if (!profiles) {
+    return <section className="iteration-panel" aria-labelledby="population-defense-heading" aria-busy={!registry.failed}>
+      <div className="scope-heading"><h3 id="population-defense-heading">Ordinary initial defenders</h3><span className="scope-badge">Current Map</span></div>
+      <PopulationDefenseLoading failed={registry.failed} label="this map" />
+    </section>;
+  }
+  return <LoadedPopulationDefensePanel {...props} profiles={profiles} />;
+}
+
+function LoadedPopulationDefensePanel({
+  project, catalog, busy = false, onPolicyChange, onContextChange, onOpenAssumptions, profiles,
+}: PopulationDefensePanelProps & { profiles: readonly VerifiedPopulationDefenseProfile[] }) {
   const policy = project.populationDefense;
   const enabled = policy?.enabled ?? false;
   const revision = policy?.profileRevision ?? POPULATION_DEFENSE_PROFILE_REVISION;
@@ -102,13 +138,31 @@ export function PopulationDefensePanel({
   </section>;
 }
 
-/** Read-only derived armies stay distinct from the province's editable guardian groups. */
-export function PopulationDefenseProvinceStatus({ project, catalog, planeId, provinceId, onConfigure,
-  profiles = VERIFIED_POPULATION_DEFENSE_PROFILES,
-}: {
+type PopulationDefenseProvinceStatusProps = {
   project: MapProject; catalog: Dom6CatalogBundle; planeId: string; provinceId: string;
   onConfigure?: () => void; profiles?: readonly VerifiedPopulationDefenseProfile[];
-}) {
+};
+
+const NO_PROFILES: readonly VerifiedPopulationDefenseProfile[] = [];
+
+/** Read-only derived armies stay distinct from the province's editable guardian groups. */
+export function PopulationDefenseProvinceStatus(props: PopulationDefenseProvinceStatusProps) {
+  // Templates only matter while the policy is enabled; a disabled policy
+  // resolves every province without consulting them.
+  const enabled = props.project.populationDefense?.enabled === true;
+  const registry = usePopulationDefenseProfiles(props.profiles === undefined && enabled);
+  const profiles = props.profiles ?? registry.profiles;
+  if (enabled && !profiles) {
+    return <section className="iteration-panel" aria-label="Selected province initial defenders" aria-busy={!registry.failed}>
+      <div className="scope-heading"><h3>Initial-defender preview</h3><span className="scope-badge">Current Map</span></div>
+      <PopulationDefenseLoading failed={registry.failed} label="this province" />
+    </section>;
+  }
+  return <LoadedPopulationDefenseProvinceStatus {...props} profiles={profiles ?? NO_PROFILES} />;
+}
+
+function LoadedPopulationDefenseProvinceStatus({ project, catalog, planeId, provinceId, onConfigure, profiles }:
+  PopulationDefenseProvinceStatusProps & { profiles: readonly VerifiedPopulationDefenseProfile[] }) {
   const plan = useMemo(() => buildInitialDefensePlan(project, catalog, project.populationDefense, profiles), [project, catalog, profiles]);
   const entry = plan.entries.get(`${planeId}:${provinceId}`);
   if (!entry) return null;

@@ -84,7 +84,7 @@ export interface StartProjectGenerationOptions {
 
 let requestSequence = 0;
 
-async function defaultWorkerFactory(): Promise<GenerationWorkerPort> {
+export async function defaultWorkerFactory(): Promise<GenerationWorkerPort> {
   if (typeof Worker === "undefined") {
     throw new Error("This browser does not support background map generation.");
   }

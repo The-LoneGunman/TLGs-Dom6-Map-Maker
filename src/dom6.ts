@@ -33,7 +33,7 @@ import { auditPlaneTopology, auditSparseRasterTopology, createProvinceOwnerResol
 import { BUILTIN_DOM6_CATALOG, findCatalogEntry, siteCompatibility, type Dom6CatalogBundle } from "./catalog";
 import { previewProvinceTerrain, terrainElevation, terrainVisualKey } from "./terrainVisuals";
 import { buildInitialDefensePlan, type VerifiedPopulationDefenseProfile } from "./populationDefenders";
-import { VERIFIED_POPULATION_DEFENSE_PROFILES } from "./populationDefenseProfiles";
+import { verifiedPopulationDefenseProfiles } from "./populationDefenseRegistry";
 import { protectedStartProvinceKeys } from "./authoringLocks";
 import { connectedRegionLayoutNotice } from "./connectedRegions";
 import { blockedTerrainContentConflicts, hasRawIndependentDefenderDirectives } from "./terrainSafety";
@@ -218,7 +218,7 @@ export interface MapTextOptions {
 
 /** The optional registry override is for internal verification fixtures, never imported project data. */
 export function compileMapText(project: MapProject, planeIndex: number, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG,
-  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES, options: MapTextOptions = {}): string {
+  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = verifiedPopulationDefenseProfiles(), options: MapTextOptions = {}): string {
   const plane = project.planes[planeIndex];
   if (!plane) throw new Error(`Plane ${planeIndex + 1} does not exist.`);
   const localNumber = (province: Province) => options.numbering?.get(plane.id)?.get(province.id) ?? province.index;
@@ -389,7 +389,7 @@ function hasProvinceBlock(province: Province): boolean {
 }
 
 export function compileTextFiles(project: MapProject, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG,
-  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES): CompiledTextFile[] {
+  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = verifiedPopulationDefenseProfiles()): CompiledTextFile[] {
   const encoder = new TextEncoder();
   const baseName = sanitizeMapName(project.name);
   return project.planes.map((_, index) => ({
@@ -577,7 +577,7 @@ let lastImmutableValidation: {
 } | undefined;
 
 export function validateProject(project: MapProject, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG,
-  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES): ValidationIssue[] {
+  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = verifiedPopulationDefenseProfiles()): ValidationIssue[] {
   if (!isProjectMarkedImmutable(project)) return validateProjectUncached(project, catalog, populationProfiles);
   // A project marked immutable cannot change, so repeated validation of the
   // current editor project (for example after Generate) reuses one result.
