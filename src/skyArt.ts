@@ -199,30 +199,37 @@ function sampleField(field: Uint8Array | Int8Array, offset: number, stride: numb
 }
 
 function distances(plane: Plane, owners: Int16Array, internal: boolean): Uint8Array {
-  const { width, height } = plane, out = new Uint8Array(owners.length);
-  const at = (x: number, y: number) => {
-    if (plane.wrapX) x = modulo(x, width);
-    if (plane.wrapY) y = modulo(y, height);
-    return x < 0 || y < 0 || x >= width || y >= height ? -1 : y * width + x;
-  };
+  // PERF: neighbour indexes by arithmetic instead of per-pixel closures and
+  // modulo calls (as realmArt's boundaryDistance does); identical semantics.
+  const { width, height, wrapX, wrapY } = plane, out = new Uint8Array(owners.length);
+  const lastRow = (height - 1) * width;
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
     const pixel = y * width + x, owner = owners[pixel]!;
     if (owner < 0) continue;
-    const boundary = (neighbor: number) => neighbor < 0 || (internal ? owners[neighbor] !== owner : owners[neighbor]! < 0);
-    out[pixel] = boundary(at(x - 1, y)) || boundary(at(x + 1, y)) || boundary(at(x, y - 1)) || boundary(at(x, y + 1)) ? 1 : 255;
+    const left = x > 0 ? pixel - 1 : wrapX ? pixel + width - 1 : -1;
+    const right = x < width - 1 ? pixel + 1 : wrapX ? pixel - width + 1 : -1;
+    const up = y > 0 ? pixel - width : wrapY ? pixel + lastRow : -1;
+    const down = y < height - 1 ? pixel + width : wrapY ? pixel - lastRow : -1;
+    const boundary = left < 0 || (internal ? owners[left] !== owner : owners[left]! < 0)
+      || right < 0 || (internal ? owners[right] !== owner : owners[right]! < 0)
+      || up < 0 || (internal ? owners[up] !== owner : owners[up]! < 0)
+      || down < 0 || (internal ? owners[down] !== owner : owners[down]! < 0);
+    out[pixel] = boundary ? 1 : 255;
   }
-  const passes = plane.wrapX || plane.wrapY ? 2 : 1;
+  const passes = wrapX || wrapY ? 2 : 1;
   for (let pass = 0; pass < passes; pass++) {
     for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
       const p = y * width + x;
       if (out[p]! <= 1) continue;
-      const left = at(x - 1, y), up = at(x, y - 1);
+      const left = x > 0 ? p - 1 : wrapX ? p + width - 1 : -1;
+      const up = y > 0 ? p - width : wrapY ? p + lastRow : -1;
       out[p] = Math.min(out[p]!, left >= 0 ? out[left]! + 1 : 1, up >= 0 ? out[up]! + 1 : 1);
     }
     for (let y = height - 1; y >= 0; y--) for (let x = width - 1; x >= 0; x--) {
       const p = y * width + x;
       if (out[p]! <= 1) continue;
-      const right = at(x + 1, y), down = at(x, y + 1);
+      const right = x < width - 1 ? p + 1 : wrapX ? p - width + 1 : -1;
+      const down = y < height - 1 ? p + width : wrapY ? p - lastRow : -1;
       out[p] = Math.min(out[p]!, right >= 0 ? out[right]! + 1 : 1, down >= 0 ? out[down]! + 1 : 1);
     }
   }

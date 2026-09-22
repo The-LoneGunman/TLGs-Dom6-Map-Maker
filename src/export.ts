@@ -66,11 +66,21 @@ export async function buildPackageFiles(project: MapProject, onProgress?: Progre
   const base = sanitizeMapName(project.name);
   const encoder = new TextEncoder();
   const files: PackageFile[] = [];
+  // Illustrated .map files end with #pb ownership runs. Those are appended below
+  // from the same native ownership sample as the plane's images, so each plane
+  // is sampled once; the placeholder keeps every file in its original position.
+  const pendingOwnershipText = new Map<number, { slot: number; text: string }>();
   onProgress?.({ stage: "preparing", plane: 0, planeCount: project.planes.length, percent: 0, message: "Compiling Dominions map directives…" });
   for (let index = 0; index < project.planes.length; index += 1) {
     const suffix = index === 0 ? "" : `_plane${index + 1}`;
-    files.push({ name: `${base}${suffix}.map`, data: encoder.encode(illustrated
-      ? await illustrated.mapText(index, catalog, populationProfiles) : compileMapText(project, index, catalog, populationProfiles)) });
+    const name = `${base}${suffix}.map`;
+    if (illustrated?.isIllustrated(index)) {
+      pendingOwnershipText.set(index, { slot: files.length, text: illustrated.baseMapText(index, catalog, populationProfiles) });
+      files.push({ name, data: new Uint8Array() });
+      continue;
+    }
+    files.push({ name, data: encoder.encode(illustrated
+      ? illustrated.baseMapText(index, catalog, populationProfiles) : compileMapText(project, index, catalog, populationProfiles)) });
   }
   if (audience === "host") files.push(...supportFiles(project, catalog, populationProfiles, artwork));
   else files.push({ name: "PLAYER_README.txt", data: encoder.encode([
@@ -92,7 +102,10 @@ export async function buildPackageFiles(project: MapProject, onProgress?: Progre
     if (illustrated?.isIllustrated(index)) {
       let completed = 0;
       const seenSuffixes = new Set<string>();
-      for await (const image of illustrated.images(index)) {
+      const artwork = await illustrated.artwork(index);
+      const pending = pendingOwnershipText.get(index)!;
+      files[pending.slot] = { name: files[pending.slot]!.name, data: encoder.encode(pending.text + artwork.ownershipText) };
+      for await (const image of artwork.images) {
         assertImageVariant(image.suffix, seenSuffixes);
         const name = `${imageFileStem(project, index)}${image.suffix}.tga`;
         files.push({ name, data: image.data });
@@ -131,8 +144,9 @@ export async function downloadPackage(project: MapProject, onProgress?: Progress
   const files = await buildPackageFiles(project, onProgress, catalog, audience, VERIFIED_POPULATION_DEFENSE_PROFILES, artwork);
   const root = sanitizeMapName(project.name);
   onProgress?.({ stage: "packaging", plane: project.planes.length, planeCount: project.planes.length, percent: 96, message: "Packing the ready-to-install map folder…" });
-  const zip = createStoredZip(files.map((file) => ({ ...file, name: `${root}/${file.name}` })));
-  downloadBlob(new Blob([ownedBuffer(zip)], { type: "application/zip" }), `${root}${audience === "player" ? "_players" : ""}.zip`);
+  // The Blob copies the ZIP straight from its parts; no joined intermediate copy.
+  const zip = createStoredZipParts(files.map((file) => ({ ...file, name: `${root}/${file.name}` })));
+  downloadBlob(new Blob(zip.map(unsharedBytes), { type: "application/zip" }), `${root}${audience === "player" ? "_players" : ""}.zip`);
   onProgress?.({ stage: "done", plane: project.planes.length, planeCount: project.planes.length, percent: 100, message: "Package downloaded." });
 }
 
@@ -194,10 +208,20 @@ export async function installPackage(project: MapProject, onProgress?: ProgressC
     const transactionId = nextInstallTransactionId();
     const support = supportFiles(project, catalog, VERIFIED_POPULATION_DEFENSE_PROFILES, artwork);
     const textArtifacts: InstallArtifact[] = [];
+    // Illustrated #pb runs are completed from each plane's single ownership
+    // sample while its images are staged, before any text artifact is written.
+    const pendingOwnershipText = new Map<number, { artifact: InstallArtifact; text: string }>();
     for (let index = 0; index < project.planes.length; index += 1) {
       const suffix = index === 0 ? "" : `_plane${index + 1}`;
-      textArtifacts.push(installArtifact(root, transactionId, `${root}${suffix}.map`, encoder.encode(illustrated
-        ? await illustrated.mapText(index, catalog, VERIFIED_POPULATION_DEFENSE_PROFILES) : compileMapText(project, index, catalog))));
+      const name = `${root}${suffix}.map`;
+      if (illustrated?.isIllustrated(index)) {
+        const artifact = installArtifact(root, transactionId, name);
+        pendingOwnershipText.set(index, { artifact, text: illustrated.baseMapText(index, catalog, VERIFIED_POPULATION_DEFENSE_PROFILES) });
+        textArtifacts.push(artifact);
+        continue;
+      }
+      textArtifacts.push(installArtifact(root, transactionId, name, encoder.encode(illustrated
+        ? illustrated.baseMapText(index, catalog, VERIFIED_POPULATION_DEFENSE_PROFILES) : compileMapText(project, index, catalog))));
     }
     textArtifacts.push(...support.map((file) => installArtifact(root, transactionId, file.name, file.data)));
     const binaryArtifactsByPlane = project.planes.map((_, index) => {
@@ -234,7 +258,10 @@ export async function installPackage(project: MapProject, onProgress?: ProgressC
           const artifacts = new Map(binaryArtifactsByPlane[index]!.map(artifact => [artifact.targetName, artifact]));
           let completed = 0;
           const seenSuffixes = new Set<string>();
-          for await (const image of illustrated.images(index)) {
+          const artwork = await illustrated.artwork(index);
+          const pending = pendingOwnershipText.get(index)!;
+          pending.artifact.data = encoder.encode(pending.text + artwork.ownershipText);
+          for await (const image of artwork.images) {
             assertImageVariant(image.suffix, seenSuffixes);
             const name = `${imageFileStem(project, index)}${image.suffix}.tga`;
             const artifact = artifacts.get(name);
@@ -1441,7 +1468,8 @@ async function rollbackInstall(
 }
 
 async function bytesFingerprint(data: Uint8Array): Promise<string> {
-  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", ownedBuffer(data)));
+  // WebCrypto hashes exactly the view's bytes; no intermediate copy is needed.
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", unsharedBytes(data)));
   return Array.from(hash, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
@@ -1485,7 +1513,13 @@ function ownedBuffer(data: Uint8Array): ArrayBuffer {
   return copy.buffer;
 }
 
-function createStoredZip(files: PackageFile[]): Uint8Array {
+/** Blob and WebCrypto copy a view's bytes themselves; only shared memory needs an owned copy first. */
+function unsharedBytes(data: Uint8Array): Uint8Array<ArrayBuffer> {
+  return data.buffer instanceof ArrayBuffer ? data as Uint8Array<ArrayBuffer> : new Uint8Array(ownedBuffer(data));
+}
+
+/** Stored (uncompressed) ZIP as ordered byte parts; concatenated, they are the archive. */
+function createStoredZipParts(files: PackageFile[]): Uint8Array[] {
   const localParts: Uint8Array[] = [];
   const centralParts: Uint8Array[] = [];
   let offset = 0;
@@ -1544,18 +1578,7 @@ function createStoredZip(files: PackageFile[]): Uint8Array {
   endView.setUint32(12, centralSize, true);
   endView.setUint32(16, centralOffset, true);
   endView.setUint16(20, 0, true);
-  return concatBytes([...localParts, ...centralParts, end]);
-}
-
-function concatBytes(parts: Uint8Array[]): Uint8Array {
-  const total = parts.reduce((sum, part) => sum + part.length, 0);
-  const output = new Uint8Array(total);
-  let offset = 0;
-  for (const part of parts) {
-    output.set(part, offset);
-    offset += part.length;
-  }
-  return output;
+  return [...localParts, ...centralParts, end];
 }
 
 const CRC_TABLE = (() => {
@@ -1570,7 +1593,8 @@ const CRC_TABLE = (() => {
 
 function crc32(data: Uint8Array): number {
   let crc = 0xffffffff;
-  for (const byte of data) crc = CRC_TABLE[(crc ^ byte) & 0xff]! ^ (crc >>> 8);
+  // Indexed loop: several times faster than an iterator over multi-megabyte images.
+  for (let index = 0, length = data.length; index < length; index += 1) crc = CRC_TABLE[(crc ^ data[index]!) & 0xff]! ^ (crc >>> 8);
   return (crc ^ 0xffffffff) >>> 0;
 }
 
