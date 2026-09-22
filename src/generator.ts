@@ -3143,14 +3143,17 @@ function borderKind(a: Province, b: Province, rng: SeededRandom): EdgeKind {
   return "standard";
 }
 
-function finalizeGeneratedRivers(plane: Plane, settings: GenerationSettings, seed: string, protectedStartIds: readonly string[] = [], warnings?: string[]) {
+/** Final generated edge-kind pass: connected rivers, including strategic river chokepoints. */
+export function finalizeGeneratedRivers(plane: Plane, settings: GenerationSettings, seed: string, protectedStartIds: readonly string[] = [], warnings?: string[]) {
   const controls = plane.generationOverrides;
   const hasRouteMix = controls && [controls.roadPercent, controls.riverPercent, controls.passPercent].some(value => value !== undefined);
   const result = generateBorderRivers(plane, seed, {
     riverPercent: hasRouteMix ? controls.riverPercent ?? 0 : undefined,
     bridgeAll: normalizeOverlandTopologyMode(settings.overlandTopology) === "open" && !hasRouteMix,
     protectedStartIds,
+    requiredBorders: takeStrategicRiverChokepoints(plane),
   });
+  restoreUnroutedStrategicChokepoints(plane, result.unroutedRequired, protectedStartIds, warnings);
   if (result.limited && hasRouteMix && (controls.riverPercent ?? 0) > 0) {
     warnings?.push(`${plane.name}: connected river routes used ${result.riverBorders} of approximately ${result.requestedBorders} requested borders. Complete outlet paths and existing barriers take priority over an exact river share.`);
   }
@@ -4137,7 +4140,8 @@ function repairStartBorders(plane: Plane, extraStartIds: readonly string[] = [])
   }
 }
 
-function applyGeneratedOverlandTopology(
+/** Generation stage; strategic river chokepoints take effect in finalizeGeneratedRivers. */
+export function applyGeneratedOverlandTopology(
   plane: Plane,
   requestedMode: OverlandTopologyMode | undefined,
   seed: string,
@@ -4179,6 +4183,8 @@ function applyGeneratedOverlandTopology(
   const target = Math.min(candidates.length, Math.max(1, Math.round(plane.provinces.length / 10)));
   const selected = new Set<string>();
   const regionLoads = new Map<string, number>();
+  const riverChokepoints = new Set<string>();
+  strategicRiverChokepoints.set(plane, riverChokepoints);
 
   while (selected.size < target) {
     const graphBridges = graphBridgeKeysExcluding(plane, selected);
@@ -4202,8 +4208,50 @@ function applyGeneratedOverlandTopology(
     const region = overlandEdgeRegion(edge, byId);
     edge.kind = strategicBorderKind(edge, byId, selected.size);
     edge.special = undefined;
+    if (edge.kind === "river") riverChokepoints.add(key);
     selected.add(key);
     regionLoads.set(region, (regionLoads.get(region) ?? 0) + 1);
+  }
+}
+
+/**
+ * Wet strategic chokepoints are provisional "river" kinds until the final
+ * connected-river pass, which resets every provisional river. This transient
+ * handoff (never serialized) lets that pass route a continuous watercourse
+ * through each chokepoint instead of erasing it.
+ */
+const strategicRiverChokepoints = new WeakMap<Plane, ReadonlySet<string>>();
+const STRATEGIC_DRY_CHOKEPOINT: EdgeKind = "mountain_pass";
+
+/** Chokepoints still marked as rivers; an explicit route mix may have replaced others, as it does passes. */
+function takeStrategicRiverChokepoints(plane: Plane): string[] {
+  const keys = strategicRiverChokepoints.get(plane);
+  strategicRiverChokepoints.delete(plane);
+  if (!keys?.size) return [];
+  const kinds = new Map(plane.edges.map((edge) => [connectionKey(edge.a, edge.b), edge.kind]));
+  return [...keys].filter((key) => kinds.get(key) === "river");
+}
+
+/** A chokepoint no continuous river can pass through keeps the strategic dry barrier instead of vanishing. */
+function restoreUnroutedStrategicChokepoints(
+  plane: Plane,
+  keys: readonly string[],
+  protectedStartIds: readonly string[],
+  warnings?: string[],
+) {
+  if (!keys.length) return;
+  const starts = new Set(protectedStartIds);
+  for (const province of plane.provinces) if (province.start || province.teamStart !== undefined) starts.add(province.id);
+  const edges = new Map(plane.edges.map((edge) => [connectionKey(edge.a, edge.b), edge]));
+  for (const key of keys) {
+    const edge = edges.get(key);
+    if (!edge || edge.kind !== "standard") continue;
+    if (starts.has(edge.a) || starts.has(edge.b)) {
+      warnings?.push(`${plane.name}: a strategic river chokepoint beside a start could not join a connected river and was left open to keep the capital exit reliable.`);
+      continue;
+    }
+    edge.kind = STRATEGIC_DRY_CHOKEPOINT;
+    edge.special = undefined;
   }
 }
 
@@ -4230,6 +4278,7 @@ function overlandEdgeRegion(edge: Pick<Edge, "a" | "b">, byId: ReadonlyMap<strin
   return `${x}:${y}`;
 }
 
+/** Wet "river" picks are routed later as part of connected watercourses. */
 function strategicBorderKind(
   edge: Pick<Edge, "a" | "b">,
   byId: ReadonlyMap<string, Province>,
@@ -4241,7 +4290,7 @@ function strategicBorderKind(
   const flagsA = effectiveProvinceTerrainFlags(a);
   const flagsB = effectiveProvinceTerrainFlags(b);
   const wet = flagsA.has("freshwater") || flagsB.has("freshwater") || flagsA.has("swamp") || flagsB.has("swamp");
-  return wet ? "river" : "mountain_pass";
+  return wet ? "river" : STRATEGIC_DRY_CHOKEPOINT;
 }
 
 function blocksReliableStartEdge(edge: Edge): boolean {
