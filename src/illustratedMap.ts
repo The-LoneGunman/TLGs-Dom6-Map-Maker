@@ -1,4 +1,4 @@
-import { effectiveProvinceTerrainFlags, sanitizeMapName, type MapProject, type Plane, type Province, type TerrainFlag } from "./domain";
+import { effectiveProvinceTerrainFlags, planeGenerationKey, sanitizeMapName, type MapProject, type Plane, type Province, type TerrainFlag } from "./domain";
 import { createProvinceOwnerResolver } from "./geometry";
 import { compileMapText } from "./dom6";
 import { type Dom6CatalogBundle } from "./catalog";
@@ -167,8 +167,8 @@ export async function* encodeIllustratedImages(plane: Plane, owners?: Int16Array
     const displayed = { ...plane, provinces: plane.provinces.map(province => imageTerrain(province, variant)) };
     const winter = variant === "winter" || variant.endsWith("w");
     const rgb = plane.kind === "cloud" || plane.kind === "air"
-      ? renderSkyRgb(displayed, mask, winter ? "winter" : "default", `${plane.id}:sky-art`)
-      : renderRealmRgb(displayed, mask, `${plane.id}:realm-art`);
+      ? renderSkyRgb(displayed, mask, winter ? "winter" : "default", `${planeGenerationKey(plane)}:sky-art`)
+      : renderRealmRgb(displayed, mask, `${planeGenerationKey(plane)}:realm-art`);
     // Renderers reserve pure white; enforce the format invariant at the boundary.
     for (let at = 0; at < rgb.length; at += 3) {
       if (rgb[at] === 255 && rgb[at + 1] === 255 && rgb[at + 2] === 255) rgb[at] = 254;

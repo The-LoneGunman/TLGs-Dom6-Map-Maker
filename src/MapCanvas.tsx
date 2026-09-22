@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import {
   effectiveProvinceTerrainFlags,
   isWaterTerrain,
+  planeGenerationKey,
   type Plane,
   type PreviewCondition,
   type Province,
@@ -606,7 +607,7 @@ function usesProceduralArtwork(plane: Plane): boolean {
 function proceduralPreviewKey(plane: Plane, condition: PreviewCondition): string {
   // Do not rely on object identity: imported drafts and library callers may edit
   // in place. Names and markers are drawn separately and need no raster rebuild.
-  return JSON.stringify([plane.id, plane.kind, plane.variant, plane.wrapX, plane.wrapY, condition,
+  return JSON.stringify([planeGenerationKey(plane), plane.kind, plane.variant, plane.wrapX, plane.wrapY, condition,
     plane.provinces.map(province => [province.id, [...effectiveProvinceTerrainFlags(province)].sort(), province.warmer, province.colder])]);
 }
 
@@ -630,8 +631,8 @@ function paintProceduralPlane(
       provinces: plane.provinces.map(province => ({ ...province, ...previewProvinceTerrain(province, condition) })) };
     const owners = samplePlaneOwnership(plane, rasterWidth, rasterHeight, ownership);
     const rgb = plane.kind === "cloud" || plane.kind === "air"
-      ? renderSkyRgb(displayed, owners, skyVariantForPreview(condition), `${plane.id}:sky-art`)
-      : renderRealmRgb(displayed, owners, `${plane.id}:realm-art`);
+      ? renderSkyRgb(displayed, owners, skyVariantForPreview(condition), `${planeGenerationKey(plane)}:sky-art`)
+      : renderRealmRgb(displayed, owners, `${planeGenerationKey(plane)}:realm-art`);
     const pixels = rasterContext.createImageData(rasterWidth, rasterHeight);
     for (let i = 0; i < owners.length; i += 1) {
       pixels.data[i * 4] = rgb[i * 3]!;

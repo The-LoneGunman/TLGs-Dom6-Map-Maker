@@ -263,6 +263,9 @@ export interface Plane {
   ownershipMode?: PlaneOwnershipMode;
   /** Applied on generation only; absence preserves the saved legacy ownership outlines. */
   landformStyle?: "natural-v1";
+  /** Applied generation identity for geometry/art, independent of editable seed and stable reference IDs.
+   * Missing preserves the appearance of older saved maps. */
+  generationKey?: string;
   /** Generated water-body shape provenance; later terrain/content edits do not rebuild it. */
   landformWater?: LandformWaterGroup[];
   /** @deprecated Parsed and serialized verbatim for old projects; topology is derived from kind and ownershipMode. */
@@ -276,6 +279,10 @@ export interface Plane {
   provinces: Province[];
   edges: Edge[];
   rawDirectives: string;
+}
+
+export function planeGenerationKey(plane: Pick<Plane, "id" | "generationKey">): string {
+  return plane.generationKey ?? plane.id;
 }
 
 /** Shared strict-import and editor validation for immutable water-shape provenance. */

@@ -452,7 +452,7 @@ const PLANE_CONNECTION_FIELDS = new Set(["a", "b", "pairs", "enabled"]);
 const PLANE_FIELDS = new Set([
   "id", "name", "kind", "variant", "autoSize", "noGeneratedStarts", "provinceTarget", "width", "height", "wrapX",
   "wrapY", "ownershipMode", "mapNoHide", "noDeepCaves", "mapTextColor", "mapDominionColor", "provinces", "edges",
-  "rawDirectives", "generationOverrides", "sparseLayout", "landformStyle", "landformWater",
+  "rawDirectives", "generationOverrides", "sparseLayout", "landformStyle", "landformWater", "generationKey",
 ]);
 const EDGE_FIELDS = new Set(["id", "a", "b", "kind", "special"]);
 const PROVINCE_FIELDS = new Set([
@@ -646,6 +646,7 @@ function assertPlane(plane: Record<string, unknown>, index: number): void {
   booleanAt(plane.wrapY, `${path}.wrapY`);
   optionalEnumAt(plane.ownershipMode, OWNERSHIP_MODES, `${path}.ownershipMode`);
   optionalEnumAt(plane.landformStyle, new Set(["natural-v1"]), `${path}.landformStyle`);
+  if (plane.generationKey !== undefined) idAt(plane.generationKey, `${path}.generationKey`);
   optionalEnumAt(plane.sparseLayout, SPARSE_LAYOUTS, `${path}.sparseLayout`);
   optionalBooleanAt(plane.mapNoHide, `${path}.mapNoHide`);
   optionalBooleanAt(plane.noDeepCaves, `${path}.noDeepCaves`);

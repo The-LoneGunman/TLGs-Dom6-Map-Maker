@@ -1,4 +1,4 @@
-import { isCaveProvince, isWaterProvince, type Plane, type PlaneOwnershipMode, type Province } from "./domain";
+import { isCaveProvince, isWaterProvince, planeGenerationKey, type Plane, type PlaneOwnershipMode, type Province } from "./domain";
 import { createConnectedRegionOwnership } from "./connectedRegions";
 import { createNaturalLandformWarp } from "./naturalLandforms";
 
@@ -389,7 +389,7 @@ export function createProvinceOwnershipModel(
     const b = provinceById.get(pair.b);
     if (!a || !b || a.index === b.index) continue;
     const to = shortestPeriodicEndpoint(a.province, b.province, plane);
-    const widthRoll = deterministicUnit(`${plane.id}:${plane.kind}:${pair.key}:corridor-width`);
+    const widthRoll = deterministicUnit(`${planeGenerationKey(plane)}:${plane.kind}:${pair.key}:corridor-width`);
     const floodedCaveConnector = isCaveFamilyKind(plane.kind)
       && (isWaterProvince(a.province) || isWaterProvince(b.province));
     const styxConnector = plane.kind === "underworld"
@@ -803,7 +803,7 @@ function createChamberPrimitive(
   profile: SparseShapeProfile,
   styxFlowAngle?: number,
 ): ProvinceChamberPrimitive {
-  const key = `${plane.id}:${plane.kind}:${province.id}:${province.index}`;
+  const key = `${planeGenerationKey(plane)}:${plane.kind}:${province.id}:${province.index}`;
   const scaleRoll = deterministicUnit(`${key}:scale`);
   const aspectRoll = deterministicUnit(`${key}:aspect`);
   const hubRoll = deterministicUnit(`${key}:hub`);
@@ -1043,7 +1043,7 @@ function shapeUndergroundCorridors(
     const bx = corridor.to.x * aspect, by = corridor.to.y;
     const dx = bx - ax, dy = by - ay, length = Math.hypot(dx, dy);
     if (length <= pixelFloor * 4) continue;
-    const seed = `${plane.id}:${plane.kind}:${corridor.key}:organic-corridor`;
+    const seed = `${planeGenerationKey(plane)}:${plane.kind}:${corridor.key}:organic-corridor`;
     const bend = Math.min(spacing * 0.06, length * 0.075, corridor.halfWidth * 1.05);
     const flare = corridor.halfWidth * 0.72;
     const desiredGrowth = bend * 1.15 + flare;
@@ -1522,7 +1522,7 @@ function geometrySignature(plane: Plane): string {
   const edgePart = ownership === "sparse"
     ? plane.edges.map((edge) => `${connectionKey(edge.a, edge.b)}${plane.kind === "underworld" && isExplicitBridge(edge) ? ":bridge" : ""}`).sort().join(",")
     : "";
-  return `${ownership}${usesConnectedRegions(plane) ? ":regions" : ""}:${plane.landformStyle ?? "legacy"}:${plane.id}:${plane.kind}:${plane.width}x${plane.height}:${plane.wrapX ? 1 : 0}${plane.wrapY ? 1 : 0}:${plane.provinces
+  return `${ownership}${usesConnectedRegions(plane) ? ":regions" : ""}:${plane.landformStyle ?? "legacy"}:${planeGenerationKey(plane)}:${plane.kind}:${plane.width}x${plane.height}:${plane.wrapX ? 1 : 0}${plane.wrapY ? 1 : 0}:${plane.provinces
     .map((province) => `${province.id}:${province.index}:${province.x}:${province.y}:${province.small ? 1 : 0}${province.large ? 1 : 0}:${province.terrain}:${province.freshwater ? 1 : 0}:${[...(province.terrainFlags ?? [])].sort().join("+")}`)
     .join(";")}:${edgePart}:${JSON.stringify(plane.landformWater ?? null)}`;
 }

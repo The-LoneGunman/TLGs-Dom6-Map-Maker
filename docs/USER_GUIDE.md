@@ -2,7 +2,7 @@
 
 Pantokrator Atlas is a local-first map maker for Dominions 6. It generates deterministic, multiplayer-oriented atlases with one to eight planes and exports playable packages that Dominions can load directly. Native `.map`/`.d6m` scenery remains the default; current `main` also offers illustrated realm images.
 
-Reviewed September 22, 2026 against application source merged to `main` at **`464ff03`**; the package version remains **0.1.5**. **Unreleased development** means additions already on `main`, not an unmerged candidate. The hosted GUI (Site version 13) and Windows v0.1.5 still use `581b2b8`. Check [Versions and documentation](../README.md#versions-and-documentation) before looking for a missing control.
+Reviewed September 22, 2026, including the [seed and numeric-edit audit repairs](AUDIT_REPAIRS_2026-09-22.md); the package version remains **0.1.5**. **Unreleased development** means source additions not yet published to the hosted GUI or Windows installer. Those editions (Site version 13 and Windows v0.1.5) still use `581b2b8`. Check [Versions and documentation](../README.md#versions-and-documentation) before looking for a missing control.
 
 The merged additions are automatic [connected-region layouts](#province-layout), [procedural realm artwork](#procedural-realm-appearance), [Illustrated realms export](#in-game-artwork), [coastal/ocean/lake shapes](#overland-ocean-layout), [connected rivers](#connected-border-rivers), [smaller default biomes](#biome-cohesion), and [cave-wall/mixed-terrain repairs](#additional-terrain-flags). They are not in the published 0.1.5 build. Keep a pre-upgrade JSON backup; regeneration can replace geography and content, and older builds may reject the new saved fields.
 
@@ -168,6 +168,8 @@ Resets the Generate options, name-reroll counter, plane resolution, and active-p
 
 A free-text deterministic seed. A first visit without a saved atlas and each **New atlas** use a fresh random seed. Reopening an existing project preserves its seed. The same effective settings and seed reproduce the same generated atlas within the same generator revision; updates can change generation, so keep project JSON when an exact map matters. The icon beside the field creates another random realm-style seed for the next **Generate**; it does not immediately rename or regenerate the current map. To change only names, use the name controls below.
 
+Current source also reproduces generation across independently created atlases: use the same seed, plane order, names and configuration, with no differing authored content or locks. Earlier builds mixed internal plane IDs into some generation/art decisions. Saved maps keep their existing outlines and artwork when opened; the fix takes effect on explicit Generate. Older builds may reject the new applied-generation metadata, so retain a pre-upgrade JSON backup.
+
 ### Players
 
 Range: **2-32**. This is the recommended player count and the required total for the five start categories.
@@ -238,6 +240,8 @@ This is the requested water share on water-capable generated realms. Generation 
 **Major continents** appears for Multiple continents and accepts **2-6**. It is a topology target. If the selected water percentage and wrapping cannot support the requested count, generation reports the achieved count instead of pretending a connected landmass is multiple continents.
 
 Island Chains needs enough sea to look and play like islands. If Water is below 48%, generation raises the effective setting to 48% and reports the change.
+
+Narrow islands may have too few inland **Land** candidates with enough safe exits and spacing. Prefer more **Coastal** starts, increase provinces per player, or choose a continental layout if validation reports missing starts. Island generation does not silently fill oceans or relax capital-safety rules to satisfy an impossible start mix.
 
 On current main, explicit ocean presets keep their water layout during start placement. If a coast-heavy map cannot fit the requested inland capitals safely, review the spacing/category notices, allocate more Coastal or Water starts, or increase provinces per player. The generator no longer scatters the chosen ocean just to accommodate those starts.
 
@@ -603,6 +607,8 @@ Content-only rerolls use the **Content / candidate seed** and selected provinces
 **Download settings recipe** saves generation settings, plane configuration/preferences, declared host patch/era/mod assumptions, and any pinned population-defender policy. The world seed is optional and excluded by default. Open a recipe file or paste its JSON to preview it; the limit is 256 KiB. Imports match plane configurations by order, preserve existing plane names/content, stage missing planes, and refuse to delete extra existing planes. Older recipes that omit host assumptions or the defender policy leave those current settings unchanged. Changes to archetype, dimensions, or wrapping can update current ownership presentation/borders; layout locks still apply. Full generation follows only when you request it.
 
 A recipe is not a map backup: it omits authored provinces, actual gateways, field locks, and saved selections. Use **Editable project JSON** for an exact atlas copy.
+
+Including the seed lets an equivalent fresh atlas reproduce generation in the same generator revision, even when its internal plane IDs differ. Match plane order and names as well as settings; destination manual names, authored starts and locks remain intentional differences. Older recipes remain readable but run the current generator when you choose Generate, not their historical generator.
 
 ### Compare generated candidates
 
@@ -1086,7 +1092,7 @@ Validation, replacement-confirmation, and export dialogs trap focus. Escape clos
 | Launcher startup fails | For the installer edition, reinstall the latest setup. For a portable copy, keep the extracted release in a writable folder and do not run inside the ZIP. If it still fails, include the complete terminal error in a [GitHub issue](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/issues). |
 | GUI opens on a different local port and the autosave looks empty | Use the same browser profile and exact Atlas address as before. If Atlas is still running there, reopen that instance and export **Editable project JSON** for import at the new address. An old port may now serve another application; do not stop unrelated programs to recover Atlas. If the previous Atlas address is unavailable, use a JSON backup. |
 | Generate is disabled | The five start categories must total Players, each category needs a compatible plane that permits generated starts, and configured cave nations cannot exceed Cave starts. Read the generation-plan summary and correct the allocation, nation list, or plane policy. |
-| Locked layout/start/field conflict | Unlock explicitly in Iterate or use a content-only reroll. Different world seeds change province IDs; field-locked provinces cannot be silently replaced. A rejected edit leaves the current atlas intact. |
+| Locked layout/start/field conflict | Unlock explicitly in Iterate or use a content-only reroll. Different world seeds change province IDs; field-locked provinces cannot be silently replaced. A rejected edit leaves the current atlas intact; bounded numeric controls restore the accepted value rather than displaying a rejected draft. |
 | Batch preview cannot apply | Review newly introduced export blockers, locked/protected skipped provinces, or a zero-change result. Change the operation/selection; existing export errors also still need repair. |
 | Named region disappeared after generation | It was a bookmark of old province IDs, not a geographic generation constraint. Use Planes → Generation preferences → Regional plans for future terrain areas. |
 | Preference did not produce its exact percentage | Safety, topology, ocean style, minimum terrain variety, and locks take priority. Inspect Current result after generation. Blank values inherit the established generator. |

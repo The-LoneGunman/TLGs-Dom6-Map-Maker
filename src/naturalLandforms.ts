@@ -1,4 +1,4 @@
-import type { Plane } from "./domain";
+import { planeGenerationKey, type Plane } from "./domain";
 import type { BorderSegment, Point } from "./geometry";
 import { createWaterLandformProfile } from "./waterLandforms";
 
@@ -25,7 +25,7 @@ function roll(value: string): number {
  */
 export function createNaturalLandformWarp(plane: Plane): NaturalLandformWarp | undefined {
   if (plane.landformStyle !== "natural-v1" || plane.provinces.length < 2) return undefined;
-  const signature = `${plane.id}:${plane.width}:${plane.height}:${plane.wrapX}:${plane.wrapY}:`
+  const signature = `${planeGenerationKey(plane)}:${plane.width}:${plane.height}:${plane.wrapX}:${plane.wrapY}:`
     + plane.provinces.map(p => `${p.id}:${p.x},${p.y}`).join(";") + JSON.stringify(plane.landformWater ?? null);
   if (cache.has(signature)) return cache.get(signature);
   const result = buildWarp(plane);
@@ -56,7 +56,7 @@ function buildWarp(plane: Plane): NaturalLandformWarp | undefined {
   const amplitudeX = Math.min(.195 / columns, minimum * .11 * Math.min(1, 1 / aspect));
   const amplitudeY = Math.min(.195 / rows, minimum * .11 * Math.min(1, aspect));
   const frequencyX = Math.max(2, Math.round(baseColumns * .7)), frequencyY = Math.max(2, Math.round(baseRows * .7));
-  const phase = roll(`${plane.id}:natural-landform-1`) * TAU, phase2 = roll(`${plane.id}:natural-landform-2`) * TAU;
+  const phase = roll(`${planeGenerationKey(plane)}:natural-landform-1`) * TAU, phase2 = roll(`${planeGenerationKey(plane)}:natural-landform-2`) * TAU;
   const pointColumns = columns + 1;
   const points = new Float64Array((rows + 1) * pointColumns * 2);
   const waterProfile = createWaterLandformProfile(plane);

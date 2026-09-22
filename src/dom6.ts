@@ -707,6 +707,10 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
     }
     const waterProvenanceError = landformWaterError(plane);
     if (waterProvenanceError) add("error", `${plane.name}: ${waterProvenanceError}`, plane.id);
+    if (plane.generationKey !== undefined && (typeof plane.generationKey !== "string"
+      || !/^[A-Za-z0-9_-]{1,128}$/.test(plane.generationKey))) {
+      add("error", `${plane.name} has an invalid applied generation key.`, plane.id);
+    }
     if (plane.landformStyle !== undefined && plane.landformStyle !== "natural-v1") {
       add("error", `${plane.name} has an unsupported natural landform style.`, plane.id);
     }
