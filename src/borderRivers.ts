@@ -21,6 +21,13 @@ export interface BorderRiverOptions {
   riverPercent?: number;
   bridgeAll?: boolean;
   protectedStartIds?: readonly string[];
+  /**
+   * Border connection keys that must lie on a connected watercourse, such as
+   * strategic wet chokepoints. Each is routed before the free river share,
+   * down the drainage forest to a valid outlet or an existing channel, and
+   * may extend that share. It is never activated as a standalone river.
+   */
+  requiredBorders?: readonly string[];
 }
 export interface BorderRiverReport {
   eligibleBorders: number;
@@ -28,6 +35,12 @@ export interface BorderRiverReport {
   riverBorders: number;
   networkCount: number;
   limited: boolean;
+  /**
+   * Required borders with no valid continuous route. They were reset like
+   * every provisional river, so the caller chooses their replacement barrier.
+   * Empty on planes this pass does not manage, where nothing is reset.
+   */
+  unroutedRequired: string[];
 }
 
 function rank(seed: string): number {
@@ -144,7 +157,7 @@ export function buildBorderRiverGraph(plane: Plane): BorderRiverGraph {
 
 /** Fresh-generation pass only. It never changes provinces, geometry, or native terrain bits. */
 export function generateBorderRivers(plane: Plane, seed: string, options: BorderRiverOptions = {}): BorderRiverReport {
-  const report: BorderRiverReport = { eligibleBorders: 0, requestedBorders: 0, riverBorders: 0, networkCount: 0, limited: false };
+  const report: BorderRiverReport = { eligibleBorders: 0, requestedBorders: 0, riverBorders: 0, networkCount: 0, limited: false, unroutedRequired: [] };
   if (!supportsBorderRivers(plane)) return report;
   const graph = buildBorderRiverGraph(plane);
   // Remove provisional independent rolls, including pairs unsuitable for a
@@ -153,10 +166,12 @@ export function generateBorderRivers(plane: Plane, seed: string, options: Border
     edge.kind = "standard"; delete edge.special;
   }
   const { nodes, arcs } = graph;
+  const required = [...new Set(options.requiredBorders ?? [])];
   report.eligibleBorders = arcs.size;
   const share = Math.max(0, Math.min(100, options.riverPercent ?? 8));
   report.requestedBorders = share > 0 && arcs.size >= 2 ? Math.max(2, Math.round(arcs.size * share / 100)) : 0;
-  if (!report.requestedBorders) return report;
+  // A zero share disables watercourses outright, required borders included.
+  if (!report.requestedBorders) { report.unroutedRequired = required; return report; }
   const adjacency = new Map<string, BorderRiverArc[]>();
   for (const arc of arcs.values()) for (const id of [arc.from, arc.to]) {
     if (!adjacency.has(id)) adjacency.set(id, []);
@@ -205,27 +220,71 @@ export function generateBorderRivers(plane: Plane, seed: string, options: Border
     }
   }
   const selected = new Set<string>(), riverNodes = new Set<string>(), outletIds = new Set<string>();
+  type Route = { arcs: BorderRiverArc[]; nodes: string[]; outlet: string };
+  /** Follow the drainage forest down to an outlet or an existing channel. */
+  const descend = (source: string) => {
+    const path: BorderRiverArc[] = [], pathNodes = [source];
+    let at = source;
+    while (parent.has(at) && !riverNodes.has(at)) {
+      const next = parent.get(at)!;
+      path.push(next.arc); at = next.node; pathNodes.push(at);
+    }
+    return { path, pathNodes, at };
+  };
+  const sourceScore = (source: string, length: number) => {
+    const node = nodes.get(source)!;
+    return node.headwater + node.elevation * 0.5 + Math.min(12, length) * 0.12
+      + rank(`${seed}:source:${source}`) * 0.25;
+  };
+  const commit = (route: Route) => {
+    for (const arc of route.arcs) selected.add(arc.key);
+    for (const id of route.nodes) riverNodes.add(id);
+    if (roots.has(route.outlet)) outletIds.add(route.outlet);
+  };
+  // Required borders seed networks before the free share, each with the
+  // shortest complete channel through it: the border, then the drainage path
+  // from its lower end to an outlet or an existing channel. A border that
+  // would reach a new outlet alone gains one head border above it. Only new
+  // nodes join the forest, so channels stay acyclic; later free headwaters
+  // may extend these channels upstream like any other network.
+  for (const key of required) {
+    if (selected.has(key)) continue;
+    const arc = arcs.get(key);
+    let chosen: Route | undefined, bestLength = Infinity, bestScore = -Infinity;
+    if (arc) for (const [up, down] of [[arc.from, arc.to], [arc.to, arc.from]] as const) {
+      if (riverNodes.has(up) || roots.has(up)) continue;
+      const tail = descend(down);
+      if ((!roots.has(tail.at) && !riverNodes.has(tail.at)) || tail.pathNodes.includes(up)) continue;
+      const minimum = riverNodes.has(tail.at) ? 1 : 2;
+      const heads = [{ source: up, path: [] as BorderRiverArc[] }, ...adjacency.get(up)!.flatMap(link => link === arc ? []
+        : [{ source: link.from === up ? link.to : link.from, path: [link] }])];
+      for (const head of heads) {
+        if (head.path.length && (riverNodes.has(head.source) || roots.has(head.source) || tail.pathNodes.includes(head.source))) continue;
+        const length = head.path.length + 1 + tail.path.length;
+        if (length < minimum) continue;
+        const score = sourceScore(head.source, length);
+        if (length < bestLength || (length === bestLength && score > bestScore)) {
+          chosen = { arcs: [...head.path, arc, ...tail.path], outlet: tail.at,
+            nodes: [...head.path.length ? [head.source] : [], up, ...tail.pathNodes] };
+          bestLength = length; bestScore = score;
+        }
+      }
+    }
+    if (chosen) commit(chosen);
+    else report.unroutedRequired.push(key);
+  }
   while (selected.size < report.requestedBorders) {
-    let chosen: { arcs: BorderRiverArc[]; nodes: string[]; outlet: string } | undefined, bestScore = -Infinity;
+    let chosen: Route | undefined, bestScore = -Infinity;
     for (const source of adjacency.keys()) {
       if (riverNodes.has(source) || roots.has(source)) continue;
-      const path: BorderRiverArc[] = [], pathNodes = [source];
-      let at = source;
-      while (parent.has(at) && !riverNodes.has(at)) {
-        const next = parent.get(at)!;
-        path.push(next.arc); at = next.node; pathNodes.push(at);
-      }
+      const { path, pathNodes, at } = descend(source);
       if (!roots.has(at) && !riverNodes.has(at)) continue;
       if (path.length < (riverNodes.has(at) ? 1 : 2) || path.length > report.requestedBorders - selected.size) continue;
-      const node = nodes.get(source)!;
-      const score = node.headwater + node.elevation * 0.5 + Math.min(12, path.length) * 0.12
-        + rank(`${seed}:source:${source}`) * 0.25;
+      const score = sourceScore(source, path.length);
       if (score > bestScore) { chosen = { arcs: path, nodes: pathNodes, outlet: at }; bestScore = score; }
     }
     if (!chosen) break;
-    for (const arc of chosen.arcs) selected.add(arc.key);
-    for (const id of chosen.nodes) riverNodes.add(id);
-    if (roots.has(chosen.outlet)) outletIds.add(chosen.outlet);
+    commit(chosen);
   }
   const starts = new Set(options.protectedStartIds ?? []);
   for (const province of plane.provinces) if (province.start || province.teamStart !== undefined) starts.add(province.id);
