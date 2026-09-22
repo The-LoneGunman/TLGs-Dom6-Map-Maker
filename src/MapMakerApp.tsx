@@ -4,6 +4,7 @@ import {
   cloneElement,
   isValidElement,
   useCallback,
+  useDeferredValue,
   useEffect,
   useId,
   useMemo,
@@ -60,6 +61,8 @@ import {
   gateCompatibility,
   hashString,
   ISLAND_CHAIN_MIN_WATER_PERCENT,
+  isProjectMarkedImmutable,
+  markProjectImmutable,
   normalizeEconomyBalanceMode,
   normalizeOverlandTopologyMode,
   preflightAuthoredStartNotices,
@@ -136,6 +139,7 @@ import {
   atlasReplacementImpact,
   atlasReplacementNeedsConfirmation,
   planeRemovalImpact,
+  shareUnchangedPlanes,
   textEditHistoryStep,
   type AtlasReplacementImpact,
   type PlaneRemovalImpact,
@@ -359,7 +363,8 @@ const EDGE_KINDS: Array<{ value: EdgeKind; label: string }> = [
 
 /** Restore every editable value shown on Generate without replacing authored map data. */
 export function resetGeneratorDefaults(draft: MapProject, activePlaneId: string): void {
-  const defaults = createDefaultProject();
+  // Only the default seed and settings are read, so skip generating a map.
+  const defaults = createDefaultProject(undefined, { generate: false });
   removeGeneratedCaveSpecificStarts(draft);
   draft.seed = defaults.seed;
   draft.settings.players = defaults.settings.players;
@@ -437,7 +442,9 @@ export function GenerationBalanceNotice({ issues, generationWarnings = [] }: { i
 
 export function MapMakerApp() {
   // Keep the server and first client render identical. Randomize after autosave resolves.
-  const [project, setProject] = useState<MapProject>(() => recordGenerationInputs(createDefaultProject()));
+  // The workbench stays inert until then and always replaces this placeholder
+  // with the saved atlas or a freshly generated one, so it is not generated.
+  const [project, setProject] = useState<MapProject>(() => recordGenerationInputs(createDefaultProject(undefined, { generate: false })));
   const [activePlaneId, setActivePlaneId] = useState("");
   const [selectedId, setSelectedId] = useState<string>();
   const [tool, setTool] = useState<Tool>("select");
@@ -491,6 +498,8 @@ export function MapMakerApp() {
   const textChangeTargetRef = useRef<EventTarget | undefined>(undefined);
   const textEditSessionRef = useRef<EventTarget | undefined>(undefined);
   const autosaveRevisionRef = useRef<AutosaveRevision | null>(null);
+  // Commit already serializes the new project; autosave reuses that exact text.
+  const committedTextRef = useRef<{ project: MapProject; text: string } | undefined>(undefined);
   const autosaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const actionErrorSequenceRef = useRef(0);
 
@@ -519,8 +528,17 @@ export function MapMakerApp() {
     () => markerAnnotationsForPlane({ gates: project.gates, specificStarts: project.specificStarts }, activePlane.id),
     [activePlane.id, project.gates, project.specificStarts],
   );
-  const fairness = useMemo(() => calculateFairness(project), [project]);
-  const issues = useMemo(() => validateProject(project, catalog), [catalog, project]);
+  // Validation and the structural score are the slowest derived state. An edit
+  // renders first and these panels refresh in a follow-up render; they only
+  // display results. Export is gated on the current project's validation below.
+  const analysisProject = useDeferredValue(project);
+  const fairness = useMemo(() => calculateFairness(analysisProject), [analysisProject]);
+  const deferredIssues = useMemo(() => validateProject(analysisProject, catalog), [analysisProject, catalog]);
+  // Export actions exist only in the export dialog: while it is open, never let
+  // a lagging validation enable an export that the current project would block.
+  const currentExportIssues = useMemo(() => exportOpen && analysisProject !== project ? validateProject(project, catalog) : undefined,
+    [analysisProject, catalog, exportOpen, project]);
+  const issues = currentExportIssues ?? deferredIssues;
   // Only the Scenario summary needs this count, and only while the policy is on.
   const populationDefenderCount = useMemo(() => leftTab === "scenario" && project.populationDefense?.enabled
     ? buildInitialDefensePlan(project, catalog, project.populationDefense, VERIFIED_POPULATION_DEFENSE_PROFILES).counts.derived
@@ -634,7 +652,11 @@ export function MapMakerApp() {
       setAutosaveSaving(true);
       autosaveQueueRef.current = autosaveQueueRef.current.catch(() => undefined).then(async () => {
         if (currentProjectRef.current !== project) return;
-        const state = await saveProjectAutosave(project, undefined, { expectedRevision: autosaveRevisionRef.current });
+        const committed = committedTextRef.current;
+        const state = await saveProjectAutosave(project, undefined, {
+          expectedRevision: autosaveRevisionRef.current,
+          ...(committed?.project === project ? { serialized: committed.text } : {}),
+        });
         setAutosaveState(state);
         if (state.conflict) {
           setToast("Autosave paused because another tab saved a newer copy. Choose which copy to keep.");
@@ -720,12 +742,13 @@ export function MapMakerApp() {
   }, []);
 
   const commit = useCallback((next: MapProject, remember = true, respectLocks = true) => {
+    let text: string;
     try {
       if (respectLocks) {
         assertProjectLocks(currentProjectRef.current, next);
         pruneAuthoringRegions(next);
       }
-      serializeProject(next);
+      text = serializeProject(next);
     } catch (error) {
       showActionError("project-edit", error, "The previous project is unchanged.");
       return false;
@@ -740,6 +763,10 @@ export function MapMakerApp() {
     // A new edit branches away from Redo, including coalesced range edits.
     setRedoStack([]);
     importGuardRef.current.changed();
+    // Committed projects are replaced, never edited in place, so validation,
+    // fairness and start analysis may share derived graphs and results.
+    markProjectImmutable(next);
+    committedTextRef.current = { project: next, text };
     currentProjectRef.current = next;
     setAutosaveSaving(true);
     setProject(next);
@@ -747,10 +774,13 @@ export function MapMakerApp() {
   }, [clearActionError, showActionError]);
 
   const mutate = useCallback((recipe: (draft: MapProject) => void, remember = true) => {
-    const draft = cloneProject(currentProjectRef.current);
+    const previous = currentProjectRef.current;
+    const draft = cloneProject(previous);
     recipe(draft);
     draft.updatedAt = new Date().toISOString();
-    return commit(draft, remember);
+    // Planes the edit left unchanged stay shared with the committed previous
+    // project (and its Undo snapshot) instead of being retained twice.
+    return commit(isProjectMarkedImmutable(previous) ? shareUnchangedPlanes(previous, draft) : draft, remember);
   }, [commit]);
 
   const beginRangeEdit = useCallback(() => {
@@ -1389,7 +1419,7 @@ export function MapMakerApp() {
           <button className="icon-button" type="button" onClick={handleUndo} disabled={!undoStack.length} title="Undo" aria-label="Undo">↶</button>
           <button className="icon-button" type="button" onClick={handleRedo} disabled={!redoStack.length} title="Redo" aria-label="Redo">↷</button>
           <button className="button quiet" type="button" onClick={() => setValidationOpen(true)}>
-            Validate <span className={errorCount ? "count error" : warningCount ? "count warning" : "count ok"}>{errorCount || warningCount || "✓"}</span>
+            Validate <span className={!hydrated ? "count" : errorCount ? "count error" : warningCount ? "count warning" : "count ok"}>{!hydrated ? "…" : errorCount || warningCount || "✓"}</span>
           </button>
           <button className="button primary" type="button" onClick={() => setExportOpen(true)}>Install / export</button>
         </div>
@@ -1838,7 +1868,7 @@ export function MapMakerApp() {
               <small>{activePlane.provinces.length} provinces · {activePlane.width}×{activePlane.height}</small>
               {preview !== "normal" && <em>{CONDITIONS.find((condition) => condition.value === preview)?.label} preview · illustrative only</em>}
             </div>}
-            {!activePlane.provinces.length && <div className="draft-plane-overlay">
+            {hydrated && !activePlane.provinces.length && <div className="draft-plane-overlay">
               <section className="draft-plane-card" aria-labelledby="draft-plane-title">
                 <p className="eyebrow">DRAFT PLANE · {(PLANE_KINDS.find((item) => item.value === activePlane.kind)?.label ?? activePlane.kind).toLocaleUpperCase()}</p>
                 <h2 id="draft-plane-title">Draft plane — Generate to create provinces</h2>
@@ -1918,7 +1948,7 @@ export function MapMakerApp() {
                     ["generate", "Generate", "Seed, players, provinces per player and start allocation"],
                     ["planes", "Planes", "Add and configure every plane and its planned links"],
                     ["scenario", "Scenario", "Hosting restrictions; then Generate balanced atlas"],
-                    ["validate", "Validate", errorCount ? `${errorCount} export blocker${errorCount === 1 ? "" : "s"} to resolve` : "No export blockers; review any warnings"],
+                    ["validate", "Validate", !hydrated ? "Checking the atlas…" : errorCount ? `${errorCount} export blocker${errorCount === 1 ? "" : "s"} to resolve` : "No export blockers; review any warnings"],
                     ["install", "Install", "Install directly or download a ready ZIP"],
                   ] as Array<[LeftTab | "validate" | "install", string, string]>).map(([step, label, detail], index) => <li key={step}>
                     <button type="button" aria-haspopup={step === "validate" || step === "install" ? "dialog" : undefined} onClick={() => {
@@ -1935,11 +1965,15 @@ export function MapMakerApp() {
       </div>
 
       <footer className="statusbar">
-        <span><i className={errorCount ? "status-dot bad" : "status-dot good"} />{errorCount ? `${errorCount} export blocker${errorCount === 1 ? "" : "s"}` : "Dominions checks ready"}</span>
-        <span>{project.planes.length} plane{project.planes.length === 1 ? "" : "s"} · {totalProvinces} provinces · {project.settings.players} starts target</span>
-        <button className="status-review" type="button" aria-haspopup="dialog" onClick={() => setBalanceOpen(true)}>Fairness (structural) <strong className={scoreClass(fairness.overall)}>{fairness.overall}</strong> · Start analysis…</button>
+        {/* Until the autosave or a fresh atlas loads, the ungenerated placeholder
+            must not report blockers, a zero score or an empty map. */}
+        {hydrated ? <>
+          <span><i className={errorCount ? "status-dot bad" : "status-dot good"} />{errorCount ? `${errorCount} export blocker${errorCount === 1 ? "" : "s"}` : "Dominions checks ready"}</span>
+          <span>{project.planes.length} plane{project.planes.length === 1 ? "" : "s"} · {totalProvinces} provinces · {project.settings.players} starts target</span>
+        </> : <span><i className="status-dot" />Loading atlas…</span>}
+        <button className="status-review" type="button" aria-haspopup="dialog" onClick={() => setBalanceOpen(true)}>Fairness (structural) <strong className={hydrated ? scoreClass(fairness.overall) : undefined}>{hydrated ? fairness.overall : "—"}</strong> · Start analysis…</button>
         <span>{Math.round(zoom * 100)}%</span>
-        <span>{formatBytes(estimatedPackageBytes(project, catalog))} package</span>
+        {hydrated && <span>{formatBytes(estimatedPackageBytes(project, catalog))} package</span>}
       </footer>
 
       {destructiveConfirmation && <DestructiveConfirmationDialog
