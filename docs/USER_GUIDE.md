@@ -181,7 +181,7 @@ Range: **8-30**. This sizes the core overland and cave realms; it does not multi
 
 #### Generation plan and province budget
 
-At the end of **Basics**, the **Next generation** summary shows core, bonus, and total planned provinces. Expand **Province budget by plane** to compare each plane's current count with its next target, including manual-size preservation, start-buffer minimums, start blocking, and the 800-province per-plane cap. It uses the same sizing calculation as generation; counts do not guarantee feasible start spacing or water allocation.
+At the end of **Basics**, the **Next generation** summary shows core, bonus, and total planned provinces. Expand **Province budget by plane** to compare each plane's current count with its next target, including manual-size preservation, start-buffer minimums, start blocking, and the 800-province per-plane cap. Each row also lists the plane's generated start count. Generate sizes every plane and places its generated starts from this same plan, and manual planes are measured by their next-generation target rather than their current province count. Counts still do not guarantee feasible start spacing or water allocation.
 
 The pending summary groups inputs changed since the last generation recorded by this editor. It deliberately excludes manual province edits, name rerolls, host options, and patch notes. “Plan matches” is not proof that the current map is unedited. Older projects have no recorded baseline and say so; generating establishes one. Resolution, wrapping, and archetype changes can also affect current display/export behavior before generation, as their scope labels indicate.
 
@@ -234,7 +234,7 @@ Capital spacing is a separate rule:
 
 If the target cannot fit safely, Atlas reports a warning. Increase map size, simplify the start mix, lower the degree target, change wrapping, or try another seed.
 
-When a manual nation-specific start is too close to another start or lacks connections, a **Nation-specific starts need spacing** notice appears below **Starts**. It does not block Generate; each row offers **Remove nation N start**.
+Generate keeps generated starts at least three moves from manual nation-specific and team starts on the same plane, alongside the usual spacing between generated starts. When a manual nation-specific start is too close to another start or lacks connections, a **Nation-specific starts need spacing** notice appears below **Starts** and in the **Generate and replace** confirmation. It does not block Generate; each row offers **Remove nation N start**. If a regenerated map still cannot keep that distance, a generation notice names the nation, its province, the nearest generated start and the distance achieved.
 
 ### World shape
 
@@ -291,7 +291,7 @@ This policy changes generated population values, not the identity of independent
 
 - **Open movement:** turns generated rivers into bridges and other blocking or seasonal overland borders into ordinary links.
 - **Competitive mix (default):** keeps a terrain-shaped mix of open routes, rivers, passes, and borders.
-- **Strategic regions:** adds deterministic regional chokepoints away from every capital while keeping the movement graph connected.
+- **Strategic regions:** adds deterministic regional chokepoints away from every capital while keeping the movement graph connected. Wet chokepoints are routed as part of connected border rivers (with the usual bridge crossings); a chokepoint that no continuous river can pass, such as a coastal border, becomes a mountain pass instead.
 
 This affects solid Surface and surface-like Custom planes. Cave-family and sparse special realms retain their own topology.
 
@@ -346,7 +346,7 @@ Wrapping is set per plane in **Planes → Selected plane**. **Plane size & outpu
 
 A fully wrapped Underworld is allowed, but validation warns that one river band cannot truly divide a torus.
 
-Generation uses chamber-and-corridor ownership for the Underworld so the Styx crossings agree with the playable map. Imported solid Underworlds are converted only when you generate, with a notice explaining the change.
+Generation uses chamber-and-corridor ownership for the Underworld so the Styx crossings agree with the playable map. Every generated passage stays clear of unrelated chambers, so the exported borders equal the plane's connections. A bridge is drawn over the river it crosses, and each Styx province it touches is linked to the bank on that side (a ford link). Very small Underworlds (about 8–12 provinces) that cannot fit such a layout keep the previous construction; validation warns when an Underworld's drawn borders and connections disagree, for example after authoring a crossing link. Imported solid Underworlds are converted only when you generate, with a notice explaining the change.
 
 #### Configure plane archetypes & selected links
 

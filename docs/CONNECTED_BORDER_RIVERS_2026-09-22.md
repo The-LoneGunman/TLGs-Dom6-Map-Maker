@@ -27,3 +27,7 @@ The river-only checkpoint passed: production build, 14 integration tests and 957
 Interactive browser checks passed on the isolated `127.0.0.1:3027` build using seed `river-review-0`, 96 provinces and 2048×1152 output. Actual UI generation was checked at inherited density, explicit 25%, and 0%. The denser map displayed joined blue channels and bridge underlays; zero removed border rivers without changing the province-water layout. Pending-setting labels, generation confirmation/progress, and the new preference help worked, with no captured browser warnings/errors. The initial navigation failure was resolved by restarting the local preview server after a build had replaced its cached output files; no alternate browser was needed.
 
 No new Dominions 6 in-game visual acceptance is claimed. Native river/bridge drawing, especially at wrap seams, remains engine-controlled. Native export flags and unchanged D6M geography are covered by automated tests.
+
+## Strategic topology (follow-up)
+
+In **Strategic regions** topology, wet chokepoints chosen by the strategic pass are passed to the river router as required borders. Each is routed as part of a continuous channel to an outlet or an existing river, with the usual bridge rules and capital-border protections. A chokepoint no continuous river can pass (for example a coast or sea border) keeps a mountain pass instead of silently reverting to an ordinary link. Open and Competitive topologies are unchanged.
