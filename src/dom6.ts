@@ -576,7 +576,12 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
     issues.push({ id: `issue-${issues.length + 1}`, severity, message, planeId, provinceId });
   };
   if (!project.name.trim()) add("error", "Map name is required.");
-  if (sanitizeMapName(project.name) !== project.name) add("warning", `Export filenames will be normalized to “${sanitizeMapName(project.name)}”.`);
+  const exportName = sanitizeMapName(project.name);
+  if (exportName !== project.name) {
+    // Spaces becoming underscores (as in the default name) is routine; other character changes deserve a warning.
+    const whitespaceOnly = exportName.toLocaleLowerCase() === project.name.trim().replace(/\s+/g, "_").toLocaleLowerCase();
+    add(whitespaceOnly ? "info" : "warning", `Export filenames will be normalized to “${exportName}”.`);
+  }
   if (project.planes.length < 1 || project.planes.length > MAX_PLANES) add("error", "Dominions 6 maps must contain one to eight planes.");
   if (!integerInRange(project.settings.players, 2, 32)) add("error", "Player count must be a whole number from 2 to 32.");
   if (!integerInRange(project.settings.provincesPerPlayer, 8, 30)) add("error", "Provinces per player must be a whole number from 8 to 30.");

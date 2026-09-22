@@ -114,7 +114,9 @@ Selecting a plane in the Planes list or the strip below the map makes it active.
 
 **Find a province** searches all planes by province name, plane name, or number. Numbers (with or without `#`) match either the editor's global number or the local province number; these match Native scenery export. Illustrated image provinces can have different in-game numbers; use the mapping in `host_settings.txt` to cross-reference them. Add a plane-name word to narrow ambiguous local numbers. The first 30 matches are shown with both editor numbers. Selecting a result switches to **Select** and cancels any armed border/gateway endpoint; it does not edit the map.
 
-Control labels identify their scope: **Next generation**, **Current Map**, **Current Map + next generation**, **Host / export**, **Preview only**, **Saved note only**, or **On project open**. Current-map changes are reflected in later exports; they do not alter a map already installed in Dominions. Biome and patch notes are descriptive, while primary terrain and terrain flags affect artwork and game rules.
+Scope badges say when a change takes effect: **Next generation**, **Current Map**, **Current Map + next generation**, **Host / export**, **Preview only**, **Saved note only**, or **On project open**. In the Generate, Planes and Scenario tabs each section states its scope once, in its heading. Only a control whose scope differs from its section carries its own badge, beside its label: for example **Output resolution** (Current Map + next generation), **Plane name** (Current Map) and **Fresh generated names on open** (On project open). The badge is not part of the control's accessible name. Current-map changes are reflected in later exports; they do not alter a map already installed in Dominions. Biome and patch notes are descriptive, while primary terrain and terrain flags affect artwork and game rules.
+
+Setup sections are collapsible; a collapsed heading summarizes the section's current values. Help notes show one line, and **More…** reveals the full explanation. The Generate and Planes tabs keep **Generate balanced atlas**, the start-allocation status and generation progress pinned at the bottom of the setup panel.
 
 The map marker legend distinguishes all authored gameplay markers instead of collapsing them into a generic symbol: **S/#/N** means generic/team/nation-specific start, **♜/♛/×** means preferred/fixed/avoided throne, **✦/M** means a placed site/many-sites terrain, **G** means guardian groups, and **◎** means a gateway endpoint. A province can show several badges at once. The selected-province screen-reader status announces its combined terrain, the same marker meanings, and relevant group, nation, site, guardian, and gate numbers.
 
@@ -124,13 +126,7 @@ The **Project** name in the header becomes the map title and the basis for the e
 
 Generation controls define the next generated atlas. Changing most of them does not alter existing geography until **Generate balanced atlas** is pressed.
 
-### Generation plan and province budget
-
-The **Next generation** summary shows core, bonus, and total planned provinces. Expand **Province budget by plane** to compare each plane's current count with its next target, including manual-size preservation, start-buffer minimums, start blocking, and the 800-province per-plane cap. It uses the same sizing calculation as generation; counts do not guarantee feasible start spacing or water allocation.
-
-The pending summary groups inputs changed since the last generation recorded by this editor. It deliberately excludes manual province edits, name rerolls, host options, and patch notes. “Plan matches” is not proof that the current map is unedited. Older projects have no recorded baseline and say so; generating establishes one. Resolution, wrapping, and archetype changes can also affect current display/export behavior before generation, as their scope labels indicate.
-
-**Review current starts** opens the start-region inspector described below. It analyzes the current map, not the ungenerated plan.
+The tab is grouped into collapsible sections: **Basics**, **Starts**, **World shape** and **Balance & routes** start open; **Plane size & output** and **Province names** start collapsed. A collapsed section's heading summarizes its current values, and Atlas remembers which sections you opened while you switch tabs. Each help note shows one line; choose **More…** for the full explanation. The Generate button and allocation status stay pinned below the sections.
 
 ### Fresh-project defaults
 
@@ -160,27 +156,39 @@ Device autosave may restore your previous atlas instead of showing a fresh proje
 
 Opens an explicit replacement confirmation for the current project. The dialog lists the current plane, province, and gateway totals and offers **Download backup** before continuing. Confirming creates the fresh-project defaults above with a new random seed, clears the selection and armed tools, and clears Undo/Redo history. The new project becomes the device autosave, so the downloaded editable JSON is the recovery path for the replaced atlas.
 
-### Reset generator defaults
+### Basics
 
-Resets the Generate options, name-reroll counter, plane resolution, and active-plane wrapping without replacing the current atlas. It also turns off **Fresh generated names on open** and restores the fixed example seed `pantokrator-001`; use the seed-shuffle button for another world. It preserves planes, provinces, Scenario settings, gateways, manual edits, manual specific starts, and each plane's **Block generated starts** choice. Generated cave-nation assignments are removed until you generate again. The reset is Undoable and does not itself generate. Per-plane generation preferences have their own reset under Planes; layout/start locks can reject conflicting reset changes.
+Seed, player count, provinces per player and the generation plan summary.
 
-### Seed
+#### Seed
 
 A free-text deterministic seed. A first visit without a saved atlas and each **New atlas** use a fresh random seed. Reopening an existing project preserves its seed. The same effective settings and seed reproduce the same generated atlas within the same generator revision; updates can change generation, so keep project JSON when an exact map matters. The icon beside the field creates another random realm-style seed for the next **Generate**; it does not immediately rename or regenerate the current map. To change only names, use the name controls below.
 
 Current source also reproduces generation across independently created atlases: use the same seed, plane order, names and configuration, with no differing authored content or locks. Earlier builds mixed internal plane IDs into some generation/art decisions. Saved maps keep their existing outlines and artwork when opened; the fix takes effect on explicit Generate. Older builds may reject the new applied-generation metadata, so retain a pre-upgrade JSON backup.
 
-### Players
+#### Players
 
 Range: **2-32**. This is the recommended player count and the required total for the five start categories.
 
 When the current allocation exactly matches the old player count, increasing Players adds the difference to Land. Decreasing it removes starts in this order: Land, Other, Cave, Coastal, Water. If the old allocation was already incomplete or overfilled, adjust it manually.
 
-### Provinces / player
+#### Provinces / player
 
 Range: **8-30**. This sizes the core overland and cave realms; it does not multiply every bonus plane independently. See [Automatic plane sizing](#automatic-plane-sizing).
 
-### Start allocation
+#### Generation plan and province budget
+
+At the end of **Basics**, the **Next generation** summary shows core, bonus, and total planned provinces. Expand **Province budget by plane** to compare each plane's current count with its next target, including manual-size preservation, start-buffer minimums, start blocking, and the 800-province per-plane cap. It uses the same sizing calculation as generation; counts do not guarantee feasible start spacing or water allocation.
+
+The pending summary groups inputs changed since the last generation recorded by this editor. It deliberately excludes manual province edits, name rerolls, host options, and patch notes. “Plan matches” is not proof that the current map is unedited. Older projects have no recorded baseline and say so; generating establishes one. Resolution, wrapping, and archetype changes can also affect current display/export behavior before generation, as their scope labels indicate.
+
+**Review current starts** opens the start-region inspector described below. It analyzes the current map, not the ungenerated plan.
+
+### Starts section
+
+The five start categories, the connection target, and the nested cave-start nation list.
+
+#### Start allocation
 
 Each category accepts 0-32. The five values must total Players exactly, or Generate remains disabled.
 
@@ -190,13 +198,13 @@ Each category accepts 0-32. The five values must total Players exactly, or Gener
 - **Cave:** dry Cave/Great Cavern starts. If no Cave/Great Cavern plane permits generated starts, eligible Underworld, Infernal, or Abyss planes supply the slots.
 - **Other:** dry special-realm terrain outside the overland and cave families, such as Cloud, Air, Dream, or Elemental.
 
-**Put remainder on land** appears when too few starts are allocated and fills the unassigned slots with Land starts.
+The allocation status is pinned above **Generate balanced atlas**. **Put remainder on land** appears there when too few starts are allocated and fills the unassigned slots with Land starts.
 
-Make sure the required plane families exist and permit generated starts. For example, Cave starts need an eligible cave-family plane (preferring Cave/Cavern) and Other starts need an eligible bonus realm. A plane whose **Block generated starts on this plane** option is checked is not eligible for any automatically allocated start category. An impossible category displays a persistent **Generation plan cannot place all starts** summary and disables Generate until you permit starts on a compatible plane, add one, or change the allocation. Existing and imported atlases remain subject to start-count, category, and safety validation; blocking future generation does not itself invalidate existing starts.
+Make sure the required plane families exist and permit generated starts. For example, Cave starts need an eligible cave-family plane (preferring Cave/Cavern) and Other starts need an eligible bonus realm. A plane whose **Block generated starts on this plane** option is checked is not eligible for any automatically allocated start category. An impossible category displays a persistent **Generation plan cannot place all starts** summary in the pinned Generate bar and disables Generate until you permit starts on a compatible plane, add one, or change the allocation. Existing and imported atlases remain subject to start-count, category, and safety validation; blocking future generation does not itself invalidate existing starts.
 
-### Deterministic cave-start nations
+#### Deterministic cave-start nations
 
-This is an ordered list of playable nation IDs.
+This is an ordered list of playable nation IDs, collapsed inside **Starts**. It opens automatically when nations are configured.
 
 - **Empty list:** Dominions uses its native cave-start preferences on the generic cave starts.
 - **Configured list:** after Generate, the program binds each nation in priority order to a distinct generated Cave start with `#specstart`.
@@ -208,7 +216,7 @@ This is an ordered list of playable nation IDs.
 
 Use the arrow controls to change priority.
 
-### Target useful connections at starts
+#### Target useful connections at starts
 
 Range: **1-8**. Default: **4**.
 
@@ -223,13 +231,17 @@ Capital spacing is a separate rule:
 
 If the target cannot fit safely, Atlas reports a warning. Increase map size, simplify the start mix, lower the degree target, change wrapping, or try another seed.
 
-### Water provinces
+When a manual nation-specific start is too close to another start or lacks connections, a **Nation-specific starts need spacing** notice appears below **Starts**. It does not block Generate; each row offers **Remove nation N start**.
+
+### World shape
+
+#### Water provinces
 
 Range: **0-60%**. Default: **18%**.
 
 This is the requested water share on water-capable generated realms. Generation may raise it to satisfy water/coastal starts, an Oceanic variant, or Island Chains. A plane's optional [generation preferences](#generation-preferences) can override the inherited request. Flooded Cave/Cavern chambers have a separate preference; the Underworld's Styx is an archetype feature, not an ordinary water-quota result.
 
-### Overland ocean layout
+#### Overland ocean layout
 
 - **Natural / varied:** organic seed-driven land and water patches.
 - **Single continent:** one connected major landmass with peripheral sea.
@@ -251,7 +263,7 @@ Water remains a set of playable Sea/Deep Sea provinces, not a painted overlay. P
 
 Coastal boundaries use stronger bays/headlands than inland divisions; ocean interiors use broader curves, and small enclosed lakes receive rounded basin outlines. The generator saves these shape hints separately from editable terrain. Manually changing Sea or other flags changes the province's art and game terrain, not its borders. Generate again when you want water placement and shapes rebuilt together.
 
-### Biome cohesion
+#### Biome cohesion
 
 Range: **0-100%**. Current-main default: **58%** (published 0.1.5 uses 68%). Saved settings are not automatically lowered.
 
@@ -262,7 +274,9 @@ The current-main generator blends a little more regional moisture/elevation deta
 
 The generator still enforces minimum terrain variety, so the relationship is directional rather than a promise that every low-cohesion seed will have fewer same-terrain neighbors than every high-cohesion seed.
 
-### Economy balance
+### Balance & routes
+
+#### Economy balance
 
 - **None / natural:** preserves generated populations without correcting unequal early economies.
 - **Soft correction:** nudges start economies toward parity, caps corrections at 12%, and applies less than half the Hard adjustment.
@@ -270,7 +284,7 @@ The generator still enforces minimum terrain variety, so the relationship is dir
 
 This policy changes generated population values, not the identity of independently recruitable poptypes or a nation's persistent post-capture PD roster.
 
-### Overland topology
+#### Overland topology
 
 - **Open movement:** turns generated rivers into bridges and other blocking or seasonal overland borders into ordinary links.
 - **Competitive mix (default):** keeps a terrain-shaped mix of open routes, rivers, passes, and borders.
@@ -278,7 +292,7 @@ This policy changes generated population values, not the identity of independent
 
 This affects solid Surface and surface-like Custom planes. Cave-family and sparse special realms retain their own topology.
 
-#### Connected border rivers
+##### Connected border rivers
 
 Unreleased feature on current main; published 0.1.5 retains the earlier border-river generator.
 
@@ -288,47 +302,37 @@ Capital exits and road crossings use bridges so the river remains visually conti
 
 Use **Planes → Generation preferences → Eligible dry-land border mix → River share (%)** to change the amount, or enter **0** to disable generated border rivers. The share is approximate: complete routes take priority over filling the percentage with disconnected pieces, and constrained explicit requests produce a generation notice. River crossings can replace some requested road borders with bridges. Regenerate to apply these settings; loading, synchronizing or exporting an existing map does not reroute authored rivers. The River Styx, ocean provinces, cave waterways, and sparse-realm passages are unchanged.
 
-### Province-name controls
-
-**Reroll generated names (preserve manual)** immediately renames generated provinces on every plane without changing geography. Names use plane, terrain, coast, flooded-cave, and Styx context. Names edited in the province inspector and legacy names with no provenance are preserved. The action is Undoable.
-
-**Replace every province name** opens a confirmation and replaces generated, manual, and legacy names, except provinces protected by a name lock. Unlock those names first if they should also change. Use it to repair duplicate or poorly matched names in older projects. It is also Undoable.
-
-Generated names are unique across the atlas and avoid known nation, epithet, home/capital-site, and special-realm names.
-
-Names blend article-free forms such as **Silver Grove** with occasional **The**-prefixed forms. Roughly one in four candidates uses **The**, including longer compound names. Existing saved names stay unchanged by default: use **Reroll generated names (preserve manual)** to apply the new blend without regenerating the map.
-
-The vocabulary also includes 528 original named places and landmarks, interleaved with descriptive names: **Bellroot Vault** for caves, **Candlewake Ferry** for the Styx, **Larkglass** in the Dreamlands, and **Orphaned Meridian** in the Abyss. Terrain-specific pools keep farms, forests, seas, flooded caves, and other landscapes distinct; special realms retain their own naming character. These names use the same uniqueness and capital-name protections.
-
-**Fresh generated names on open** is an optional setting saved with each project. Enable it to shuffle generated names whenever the project opens from JSON or is restored on page load. It does not rename anything immediately, change the world seed, or regenerate geography, guardians, or starts. Manual and legacy names are preserved, and conflict/recovery copies are always opened unchanged. After a page-load reroll, **Undo** restores the saved names. Turn this option off before sharing a multiplayer map whose province names should stay fixed; exported game maps never reroll names when loaded in Dominions.
-
-### Each bonus plane size (% of core)
-
-Range: **1-500%**. Default: **30%**.
-
-Each auto-sized bonus plane independently receives this percentage of the combined core, up to 800 provinces. Values over 100% are allowed. Manually sized planes are unchanged.
-
-### Recommended throne locations
+#### Recommended throne locations
 
 Range: **0-64**. Default: **8**.
 
 This marks preferred throne provinces; it does not set Ascension points and does not force exact named throne sites. The generator distributes preferences while protecting start and gate exclusion zones. If all requested locations cannot fit safely, validation warns with the achieved count. Lower the target or enlarge the atlas if exact capacity matters.
 
-### Output resolution
+### Plane size & output
+
+Collapsed by default. Its heading shows the bonus-plane percentage and output resolution.
+
+#### Each bonus plane size (% of core)
+
+Range: **1-500%**. Default: **30%**.
+
+Each auto-sized bonus plane independently receives this percentage of the combined core, up to 800 provinces. Values over 100% are allowed. Manually sized planes are unchanged.
+
+#### Output resolution
 
 - **Compact:** 1536 x 1024
 - **2K:** 2048 x 1152
-- **ChatGPT max / 4K:** 3840 x 2160
+- **4K:** 3840 x 2160
 - **Square max:** 2880 x 2880
 - **Custom per plane**
 
-A preset immediately applies its dimensions to every plane. Custom exposes Width and Height in Planes for the active plane. Each axis must be 256-3840 pixels, and the total may not exceed 8,294,400 pixels.
+This control carries its own **Current Map + next generation** badge. A preset immediately applies its dimensions to every plane. Custom exposes Width and Height in Planes for the active plane. Each axis must be 256-3840 pixels, and the total may not exceed 8,294,400 pixels.
 
 Choose the final aspect ratio before generation because it affects geometry. Large multi-plane 4K packages are faster and more memory-efficient with direct installation than ZIP export.
 
-### Wrap east/west and north/south
+#### Wrap east/west and north/south
 
-These affect only the active plane.
+Wrapping is set per plane in **Planes → Selected plane**. **Plane size & output** shows the selected plane's setting as a read-only line (for example, *Selected plane (Pantokrator's Realm) wraps east/west and north/south*), followed by the button that opens Planes.
 
 - East/west links the left and right seams.
 - North/south links the top and bottom seams.
@@ -341,19 +345,41 @@ A fully wrapped Underworld is allowed, but validation warns that one river band 
 
 Generation uses chamber-and-corridor ownership for the Underworld so the Styx crossings agree with the playable map. Imported solid Underworlds are converted only when you generate, with a notice explaining the change.
 
-### Configure plane archetypes & selected links
+#### Configure plane archetypes & selected links
 
-Switches to Planes without changing the map. Use it to finish plane planning before Generate.
+Switches to Planes without changing the map. It is the last control in **Plane size & output**. Use it to finish plane planning before Generate.
 
-### Generate balanced atlas
+### Province-name controls
 
-Rebuilds every planned plane from the seed and settings, including terrain, topology, starts, generated gateways, throne recommendations, independent details, cave-nation assignments, and generated names. Plane/Scenario configuration and manually authored province names remain. Compatible field-locked content can survive same-seed generation; most other province edits do not. Layout lock blocks full generation, and conflicting start/field locks reject the result without replacing the atlas.
+These controls are in the **Province names** section, which starts collapsed and is scoped **Current Map** because its actions apply immediately.
 
-On a populated atlas, Atlas confirms what will be replaced and offers a project backup. The progress card lets you cancel safely, and generation never installs a partial result. If you edit the project while generation runs, a stale result is discarded. A completed generation is Undoable.
+**Reroll generated names (preserve manual)** immediately renames generated provinces on every plane without changing geography. Names use plane, terrain, coast, flooded-cave, and Styx context. Names edited in the province inspector and legacy names with no provenance are preserved. The action is Undoable.
 
-### Generation balance notice
+**Replace every province name** opens a confirmation and replaces generated, manual, and legacy names, except provinces protected by a name lock. Unlock those names first if they should also change. Use it to repair duplicate or poorly matched names in older projects. It is also Undoable.
 
-Appears when generation used a safe best-effort result, especially:
+Generated names are unique across the atlas and avoid known nation, epithet, home/capital-site, and special-realm names.
+
+Names blend article-free forms such as **Silver Grove** with occasional **The**-prefixed forms. Roughly one in four candidates uses **The**, including longer compound names. Existing saved names stay unchanged by default: use **Reroll generated names (preserve manual)** to apply the new blend without regenerating the map.
+
+The vocabulary also includes 528 original named places and landmarks, interleaved with descriptive names: **Bellroot Vault** for caves, **Candlewake Ferry** for the Styx, **Larkglass** in the Dreamlands, and **Orphaned Meridian** in the Abyss. Terrain-specific pools keep farms, forests, seas, flooded caves, and other landscapes distinct; special realms retain their own naming character. These names use the same uniqueness and capital-name protections.
+
+**Fresh generated names on open** (scoped **On project open**) is an optional setting saved with each project. Enable it to shuffle generated names whenever the project opens from JSON or is restored on page load. It does not rename anything immediately, change the world seed, or regenerate geography, guardians, or starts. Manual and legacy names are preserved, and conflict/recovery copies are always opened unchanged. After a page-load reroll, **Undo** restores the saved names. Turn this option off before sharing a multiplayer map whose province names should stay fixed; exported game maps never reroll names when loaded in Dominions.
+
+### Reset generator defaults
+
+The quiet **Reset generator defaults** link sits at the bottom of the Generate tab. It resets the Generate options, name-reroll counter, plane resolution, and active-plane wrapping without replacing the current atlas. It also turns off **Fresh generated names on open** and restores the fixed example seed `pantokrator-001`; use the seed-shuffle button for another world. It preserves planes, provinces, Scenario settings, gateways, manual edits, manual specific starts, and each plane's **Block generated starts** choice. Generated cave-nation assignments are removed until you generate again. The reset is Undoable and does not itself generate. Per-plane generation preferences have their own reset under Planes; layout/start locks can reject conflicting reset changes.
+
+### Pinned Generate bar
+
+#### Generate balanced atlas
+
+The button is pinned at the bottom of the Generate and Planes tabs, together with the allocation status, any start-plan errors, generation progress and border status, so it stays visible while you scroll. It rebuilds every planned plane from the seed and settings, including terrain, topology, starts, generated gateways, throne recommendations, independent details, cave-nation assignments, and generated names. Plane/Scenario configuration and manually authored province names remain. Compatible field-locked content can survive same-seed generation; most other province edits do not. Layout lock blocks full generation, and conflicting start/field locks reject the result without replacing the atlas.
+
+On a populated atlas, Atlas confirms what will be replaced and offers a project backup. The progress card in the pinned bar lets you cancel safely, and generation never installs a partial result. If you edit the project while generation runs, a stale result is discarded. A completed generation is Undoable.
+
+#### Generation balance notice
+
+Appears below **Starts** when generation used a safe best-effort result, especially:
 
 - Start spacing below the preferred scale-aware target while retaining the hard three-step floor.
 - Unequal start connection counts.
@@ -361,9 +387,9 @@ Appears when generation used a safe best-effort result, especially:
 
 These warnings do not block export. Hard spacing failures remain red validation errors.
 
-### Synchronize visible borders
+#### Synchronize visible borders
 
-The button reads **Synchronize N project border issues**, or **Visible borders synchronized** when no repair is needed. It repairs all planes when the saved Dominions neighbor graph differs from visible ownership boundaries. Use it for imported projects that show topology errors; it preserves valid authored border types.
+When repairs are needed, the pinned Generate bar shows a **Synchronize N project border issues** button; otherwise it shows the status text **Visible borders synchronized**. It repairs all planes when the saved Dominions neighbor graph differs from visible ownership boundaries. Use it for imported projects that show topology errors; it preserves valid authored border types.
 
 ### Automatic plane sizing
 
@@ -378,6 +404,16 @@ Core planes are Surface, Cave, Great Cavern, and solid Custom realms with Temper
 ## Planes tab
 
 An atlas can have **one to eight planes**. Auto-sizing and planned-link changes apply to the next generation. Archetype changes immediately update the current plane's identity, ownership presentation and borders; surviving authored border types are preserved. Terrain, starts, sites and guardians are not regenerated until **Generate**. Wrap changes, including **Reset generator defaults**, also synchronize current borders in the same undoable edit. Review validation after changing topology because start spacing may change.
+
+The plane list and **+ Add plane to plan** stay at the top. Settings for the selected plane follow in collapsible sections:
+
+- **Selected plane** (Current Map + next generation; open): name, archetype, terrain variant, province layout, wrapping, custom width/height and **Remove this plane…**. Plane name has its own **Current Map** badge.
+- **Generation preferences** (Next generation; open): auto-size or province target, **Block generated starts on this plane**, and the per-plane generation preferences.
+- **Display, flags & plane directives** (Host / export; collapsed): map-image and deep-cave overrides, name and dominion colors, and the plane's raw directives.
+- **Planned links** (Next generation): open when the atlas has more than one plane. With a single plane it starts collapsed and shows no link rows.
+- **Existing gateways (N)** (Current Map; collapsed): actual saved gateways touching the selected plane.
+
+The pinned **Generate balanced atlas** bar stays below these sections.
 
 ### Add plane to plan
 
@@ -455,7 +491,7 @@ With auto-size on, the plane uses the formulas under [Automatic plane sizing](#a
 
 ### Block generated starts on this plane
 
-Unchecked by default. When checked, the next **Generate balanced atlas** does not allocate generic generated starts to that plane. Use this to reserve a dangerous bonus realm, keep a thematic plane neutral, or direct the requested start categories into other compatible planes. If the remaining eligible planes cannot satisfy the allocation, the Generate tab names the impossible categories and disables Generate instead of silently ignoring the policy.
+Unchecked by default. When checked, the next **Generate balanced atlas** does not allocate generic generated starts to that plane. Use this to reserve a dangerous bonus realm, keep a thematic plane neutral, or direct the requested start categories into other compatible planes. If the remaining eligible planes cannot satisfy the allocation, the pinned Generate bar (visible on both Generate and Planes) names the impossible categories and disables Generate instead of silently ignoring the policy.
 
 This affects only automatic allocation. Existing starts remain until regeneration, and you can add generic, team, or nation-specific starts manually afterward. The setting is preserved by saving, importing, Undo/Redo, and **Reset generator defaults**.
 
@@ -463,7 +499,7 @@ Whether a start was generated or placed manually, its capital province and every
 
 ### Wrap settings
 
-Create movement and ownership seams across the selected axis. Underworld defaults to no wrap so its Styx remains a permanent barrier with controlled crossings.
+**Wrap east / west** and **Wrap north / south** in **Selected plane** are the only wrap controls; Generate shows the setting read-only. They create movement and ownership seams across the selected axis and immediately resynchronize that plane's borders. Underworld defaults to no wrap so its Styx remains a permanent barrier with controlled crossings.
 
 ### Custom resolution
 
@@ -471,7 +507,7 @@ When Generate's resolution is Custom, Width and Height appear here for the activ
 
 ### Generation preferences
 
-Expand **Generation preferences · Next generation** on the active plane. Blank values inherit the established generator. Current provinces remain unchanged until Generate; **Reset plane preferences to inherited** removes all overrides for that plane.
+In the **Generation preferences** section, expand **Generation preferences · Next generation** for the active plane. Blank values inherit the established generator. Current provinces remain unchanged until Generate; **Reset plane preferences to inherited** removes all overrides for that plane.
 
 | Preference | What it does |
 | --- | --- |
@@ -487,10 +523,13 @@ Treat these as preferences, not exact quotas. Locks, terrain variety, ocean cons
 
 ### Plane display & native flags
 
+These are in the collapsed **Display, flags & plane directives** section (Host / export). Its heading counts the settings that differ from the inherited defaults.
+
 - **Reveal this plane's map image:** Inherit project setting, On, or Off. Controls per-plane `#mapnohide` behavior.
 - **Disable random deep caves from this plane:** Inherit, On, or Off. Controls per-plane `#nodeepcaves` behavior.
 - **Province-name color:** four decimal RGBA values from 0 to 1 for `#maptextcol`. Default: `0.93 0.88 0.70 1.0`.
 - **Dominion-overlay color:** four integer RGBA values from 0 to 255 for `#mapdomcol`. Default: `238 205 112 42`.
+- **Plane directives:** raw commands appended at the end of this plane's map file. It edits the same text as **Plane directives** in the province inspector's Advanced tab. See [Raw directives](#raw-directives).
 
 ### Themed backdrops
 
@@ -516,17 +555,19 @@ These are different systems:
 
 Choosing a preset replaces the planned pair rules for the atlas.
 
+These rules are in the **Planned links** section of Planes. It starts collapsed and lists no rows while the atlas has only one plane; the preset and default pair count remain editable there.
+
 **Default pairs for all enabled links** sets 1-3 distinct gateway pairs for every enabled plane pair. Each visible row can be enabled/disabled and can override its pair count. Rows show only links involving the active plane. The compatibility percentage is a generation heuristic, not a travel chance.
 
 All generated links are bidirectional. Dominions treats every province sharing the same `#gate` number as one bidirectional network; one-way gateways are not supported by the engine.
 
 ### Existing gateways editor
 
-Shows actual gate groups touching the active plane.
+The collapsed **Existing gateways (N)** section of Planes shows actual gate groups touching the active plane.
 
 - A gate number must be a unique positive safe integer.
 - Every endpoint with the same number is mutually connected; a group with three or more endpoints is a network, not a sequence.
-- Each endpoint displays its plane, local province number, name, and stable ID.
+- Each endpoint displays its plane, local province number, and name. Hover the province line to see its stable internal ID.
 - An endpoint can be reassigned to another province on its stored plane.
 - The same province cannot appear twice in one group.
 - Delete removes the entire gateway group.
@@ -535,28 +576,44 @@ Validation requires at least two valid, non-blocked endpoints and a route from e
 
 ## Scenario tab
 
-Scenario options affect export directly and do not require regeneration.
+Scenario options affect export directly and do not require regeneration. They are grouped into collapsible sections. **Game info** starts open; the others start collapsed, and each heading summarizes the current values (for example *Sail 2 · sites 50 · no ascension target*).
+
+**Game info** (Host / export)
 
 - **Description:** main map description. Secondary planes receive the description plus their plane name.
 - **Minimum Dominions version:** range 600-999; emits `#domversion`. The default 635 means Dominions 6.35. This is a minimum file-compatibility declaration, not the host's actual patch or the selector-catalog version. The 6.37 catalog refresh added no IDs and does not automatically raise existing maps' minimum version.
+
+**Victory & rules** (Host / export)
+
 - **Sail distance:** range 1-10; emits `#saildist`.
 - **Site frequency:** range 0-100; emits the global `#features` value.
 - **Ascension points:** optional 1-999; emits `#victorycondition 6 N`. Blank leaves that victory condition unspecified.
+
+**Nations & AI** (Host / export)
+
 - **Allowed nations:** emits `#allowedplayer`. Empty means unrestricted. A nonempty list must contain at least as many distinct nations as Players.
 - **Computer-controlled nations:** forces selected nations to AI. Easy = 1, Normal = 2, Difficult = 3, Mighty = 4, Master = 5.
 - **Cannot-win nations:** emits `#cannotwin`.
+
+**Visibility & naming** (Host / export)
+
 - **Reveal map image:** project-level `#mapnohide`.
 - **Disable random deep-cave planes:** project-level `#nodeepcaves`.
 - **Hide deep-plane choice:** emits `#nodeepchoice`.
 - **Disable homeland names:** emits `#nohomelandnames`; useful when authored capital names must be preserved.
 - **Disable name filter:** emits `#nonamefilter`.
+
+**Advanced: map-level directives** (Host / export)
+
 - **Map-level directives:** advanced commands appended only to plane 1.
+
+**Population-matched defenders** opens by default only when the policy is on; its heading reads **Off** or **On · N provinces**. **Catalog data** holds the [Catalog manager](#catalog-manager).
 
 Playable nation IDs must be safe integers 5 or greater. Unknown IDs require matching custom content in Dominions.
 
 ### Population-matched initial defenders
 
-In **Host & scenario**, enable **Match ordinary defenders to recruitment population** to replace eligible ordinary initial armies at export. The option is off by default. Both manually assigned and generated population types use the same rule; changing a province's population type updates its preview immediately without regenerating the map.
+In **Scenario → Population-matched defenders**, enable **Match ordinary defenders to recruitment population** to replace eligible ordinary initial armies at export. The option is off by default. Both manually assigned and generated population types use the same rule; changing a province's population type updates its preview immediately without regenerating the map.
 
 The current **v3** revision supports **76 population types**, including 41 of the 45 types used by the generator, for **unmodded Dominions 6.37, Middle Age**. Declare the host patch and era explicitly; neither is auto-detected. Each template lists its tested land/water and Cave requirements under **Verified template scope**. For example, Cavemen use one Caveman Champion and eight Cavemen; Pale Ones use one Pale One Commander and fifteen Pale Ones in dry Cave terrain. The coverage panel lists matched, preserved, excluded and unsupported provinces so partial coverage is visible.
 
@@ -855,7 +912,7 @@ Appended inside that province's `#land` or `#setland` block after structured fea
 
 - **Province directives:** appended inside that province block.
 - **Map-level directives:** appended to plane 1 after structured province blocks.
-- **Plane directives:** appended at the end of the selected plane file.
+- **Plane directives:** appended at the end of the selected plane file. Edit them in **Planes → Display, flags & plane directives** or in the province inspector's Advanced tab.
 - Only trimmed lines beginning with `#` or `--` are exported; other text is discarded.
 - Raw commands are not syntax-checked, deduplicated, or reconciled with structured controls.
 - Command order and scope are your responsibility.
@@ -1058,7 +1115,7 @@ Choose the **High-res … preview of …** button in **Install / export**. It ex
 
 ### Filename normalization
 
-The normalized project root uses safe ASCII letters, digits, and underscores, with a maximum of 64 characters. Automatic plane, realm and condition suffixes are added after that root. Unsafe characters and reserved Windows filenames are normalized automatically; the export dialog shows the exact result before writing. A normalization warning does not block export.
+The normalized project root uses safe ASCII letters, digits, and underscores, with a maximum of 64 characters. Automatic plane, realm and condition suffixes are added after that root. Unsafe characters and reserved Windows filenames are normalized automatically; the export dialog shows the exact result before writing. When the only change is spaces becoming underscores (such as the default **Pantokrator Atlas** → `Pantokrator_Atlas`), validation lists it as **Info**; other character changes, truncation or reserved names are a **Warning**. Neither blocks export.
 
 ### Browser limitations
 
@@ -1076,7 +1133,7 @@ When the map has keyboard focus:
 - Enter/Space: apply the active tool exactly once.
 - Arrow navigation never applies Start, Throne, Link, Gate, or Site.
 
-For the setup and inspector tab groups, Arrow keys move between tabs and Home/End jumps to the first/last tab.
+For the setup and inspector tab groups, Arrow keys move between tabs and Home/End jumps to the first/last tab. Setup section headings and **More…** notes are native disclosure buttons: Tab to one and press Enter or Space to expand or collapse it.
 
 In catalog fields, type a name or ID, use Up/Down to move through results, Enter to commit, and Escape to close and restore the previous value. Nation, population-type and fort fields accept numeric IDs (including `#15`) or an exact unique name on blur. An ambiguous name such as **Agartha**, which exists in several eras, keeps the previous value and asks you to choose a result. Only explicitly clearing the field removes its assignment. Unit and site fields still accept raw mod references.
 

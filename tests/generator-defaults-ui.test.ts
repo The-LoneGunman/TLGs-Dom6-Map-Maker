@@ -195,9 +195,12 @@ test("Generate copy and completion reporting disclose effective ocean-layout nor
 
 test("Generate exposes documented economy and overland policy choices", () => {
   const html = renderToStaticMarkup(createElement(MapMakerApp));
-  assert.match(html, />Economy balance <small class="scope-badge">Next generation<\/small>/);
-  assert.match(html, />Hard competitive balance</);
-  assert.match(html, />Overland topology <small class="scope-badge">Next generation<\/small>/);
-  assert.match(html, />Competitive mix</);
-  assert.match(html, /sparse and cave realms keep their authored route profiles/);
+  // The scope is stated once on the section summary instead of inside each control's label.
+  assert.match(html, /<summary><span class="setup-section-title">Balance &amp; routes<\/span><small class="scope-badge">Next generation<\/small>/);
+  const section = html.slice(html.indexOf("Balance &amp; routes"), html.indexOf("Plane size &amp; output"));
+  assert.match(section, /<span>Economy balance<\/span><select/);
+  assert.match(section, />Hard competitive balance</);
+  assert.match(section, /<span>Overland topology<\/span><select/);
+  assert.match(section, />Competitive mix</);
+  assert.match(section, /sparse and cave realms keep their authored route profiles/);
 });
