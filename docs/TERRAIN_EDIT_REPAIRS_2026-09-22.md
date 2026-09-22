@@ -1,6 +1,6 @@
 # Terrain-edit repairs — September 22, 2026
 
-Source-stage verification from `codex/terrain-edit-safety-sep22`, based on main `c4ee2d7`. Package version remains 0.1.5. These changes are unreleased: merging the source does not deploy the hosted app or update the Windows installer.
+Source-stage verification from `codex/terrain-edit-safety-sep22`, based on main `c4ee2d7`. Merged to `main` at **`464ff03`** through [PR #9](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/pull/9). Package version remains 0.1.5. These repairs are unreleased: merging source does not deploy the hosted app or update the Windows installer. The checks below are this repair checkpoint; the later [natural-landform record](NATURAL_LANDFORMS_2026-09-22.md#final-checks) contains the combined 1,010-test result.
 
 ## Corrections
 

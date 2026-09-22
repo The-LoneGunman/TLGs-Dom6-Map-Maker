@@ -1,6 +1,6 @@
 # Connected border rivers — September 22, 2026
 
-Source-stage verification from `codex/terrain-edit-safety-sep22`, following the terrain-edit repairs. These changes are unreleased: merging the source does not deploy the hosted app or update the Windows installer.
+Source-stage verification from `codex/terrain-edit-safety-sep22`, following the terrain-edit repairs. Merged to `main` at **`464ff03`** through [PR #9](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/pull/9). These changes remain unreleased: merging source does not deploy the hosted app or update the Windows installer. The later [natural-landform record](NATURAL_LANDFORMS_2026-09-22.md#final-checks) contains the combined 1,010-test checkpoint.
 
 ## Behavior
 
@@ -22,7 +22,7 @@ The five existing complete-generation snapshots were compared with main `c4ee2d7
 
 An 800-province full-generation stress case completed with 1,252 connected-route border selections and an explicit notice that the requested 100% share could not be met without violating route constraints. A separate regular 800-province wrapped geometry fixture took about 0.43 seconds to build topology and 0.17 seconds for the river pass on this machine; these are observations, not performance guarantees.
 
-Final verification passed: production build, 14 integration tests and 957 TypeScript tests (971 total, zero failures or skips), typecheck, ESLint, license checks, and diff whitespace checks. Independent sub-agent review found no further in-scope blocker.
+The river-only checkpoint passed: production build, 14 integration tests and 957 TypeScript tests (971 total, zero failures or skips), typecheck, ESLint, license checks, and diff whitespace checks. Independent sub-agent review found no further in-scope blocker. This predates the natural-landform follow-up and its combined test total.
 
 Interactive browser checks passed on the isolated `127.0.0.1:3027` build using seed `river-review-0`, 96 provinces and 2048×1152 output. Actual UI generation was checked at inherited density, explicit 25%, and 0%. The denser map displayed joined blue channels and bridge underlays; zero removed border rivers without changing the province-water layout. Pending-setting labels, generation confirmation/progress, and the new preference help worked, with no captured browser warnings/errors. The initial navigation failure was resolved by restarting the local preview server after a build had replaced its cached output files; no alternate browser was needed.
 

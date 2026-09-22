@@ -1,6 +1,6 @@
 # Multiplayer workbench implementation
 
-Reviewed September 21, 2026 for **0.1.5**, integrated into `main` at `581b2b8`, deployed as hosted Site version 13, and published as Windows release v0.1.5 after its independent packaging gate. See [Versions and documentation](../README.md#versions-and-documentation) and [release verification](RELEASE_VERIFICATION_0.1.5.md) for exact source/artifact references.
+Reviewed September 22, 2026 against application source merged to `main` at **`464ff03`**. Package version remains 0.1.5, but hosted Site version 13 and Windows v0.1.5 still contain the earlier `581b2b8` source. The post-release additions below are merged, not deployed. See [Versions and documentation](../README.md#versions-and-documentation) and [release verification](RELEASE_VERIFICATION_0.1.5.md) for the separate delivery records.
 
 This tracks the approved [comparative-research roadmap](MULTIPLAYER_MAPMAKER_RESEARCH_2026-09-06.md). Approval is not proof of delivery or measured balance. Selector catalogs are pinned to 6.37; they are not nation-strength rulesets or automatic update feeds.
 
@@ -31,18 +31,32 @@ This tracks the approved [comparative-research roadmap](MULTIPLAYER_MAPMAKER_RES
 - **Population-matched initial defenders** is opt-in and off by default. The current v3 revision covers 76 populations and 161 tested land/water × Cave scopes in unmodded 6.37 Middle Age. It requires explicit patch/era declarations, preserves custom guardians and protected starts, and leaves unsupported contexts unchanged. Counts are fixed authored choices, not calibrated combat difficulty or persistent PD.
 - Saved v1/v2 template revisions remain unchanged until the user explicitly selects the newer revision. Manual population edits re-evaluate the read-only army preview without regeneration.
 
+## Merged post-release additions — September 21–22
+
+| Area | Current-main behavior and scope |
+| --- | --- |
+| Realm layout and artwork | [Connected regions and broad passages](CONNECTED_REGIONS_2026-09-21.md) replace the classic sparse-layout selector. Procedural landscapes cover nine realm types, with optional [playable illustrated export](ILLUSTRATED_EXPORT_2026-09-22.md), terrain/winter sheets and remapped province references. Surface/Custom remain native. |
+| Natural geography | [Distinct coast, ocean, lake and realm contours](NATURAL_LANDFORMS_2026-09-22.md) share editor/export ownership. New generations record shape provenance; terrain edits and content rerolls do not reshape those boundaries. Explicit ocean presets keep their water layout during start placement. |
+| Terrain distribution | New-project and Balanced FFA cohesion defaults are 58%, with modest extra variation in temperate terrain below 80%. Saved settings, themed samplers and explicit preferences are preserved. |
+| Rivers | [Connected border watercourses](CONNECTED_BORDER_RIVERS_2026-09-22.md) use real shared-border junctions and safe capital/road bridges. Complete routes take priority over a precise requested share; the province-water Styx is unchanged. |
+| Terrain editing | [Cave-wall safety and mixed relief](TERRAIN_EDIT_REPAIRS_2026-09-22.md): consistent primary/additive cleanup, blocked-content export checks, submerged aquatic relief and low wooded-swamp relief. |
+
 ## Verification and remaining work
 
-Five fixed generation fixtures cover default, islands, continents, caves, and eight planes to detect changes when new preferences are unused. Current checks belong in [0.1.5 release verification](RELEASE_VERIFICATION_0.1.5.md); the [September 20 implementation record](IMPLEMENTATION_ROUND_2026-09-20.md) remains dated evidence, not the latest test total.
+**Latest source:** `464ff03` passed [merged-main CI](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35738115402): **1,010 automated tests (14 build/integration + 996 TypeScript)**, type checking, lint, licenses, dependency audit and Linux/Windows server/launcher checks. Real browser use covered continental, island and inland-sea generation, mixed starts, terrain editing/Undo and saved geometry. The [natural-landform record](NATURAL_LANDFORMS_2026-09-22.md#final-checks) gives the fixtures and limits.
 
-The candidate passed **743 automated tests (14 build/integration + 729 TypeScript)**, type checking, lint, license checks, and server/launcher checks. Native Dominions 6.37 loaded all eight planes of the acceptance package, and each was visually inspected. All 163 trial cases passed the documented creation/hosting checks; withholding the unresolved Onyx Amazon mount case leaves 76 released templates and 161 accepted scopes. The [template evidence](research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md) expressly does not claim a final troop census or combat balance. One [generated Inferno encounter](research/NATIVE_GUARDIAN_CAPTURE_2026-09-21.md) was also fought and captured, followed by completed Lava-born commander/troop recruitment and PD-level-10 inspection.
+Five generation fixtures cover default, islands, continents, caves and eight planes. Their expected output intentionally changed with the new generator after before/after review; they are not promises that a seed recreates older geography. Frozen saved-map fixtures separately preserve legacy ownership checks. Keep project JSON for an exact map, not just its seed or settings recipe.
+
+**Published release evidence:** `581b2b8` passed **743 tests (14 build/integration + 729 TypeScript)**, type checking, lint, license checks, and server/launcher checks. Native Dominions 6.37 loaded all eight planes of that acceptance package, and each was visually inspected. All 163 trial cases passed the documented creation/hosting checks; withholding the unresolved Onyx Amazon mount case leaves 76 released templates and 161 accepted scopes. The [template evidence](research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md) expressly does not claim a final troop census or combat balance. One [generated Inferno encounter](research/NATIVE_GUARDIAN_CAPTURE_2026-09-21.md) was also fought and captured, followed by completed Lava-born commander/troop recruitment and PD-level-10 inspection.
 
 Browser checks covered old-v2 import/pinning, explicit adoption of v3, manual Cavemen population edits, unsupported Troglodytes fallback, Undo and a 390-pixel-wide viewport without panel overflow or console errors. These do not substitute for native gameplay checks.
 
-The structural evaluation ran 1,000 fixed-corpus maps with zero export-error maps or generation exceptions. **243 missed the experimental quality criteria**; the separate held-out set had **48 misses out of 200**. These misses remain quality follow-up work, not export blockers or proof that the maps are unplayable. The criteria are proposed diagnostics, not established community standards, and the results do not certify multiplayer balance.
+The [September 20 structural evaluation](IMPLEMENTATION_ROUND_2026-09-20.md) ran 1,000 fixed-corpus maps with zero export-error maps or generation exceptions. **243 missed the experimental quality criteria**; the separate held-out set had **48 misses out of 200**. This corpus has not been rerun against the latest generator, so these are historical measurements, not current miss counts. The misses remain quality follow-up work, not export blockers or proof that the maps are unplayable. The criteria are proposed diagnostics, not established community standards, and the results do not certify multiplayer balance.
 
 Still outstanding:
 
+- Fresh native-game visual acceptance for the latest Cloud/Air and natural contours, connected river/bridge rendering (including wrap seams), and Sea + Cave Wall relief. Earlier illustrated-art loading/visual checks predate these refinements.
+- Separate hosted deployment and clean-runner installer packaging/publication for the post-release additions; a source merge does not complete either.
 - Full lossless editable import of arbitrary external maps, including authored raster geometry and unsupported directives.
 - Calibrated nation movement, separate income/resources/recruitment estimates, and combat difficulty models.
 - Verified automatic nation accommodations. Host-declared checks are not a substitute for patch-specific evidence.

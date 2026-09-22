@@ -4,7 +4,7 @@
 
 Custom Atlas artwork now has a playable export path. Generated Cloud, Cave, Cavern, Underworld, Hell, Abyss, Dreamlands and Elemental artwork has been visibly confirmed inside Dominions 6.37, including actual generated sky snow in winter. This is no longer limited to editor/PNG previews or a diagnostic magenta image.
 
-The feature is **unreleased development work**, prepared on `codex/realm-landscape-art-sep21`. The package version remains 0.1.5. Repository commits and merges do not deploy the hosted GUI or publish a Windows release; the published app and Windows v0.1.5 still use source `581b2b8`.
+The feature was merged to `main` at **`c4ee2d7`** through [PR #8](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/pull/8), after development on `codex/realm-landscape-art-sep21`. It remains **unreleased**, with package version 0.1.5: the hosted GUI and Windows v0.1.5 still use `581b2b8`. The later [natural-landform merge](NATURAL_LANDFORMS_2026-09-22.md) adds shapes and raises the combined suite to 1,010 tests; it does not extend the native visual evidence recorded here or deploy a new app/installer.
 
 This record supersedes the preview-only export boundary in the [September 21 realm-art checkpoint](REALM_ARTWORK_2026-09-21.md). The earlier [format investigation](research/SKY_RENDERING_OPTIONS_2026-09-21.md) and [custom-map comparison](research/ILLUSTRATED_MAP_PARITY_2026-09-21.md) remain dated research, not descriptions of the new exporter.
 

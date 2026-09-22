@@ -2,6 +2,8 @@
 
 Reviewed September 21, 2026. This record separates source testing from delivery. The work includes the September 20 multiplayer controls, September 21 underground polish, the pinned 6.37 catalog, and opt-in population-matched initial defenders.
 
+This is the fixed evidence record for published source `581b2b8`, not the latest `main` test total or feature set. Later source adds illustrated export and new geography; see the [current source checkpoint](README.md#current-source-checkpoint). Its newer tests do not retroactively certify these release artifacts, and the native observations below do not certify the later contour changes.
+
 ## Delivery
 
 The tested development branch was fast-forward merged into `main` and pushed to both GitHub project remotes. Release source: [`581b2b866674ca4b8853514d7966341f758f4786`](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/commit/581b2b866674ca4b8853514d7966341f758f4786), tagged `v0.1.5`. Subsequent documentation-only delivery updates do not change that release source.

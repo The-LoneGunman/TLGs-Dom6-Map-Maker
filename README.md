@@ -1,6 +1,6 @@
 # Pantokrator Atlas
 
-Pantokrator Atlas is a local-first map maker for Dominions 6. It generates deterministic, multiplayer-oriented maps with up to eight linked planes and exports playable packages without requiring a mod. Native `.map`/`.d6m` scenery is the default; the development source also offers custom illustrated realm exports.
+Pantokrator Atlas is a local-first map maker for Dominions 6. It generates deterministic, multiplayer-oriented maps with up to eight linked planes and exports playable packages without requiring a mod. Native `.map`/`.d6m` scenery is the default; current `main` also offers custom illustrated realm exports.
 
 - [Open the hosted GUI](https://pantokrator-atlas.mbatlle7.chatgpt.site)
 - [Download the latest Windows release](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/latest)
@@ -10,19 +10,19 @@ Projects, imported catalogs, and generated packages remain in your browser profi
 
 ## Versions and documentation
 
-The package version remains **0.1.5**. Sections explicitly marked **Unreleased development** describe later source work that is not in the published hosted app or Windows v0.1.5 release; merging source does not deploy or publish either edition.
+Reviewed September 22, 2026 against merged application source **`464ff03`**. The package version remains **0.1.5**. **Unreleased development** means features already on `main` but not yet in the hosted app or Windows v0.1.5 release; it does not mean an unmerged branch. Merging source does not deploy or publish either edition.
 
 | Edition | Where to check the build | Availability |
 | --- | --- | --- |
-| Source checkout | Selected Git branch/commit and `package.json` | The package version is still 0.1.5; the selected commit determines whether unreleased features are present. A normal clone selects the default branch, not an unmerged development branch. |
+| Source checkout | Selected Git branch/commit and `package.json` | A current clone of `main` includes the additions through `464ff03`. Use the commit, not package version 0.1.5 alone, to identify the source build. |
 | Hosted GUI | [Open app](https://pantokrator-atlas.mbatlle7.chatgpt.site) and [release verification](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/RELEASE_VERIFICATION_0.1.5.md) | Updated by a separate deployment; newer source documentation alone does not identify the deployed build. |
 | Windows installer / portable release | [Latest release and its notes](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/latest) | Contains the tagged build supplied by that release, not every later source change. |
 
 The [release verification record](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/RELEASE_VERIFICATION_0.1.5.md) tracks 0.1.5 testing and delivery separately. Check the hosted deployment or release notes for the edition you use. Keep a pre-upgrade JSON backup: older builds may reject newer optional project fields.
 
-**Published September 21, 2026:** the hosted GUI (Site version 13) and [Windows v0.1.5](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/tag/v0.1.5) both use the tested `581b2b8` application source. Later documentation-only commits do not change that release build.
+**Published September 21, rechecked September 22, 2026:** the hosted GUI (Site version 13) and [Windows v0.1.5](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/tag/v0.1.5) still use the tested `581b2b8` application source. Updating a source checkout or its documentation does not update those published builds.
 
-**Unreleased development:** sparse realms now automatically use [Connected regions & passages](docs/USER_GUIDE.md#province-layout): adjoining cave/realm provinces grouped into larger landforms, joined by substantial passage provinces. The classic selector has been removed. The Underworld retains its dedicated Styx geometry; incompatible authored maps retain explicitly identified compatibility geometry without losing their links. Original procedural landscapes cover Cloud/Air, Cave/Cavern, Underworld, Infernal/Abyss, Dream, and Elemental realms. In **Install / export**, choose **In-game artwork → Illustrated realms (custom artwork)** to include these landscapes in the playable package, with terrain/winter image sheets and province click areas. Surface and Custom planes retain native scenery. This work is not included in the published 0.1.5 app or installer; see the [illustrated-export status and evidence](docs/ILLUSTRATED_EXPORT_2026-09-22.md).
+**Unreleased development on main:** connected cave/realm groups with broad passages, procedural landscapes and playable illustrated export, natural coastal/ocean/lake contours, connected border rivers, smaller default temperate biomes, and terrain-edit safety repairs. The classic sparse-layout selector is removed; the Underworld retains its dedicated Styx layout. Choose **Install / export → In-game artwork → Illustrated realms (custom artwork)** to include realm landscapes and terrain/winter sheets in the game; Surface and Custom remain native. See the [source checkpoint](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/README.md#current-source-checkpoint) and [illustrated-export evidence](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/ILLUSTRATED_EXPORT_2026-09-22.md).
 
 The 0.1.5 source includes smoother underground shapes and relief, the pinned 6.37 selector catalog, and opt-in population-matched initial defenders. The current v3 templates cover **76 population types in unmodded 6.37 Middle Age**, within their declared terrain scope; unsupported contexts retain native armies. See the [population-defender instructions](docs/USER_GUIDE.md#population-matched-initial-defenders) and [native acceptance evidence](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md).
 
@@ -49,6 +49,7 @@ Where browser folder access is supported, use **Install directly**; otherwise us
 - Fresh random seeds for new atlases, contextual province names with optional generated-name shuffling on reopen, themed populations/recruitment, random-site affinities, and powerful special-plane guardians.
 - Searchable game-content catalogs and scenario editing for nations, commanders, squads, sites, buildings, battle settings, and advanced directives.
 - Combined terrain-flag artwork in the editor and PNG previews: adding Farm, Forest, Cave, Water, and other flags changes the province's appearance immediately. Unreleased procedural landscapes add floating sky islands, textured caverns, tomb-like Underworld stone, infernal embers, abyssal obsidian, dream vegetation, and variant-led elemental accents.
+- Unreleased terrain safety repairs: primary and additive Cave Wall edits clear conflicting starts, thrones and guardians; mixed aquatic terrain retains submerged relief and wooded swamps retain marsh relief.
 - Editable custom border bitmasks with layered border styles, aspect-correct map framing, readable province details, and realm-aware illustrative condition previews.
 - Browser autosave, Undo/Redo, editable JSON backups, direct folder installation, ZIP export, and structural/gameplay validation.
 - Planned-versus-current province budgets, control-scope labels, cross-plane province search, and a per-start structural inspector with temporary region highlights.
@@ -68,7 +69,7 @@ For every generator, plane, scenario, province, catalog, validation, and export 
 2. Add or customize planes, their sizes, start policies, terrain variants, and links on **Planes**.
 3. Review the next-generation province budget, generate the atlas, then inspect current starts and validation notices.
 4. Inspect or edit provinces, borders, gateways, starts, thrones, guardians, sites, and scenario settings. Use **Iterate** to preview larger changes or compare candidates.
-5. Save **Editable project JSON** as a backup, choose the desired **In-game artwork** in development builds, then use **Install directly** or **Download ready ZIP**. **Download player ZIP** offers a reduced-spoiler handoff; playable map files remain inspectable.
+5. Save **Editable project JSON** as a backup, choose the desired **In-game artwork** when using current source, then use **Install directly** or **Download ready ZIP**. **Download player ZIP** offers a reduced-spoiler handoff; playable map files remain inspectable.
 
 `Players x provinces per player` sizes only core Surface, Cave, Cavern, and surface-like solid Custom realms. Auto-sized bonus planes are added as a configurable percentage of that core total; percentages above 100% are allowed. Manual plane sizes are preserved.
 
@@ -87,14 +88,14 @@ Generated maps use native game content. Keep these distinctions in mind:
 - `#poptype` controls vanilla local recruitment but does not replace the independent army Dominions initially generates.
 - **Native scenery** uses `.d6m` geography and Dominions' own art. **Illustrated realms**, an unreleased option, bundles generated TGA landscapes for nine supported realm types while preserving native Surface/Custom planes. It does not export every editor badge, selection overlay, or bundled material texture. No manual image assembly is needed.
 - Illustrated province numbers follow the image-marker order required by Dominions; structured starts, guardians, neighbors, and gates are remapped without changing the editable project. Advanced raw commands block this mode because arbitrary numeric references cannot be remapped safely; use Native scenery for those projects.
-- Condition previews are illustrations, not game-event or temperature simulations. The illustrated exporter generates all 18 terrain/winter sheets independently of the selected preview. Cloud/Air receive eligible dry-island snow; other illustrated realms intentionally retain their winter palette. See [verification scope](docs/ILLUSTRATED_EXPORT_2026-09-22.md#verification-and-limits) before assuming every in-game transition has been visually tested.
+- Condition previews are illustrations, not game-event or temperature simulations. The illustrated exporter generates all 18 terrain/winter sheets independently of the selected preview. Cloud/Air receive eligible dry-island snow; other illustrated realms intentionally retain their winter palette. See [verification scope](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/ILLUSTRATED_EXPORT_2026-09-22.md#verification-and-limits) before assuming every in-game transition has been visually tested.
 - Custom catalog imports supply editor metadata, not game content. Custom IDs may require a matching mod in Dominions.
 - Referenced custom battle maps and skyboxes must be copied into the exported map folder separately.
 - Steam Workshop publishing remains a Steam/Dominions workflow outside Pantokrator Atlas.
 
 ## Develop from source
 
-Use source for the controls and corrections on your selected branch; use the hosted GUI or Windows installer for the simpler setup paths above. A normal clone opens the default branch. Check the [version table](#versions-and-documentation) before expecting unreleased features. Source development requires **Node.js 22.13.0 or newer with npm**, plus Git for the clone method:
+Use source for the latest merged controls and corrections; use the hosted GUI or Windows installer for the simpler setup paths above. A normal clone opens `main` and includes its unreleased additions. Source development requires **Node.js 22.13.0 or newer with npm**, plus Git for the clone method:
 
 ```powershell
 git clone https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker.git
@@ -107,6 +108,21 @@ Alternatively, choose **Code -> Download ZIP** on the [GitHub repository](https:
 
 The root Windows launcher can also install locked dependencies and build a raw source checkout. That initial preparation requires network access; the Windows installer already contains a prepared build and runtime.
 
+### Updating a source checkout
+
+Save an editable-project JSON backup and stop the local server first. In the source folder, run `git status --short`. If it reports changes, preserve/review them before updating; do not reset or overwrite them. For a clean clone of this public repository, run these commands in order, stopping if any fails:
+
+```powershell
+git switch main
+git pull --ff-only
+npm.cmd ci
+npm.cmd run dev
+```
+
+`git pull --ff-only` refuses a diverged local branch instead of discarding work. Check `git log -1 --oneline` to identify the result. If you downloaded a source ZIP rather than cloning, download a fresh ZIP into a new folder instead. Updates do not migrate browser storage between addresses; import your JSON backup if the new local URL differs.
+
+### Verification
+
 Before submitting a change, run:
 
 ```powershell
@@ -118,7 +134,9 @@ npm.cmd run licenses:check
 
 `npm test` includes a production build. CI additionally audits the locked dependencies and smoke-tests the local server and Windows launcher.
 
-The 0.1.5 source passed **743 automated tests**, type checking, lint, license checks, and local-server/launcher checks. Native 6.37 checks loaded and visually inspected all eight planes, exercised all **161 released population-template terrain cases**, and completed one [generated Inferno guardian battle, capture, recruitment and PD inspection](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/research/NATIVE_GUARDIAN_CAPTURE_2026-09-21.md). The same eight-plane fixture also reached winter, with surface snow and intact cave waterways. See [release verification](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/RELEASE_VERIFICATION_0.1.5.md) for remaining limits, packaging and publication. These are scoped functional checks, not universal seasonal/PD verification or multiplayer balance certification. The earlier [1,000-map structural evaluation](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/IMPLEMENTATION_ROUND_2026-09-20.md) had no export errors but retained 243 experimental quality-target misses.
+The source merged as `464ff03` passed **1,010 automated tests** (14 production-build/integration + 996 TypeScript), type checking, lint, license and dependency checks, and Linux/Windows server/launcher checks in [merged-main CI](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35738115402). Real browser checks covered generation, water layouts, terrain editing/Undo and saved geometry. The latest contours and connected rivers still need a fresh in-game visual pass; automated ownership checks are not visual acceptance or multiplayer balance certification.
+
+The published `581b2b8` build separately passed **743 tests**. Its native 6.37 checks covered all eight planes, winter, **161 population-template terrain cases**, and one [guardian battle, capture, recruitment and PD inspection](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/research/NATIVE_GUARDIAN_CAPTURE_2026-09-21.md). See [release verification](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/RELEASE_VERIFICATION_0.1.5.md) for that release's scope. The earlier [1,000-map structural evaluation](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/IMPLEMENTATION_ROUND_2026-09-20.md) had no export errors but retained 243 experimental quality-target misses; it has not been rerun for the latest generator.
 
 ## Documentation and references
 
@@ -128,9 +146,9 @@ The 0.1.5 source passed **743 automated tests**, type checking, lint, license ch
 - [Bundled catalog coverage and post-manual IDs](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/CONTENT_CATALOG.md)
 - [Artwork implementation and future asset-pack contract](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/ILLUSTRATED_ASSET_SPEC.md)
 - [Artwork provenance](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/ASSET_PROVENANCE.md)
-- [Unreleased procedural realm artwork](docs/REALM_ARTWORK_2026-09-21.md)
-- [Unreleased in-game illustrated export and native evidence](docs/ILLUSTRATED_EXPORT_2026-09-22.md)
-- [Unreleased natural province and water shapes](docs/NATURAL_LANDFORMS_2026-09-22.md)
+- [Procedural realm artwork checkpoint](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/REALM_ARTWORK_2026-09-21.md)
+- [Unreleased in-game illustrated export and native evidence](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/ILLUSTRATED_EXPORT_2026-09-22.md)
+- [Unreleased natural province and water shapes](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/NATURAL_LANDFORMS_2026-09-22.md)
 
 The documentation index separates current references, unfinished proposals, and historical evidence. Old test counts and audit findings are not current release status.
 
