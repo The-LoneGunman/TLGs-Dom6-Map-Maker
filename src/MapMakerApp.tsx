@@ -94,7 +94,9 @@ import {
 } from "./export";
 import {
   isGenerationAbort,
+  prepareConnectedRegionsInBackground,
   startProjectGeneration,
+  type ConnectedRegionPreparationTask,
   type GenerationWorkerProgress,
   type ProjectGenerationTask,
 } from "./generationWorker";
@@ -583,11 +585,10 @@ export function MapMakerApp() {
 
   useEffect(() => {
     let cancelled = false;
+    let preparation: ConnectedRegionPreparationTask | undefined;
     const timeout = window.setTimeout(() => {
-      void loadProjectAutosave().then((result) => {
+      void loadProjectAutosave().then(async (result) => {
         if (cancelled) return;
-        autosaveRevisionRef.current = result.revision ?? null;
-        setAutosaveState(result);
         let next = result.project ?? createFreshProject();
         if (result.project) {
           try {
@@ -596,6 +597,13 @@ export function MapMakerApp() {
             setToast("Your saved atlas was restored with its existing names; automatic name shuffling was unavailable.");
           }
         }
+        // The editor is still inert while loading: scan connected-region
+        // borders in workers now rather than freezing the first render.
+        preparation = prepareConnectedRegionsInBackground(next);
+        await preparation.promise;
+        if (cancelled) return;
+        autosaveRevisionRef.current = result.revision ?? null;
+        setAutosaveState(result);
         currentProjectRef.current = next;
         setProject(next);
         setActivePlaneId(next.planes[0]?.id ?? "");
@@ -619,6 +627,7 @@ export function MapMakerApp() {
     return () => {
       cancelled = true;
       window.clearTimeout(timeout);
+      preparation?.cancel();
     };
   }, []);
 
@@ -847,7 +856,7 @@ export function MapMakerApp() {
       phase: "queued",
       message: `Preparing ${source.planes.length} planned plane${source.planes.length === 1 ? "" : "s"} for background generation…`,
     });
-    const task = startProjectGeneration(source, { onProgress: setGenerationProgress });
+    const task = startProjectGeneration(source, { onProgress: setGenerationProgress, stabilizeConnectedRegions: true });
     generationTaskRef.current = task;
     void task.promise.then((next) => {
       if (currentProjectRef.current !== launchProject) {
@@ -1268,6 +1277,14 @@ export function MapMakerApp() {
       // Opening a file replaces the atlas rather than editing it, so the
       // current atlas's locks must not be compared against the new project.
       pruneAuthoringRegions(next);
+      // Scan connected-region borders in workers so the first render stays responsive.
+      const preparation = prepareConnectedRegionsInBackground(next);
+      if (preparation.pending) setToast(`Preparing regional borders for ${next.name}…`);
+      await preparation.promise;
+      if (importStatus() !== "current") {
+        if (importStatus() === "changed") setToast("Project not opened because the current atlas changed while the file was being read. Open the file again when ready.");
+        return;
+      }
       if (!commit(next, true, false)) return;
       setActivePlaneId(next.planes[0]?.id ?? "");
       setSelectedId(undefined);
