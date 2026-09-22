@@ -117,7 +117,7 @@ test("an authored start that cannot keep its spacing is named before and after G
   const achieved = nearestGeneratedStart(generated, plane.id, hub.id);
   assert.ok(achieved < 3, "fixture: 26 provinces cannot separate four generated capitals and a central nation start");
   const hubName = generated.planes[0]!.provinces.find((province) => province.id === hub.id)!.name;
-  const warning = generated.generationWarnings?.find((item) => item.includes("authored start for nation 33"));
+  const warning = generated.generationWarnings?.find((item) => item.includes("authored start for Niefelheim (#33)"));
   assert.ok(warning, "Generate records a specific warning");
   assert.ok(warning.includes(hubName));
   assert.ok(warning.includes(`only ${achieved} connection`));
@@ -138,7 +138,7 @@ test("the Generate panel and confirmation surface authored-start notices with a 
   assert.match(source, /id="authored-start-notices"[^>]*role="status"/);
   assert.match(source, /setNationSpecificStart\(draft, notice\.planeId, notice\.provinceId, undefined\)/);
   assert.match(source, /confirmLabel: "Generate and replace"/);
-  assert.match(source, /\.\.\.preflightAuthoredStartNotices\(project\)\.map\(\(notice\) => notice\.message\)/);
+  assert.match(source, /\.\.\.preflightAuthoredStartNotices\(project, nations\)\.map\(\(notice\) => notice\.message\)/);
 });
 
 function scenario(options: { staleManual?: boolean; manualTarget?: number; players?: number; ppp?: number; seed?: string } = {}): MapProject {

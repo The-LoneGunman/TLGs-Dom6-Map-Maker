@@ -45,6 +45,9 @@ import {
   type SparsePassagePlanner,
 } from "./geometry";
 import { buildConnectedRegionPlan } from "./connectedRegions";
+import { BUILTIN_DOM6_CORE_CATALOG } from "./catalog/builtinCore";
+import { formatNationLabel } from "./catalog/lookup";
+import type { CatalogEntry } from "./catalog/types";
 import { regenerateGeneratedProvinceNames } from "./naming";
 import { assertCanRebuildLayout, pruneAuthoringRegions, restoreGenerationLocks } from "./authoringLocks";
 import { applyPlaneContentPreferences, applyPlaneRoutePreferences, assertPlaneGenerationOverrides, preferredDryTerrain } from "./generationControls";
@@ -569,6 +572,16 @@ function planGeneratedStarts(project: Pick<MapProject, "planes" | "settings">, r
   return { rows, targets, actualCore, referenceCore };
 }
 
+/**
+ * Water provinces a plane needs for the water and coastal starts the frozen
+ * split assigns to it; coastal starts share a sea of at least two provinces.
+ */
+function plannedStartWaterProvinces(targets: StartPlaneTargets, planeId: string): number {
+  const water = targets.get("water")?.get(planeId) ?? 0;
+  const coastal = targets.get("coastal")?.get(planeId) ?? 0;
+  return water + (coastal ? Math.max(2, coastal) : 0);
+}
+
 /** The same planning calculation feeds generation and its read-only budget preview. */
 export function previewProvinceBudget(project: MapProject) {
   const { rows, actualCore, referenceCore } = planGeneratedStarts(project);
@@ -683,12 +696,15 @@ function generateProjectWithIdentities(project: MapProject): MapProject {
     normalized.provinceTarget = clamp(Math.round(normalized.provinceTarget), 8, 800);
     return normalized;
   });
-  const budget = previewProvinceBudget(next);
+  // The budget's frozen per-plane split: the same plan sizes the planes and places the starts.
+  const startPlan = planGeneratedStarts(next);
   next.planes = next.planes.map((normalized, index) => {
-    normalized.provinceTarget = budget.planes[index]!.target;
-    const requestedWater = next.settings.startDistribution!.water + (next.settings.startDistribution!.coastal ? Math.max(2, next.settings.startDistribution!.coastal) : 0);
+    normalized.provinceTarget = startPlan.rows[index]!.target;
+    // Only the water/coastal starts this plane will host may raise its water
+    // above the plane's preference; a plane hosting none keeps its preference.
+    const startWater = plannedStartWaterProvinces(startPlan.targets, normalized.id);
     const waterPercent = ARCHETYPE_PROFILES[normalized.kind].waterCapable
-      ? Math.max(normalized.generationOverrides?.waterPercent ?? next.settings.waterPercent, Math.ceil((requestedWater * 100) / normalized.provinceTarget))
+      ? Math.max(normalized.generationOverrides?.waterPercent ?? next.settings.waterPercent, Math.ceil((startWater * 100) / normalized.provinceTarget))
       : 0;
     return generatePlane(normalized, next.settings, `${next.seed}:plane:${index}:v1`, index, {
       generationKey: normalized.id,
@@ -2869,6 +2885,27 @@ function floodCaveProvince(province: Province, kind: "cave" | "cavern" | "underw
   province.siteBias = kind === "underworld" ? ["death", "water", "earth"] : ["water", "earth", "glamour"];
 }
 
+/** Dry presets a reroll may take its population base from, with each preset's inherent flags. */
+const DRY_POPULATION_PRESETS = (Object.keys(TERRAIN_POPULATION) as TerrainKey[])
+  .filter((terrain) => !isWaterTerrain(terrain) && !isBlockedTerrain(terrain) && terrain !== "freshwater")
+  .map((terrain) => ({ terrain, flags: effectiveProvinceTerrainFlags({ terrain, terrainFlags: undefined, freshwater: false }) }));
+
+/**
+ * The preset that best describes a dry province's effective terrain. Flag
+ * edits can store a mask as plains + flags (a Cave + Forest province, say),
+ * so the primary key alone is not the terrain. The most specific preset whose
+ * flags all apply wins; ties keep the primary, then the lower population. A
+ * province without added flags keeps its primary's population base.
+ */
+function populationTerrainFor(province: Province): TerrainKey {
+  const flags = effectiveProvinceTerrainFlags(province);
+  const fitting = DRY_POPULATION_PRESETS.filter((preset) => [...preset.flags].every((flag) => flags.has(flag)));
+  fitting.sort((a, b) => b.flags.size - a.flags.size
+    || Number(b.terrain === province.terrain) - Number(a.terrain === province.terrain)
+    || TERRAIN_POPULATION[a.terrain] - TERRAIN_POPULATION[b.terrain]);
+  return fitting[0]?.terrain ?? province.terrain;
+}
+
 /** Generate only thematic content for existing geography; callers choose which fields to copy. */
 export function rerollPlaneDetails(plane: Plane, seed: string, sourceProject?: MapProject): Plane {
   const next = structuredClone(plane);
@@ -2876,7 +2913,7 @@ export function rerollPlaneDetails(plane: Plane, seed: string, sourceProject?: M
   for (const province of next.provinces) {
     if (isBlockedProvince(province)) continue;
     const rng = new SeededRandom(`${seed}:content:${province.id}`);
-    const base = isWaterProvince(province) ? TERRAIN_POPULATION.sea : TERRAIN_POPULATION[province.terrain];
+    const base = isWaterProvince(province) ? TERRAIN_POPULATION.sea : TERRAIN_POPULATION[populationTerrainFor(province)];
     province.population = Math.min(50000, Math.max(100, Math.round(base * profile.populationScale * (0.83 + rng.next() * 0.34) / 10) * 10));
     province.manySites = rng.chance(profile.manySitesChance);
   }
@@ -3968,7 +4005,9 @@ function appendAuthoredStartSpacingWarnings(project: MapProject): void {
   project.generationWarnings ??= [];
   for (const conflict of conflicts) {
     const { nation, plane, province, nearest, nearestPlane, distance } = conflict;
-    project.generationWarnings.push(`${plane.name}: generated starts could not keep 3 movement connections from the authored start for nation ${nation} at ${province.name}; generated start ${nearest.name}${nearestPlane.id === plane.id ? "" : ` (${nearestPlane.name})`} is only ${distance} connection${distance === 1 ? "" : "s"} away. Export stays blocked until you move or remove that nation start, or change players, provinces per player or plane sizes and Generate again.`);
+    // The worker has no custom catalog; built-in nations are named, others keep their ID.
+    const label = formatNationLabel(BUILTIN_DOM6_CORE_CATALOG.nations, nation);
+    project.generationWarnings.push(`${plane.name}: generated starts could not keep 3 movement connections from the authored start for ${label} at ${province.name}; generated start ${nearest.name}${nearestPlane.id === plane.id ? "" : ` (${nearestPlane.name})`} is only ${distance} connection${distance === 1 ? "" : "s"} away. Export stays blocked until you move or remove that nation start, or change players, provinces per player or plane sizes and Generate again.`);
   }
 }
 
@@ -4005,6 +4044,8 @@ function authoredStartSpacingConflicts(
 
 export interface AuthoredStartNotice {
   nation: number;
+  /** "Ulm (#13)" from the given catalog, or "nation 13" when it lacks the nation. */
+  nationLabel: string;
   planeId: string;
   provinceId: string;
   message: string;
@@ -4016,15 +4057,22 @@ export interface AuthoredStartNotice {
  * movement connections away whenever the new geometry allows; the author can
  * proceed, or move/remove the nation start first.
  */
-export function preflightAuthoredStartNotices(project: MapProject): AuthoredStartNotice[] {
+export function preflightAuthoredStartNotices(
+  project: MapProject,
+  nations: CatalogEntry[] = BUILTIN_DOM6_CORE_CATALOG.nations,
+): AuthoredStartNotice[] {
   const authored = protectedAuthoredStarts(project).filter((item) => item.nation !== undefined);
   if (!authored.length) return [];
-  return authoredStartSpacingConflicts(project, authored).map(({ nation, plane, province, nearest, nearestPlane, distance }) => ({
-    nation,
-    planeId: plane.id,
-    provinceId: province.id,
-    message: `Nation ${nation}'s authored start at ${province.name} (${plane.name}) is only ${distance} movement connection${distance === 1 ? "" : "s"} from generated start ${nearest.name}${nearestPlane.id === plane.id ? "" : ` (${nearestPlane.name})`}. Generate places generated starts at least 3 connections from it when the new geometry allows; if it cannot, it records a warning and export stays blocked until the nation start is moved or removed.`,
-  }));
+  return authoredStartSpacingConflicts(project, authored).map(({ nation, plane, province, nearest, nearestPlane, distance }) => {
+    const nationLabel = formatNationLabel(nations, nation);
+    return {
+      nation,
+      nationLabel,
+      planeId: plane.id,
+      provinceId: province.id,
+      message: `The authored start for ${nationLabel} at ${province.name} (${plane.name}) is only ${distance} movement connection${distance === 1 ? "" : "s"} from generated start ${nearest.name}${nearestPlane.id === plane.id ? "" : ` (${nearestPlane.name})`}. Generate places generated starts at least 3 connections from it when the new geometry allows; if it cannot, it records a warning and export stays blocked until the nation start is moved or removed.`,
+    };
+  });
 }
 
 function placeDistributedStarts(project: MapProject, preparedStartAnchors: readonly PreparedStartAnchor[] = []) {
@@ -5785,6 +5833,10 @@ export function generateGates(project: MapProject): GateLink[] {
     const adjacency = adjacencyFor(plane, { traversableOnly: true });
     return [plane.id, [...(protectedStarts.get(plane.id) ?? [])].map((startId) => shortestDistances(adjacency, startId))];
   }));
+  // The fallback pool also holds endpoints two or more moves out: spaced,
+  // just closer than preferred. Only one inside a start's one-ring is flagged.
+  const inStartRing = (plane: Plane, province: Province) =>
+    (startDistanceMaps.get(plane.id) ?? []).some((distances) => distances.get(province.id) === 1);
   const startSpacingTargets = new Map(project.planes.map((plane) => [
     plane.id,
     scaledStartSeparationTarget(
@@ -5878,7 +5930,8 @@ export function generateGates(project: MapProject): GateLink[] {
         id: idFor(project.seed, "gate", gateNumber),
         gateNumber,
         direction,
-        adjacentStartFallback: sourceRanked.usedFallback || targetRanked.usedFallback || undefined,
+        adjacentStartFallback: (sourceRanked.usedFallback && inStartRing(sourcePlane, source))
+          || (targetRanked.usedFallback && inStartRing(targetPlane, destination)) || undefined,
         endpoints: [
           { planeId: sourcePlane.id, provinceId: source.id },
           { planeId: targetPlane.id, provinceId: destination.id },

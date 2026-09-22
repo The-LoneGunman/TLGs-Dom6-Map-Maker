@@ -10,7 +10,7 @@ import {
 } from "./types";
 
 export { BUILTIN_DOM6_CATALOG } from "./builtin";
-export { findCatalogEntry } from "./lookup";
+export { findCatalogEntry, formatCatalogEntry, formatNationLabel } from "./lookup";
 export { provinceSiteLocationMask, siteCompatibility, type SiteCompatibility } from "./compatibility";
 export {
   NATION_RECRUITABLE_COMMANDER_TAG,
@@ -138,10 +138,6 @@ export function searchCatalog(entries: CatalogEntry[], query: string, limit = 10
     .sort((left, right) => left.score - right.score || compareCatalogEntries(left.entry, right.entry))
     .slice(0, limit)
     .map((result) => result.entry);
-}
-
-export function formatCatalogEntry(entry: CatalogEntry): string {
-  return `${entry.name} (#${entry.id})`;
 }
 
 export function createCatalogTemplate(gameVersion = "6.26"): Dom6CatalogBundle {

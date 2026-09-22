@@ -521,7 +521,7 @@ export function MapMakerApp() {
   const caveStartNations = project.settings.caveStartNations ?? [];
   const allocatedStarts = Object.values(startDistribution).reduce((sum, value) => sum + value, 0);
   const startPlanErrors = useMemo(() => preflightStartPlan(project), [project]);
-  const authoredStartNotices = useMemo(() => preflightAuthoredStartNotices(project), [project]);
+  const authoredStartNotices = useMemo(() => preflightAuthoredStartNotices(project, catalog.nations), [project, catalog.nations]);
   const planeConnectionRules = useMemo(() => resolvePlaneConnectionRules(project), [project]);
   const selectedPlaneConnectionRules = planeConnectionRules.filter((rule) => rule.a === activePlane.id || rule.b === activePlane.id);
   const activePlaneGates = gatesTouchingPlane(project.gates, activePlane.id);
@@ -1550,7 +1550,7 @@ export function MapMakerApp() {
                     {notice.message}{" "}
                     <button className="text-button danger-text" type="button" onClick={() => mutate((draft) => {
                       setNationSpecificStart(draft, notice.planeId, notice.provinceId, undefined);
-                    })}>Remove nation {notice.nation} start</button>
+                    })}>Remove {notice.nationLabel} start</button>
                   </li>)}</ul>
                 </div>
               )}
@@ -2009,6 +2009,7 @@ export function MapMakerApp() {
       {destructiveConfirmation && <DestructiveConfirmationDialog
         action={destructiveConfirmation}
         project={project}
+        nations={catalog.nations}
         onClose={() => setDestructiveConfirmation(undefined)}
         onBackup={() => { downloadProject(project); setToast("Editable backup downloaded. Keep it until you are satisfied with the replacement."); }}
         onConfirm={confirmDestructiveAction}
@@ -2415,9 +2416,10 @@ export function ExistingGatewaysEditor({ project, activePlane, gates, mutateProj
   </div>;
 }
 
-function DestructiveConfirmationDialog({ action, project, onClose, onBackup, onConfirm }: {
+function DestructiveConfirmationDialog({ action, project, nations, onClose, onBackup, onConfirm }: {
   action: DestructiveConfirmation;
   project: MapProject;
+  nations: CatalogEntry[];
   onClose: () => void;
   onBackup: () => void;
   onConfirm: () => void;
@@ -2439,7 +2441,7 @@ function DestructiveConfirmationDialog({ action, project, onClose, onBackup, onC
           description: "Generate rebuilds provinces, borders, starts, sites, guardians, and gateways for the planned planes. Manual province names are preserved. Undo can restore this version once, but a downloaded backup is the safest recovery point.",
           details: [`${action.impact.planeCount} planned plane${action.impact.planeCount === 1 ? "" : "s"}`, `${action.impact.provinceCount} current provinces`, `${action.impact.gatewayCount} current gateways`,
             // Proceeding is allowed; cancelling leaves the nation start to move or remove below Generate.
-            ...preflightAuthoredStartNotices(project).map((notice) => notice.message)],
+            ...preflightAuthoredStartNotices(project, nations).map((notice) => notice.message)],
           confirmLabel: "Generate and replace",
         }
       : {
