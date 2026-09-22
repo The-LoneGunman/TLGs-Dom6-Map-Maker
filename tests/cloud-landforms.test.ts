@@ -236,7 +236,8 @@ test("over-dense cloud maps retain the exact movement graph or explicitly disclo
 
 for (const [kind, digest] of [
   ["cave", "58ab6f394f071d4d072cbf41af1924e3b49927c75cf17d1444a21a869239241e"],
-  ["underworld", "010c6a1e63dd4fe488e5456784baffe10ef99454184015d3ea9fffcbdcdf600e"],
+  // Re-pinned for Underworld border consistency (drawable Styx links and crossings).
+  ["underworld", "3223103dbd416fb22ae914497140f862b392df2f4a52697575f87a5a21043603"],
 ] as const) {
   test(`${kind}: saved pre-natural-style maps retain the pre-change ownership snapshot`, () => {
     const plane = fixture(kind, "cloud-landforms-nonsky", 40, 256, 256);

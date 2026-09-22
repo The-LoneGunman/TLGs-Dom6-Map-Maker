@@ -29,7 +29,7 @@ import {
   scaledStartSeparationTarget,
   shortestDistances,
 } from "./generator";
-import { auditPlaneTopology, createProvinceOwnerResolver, resolvePlaneOwnershipMode, usesConnectedRegions } from "./geometry";
+import { auditPlaneTopology, auditSparseRasterTopology, createProvinceOwnerResolver, resolvePlaneOwnershipMode, usesConnectedRegions } from "./geometry";
 import { BUILTIN_DOM6_CATALOG, findCatalogEntry, siteCompatibility, type Dom6CatalogBundle } from "./catalog";
 import { previewProvinceTerrain, terrainElevation, terrainVisualKey } from "./terrainVisuals";
 import { buildInitialDefensePlan, type VerifiedPopulationDefenseProfile } from "./populationDefenders";
@@ -802,6 +802,20 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
         plane.id,
         topologyAudit.extra[0]?.a,
       );
+    }
+    // Chamber-and-corridor planes declare their topology through their links,
+    // so compare the links with the native pixels the export actually draws.
+    const rasterAudit = plane.kind === "underworld" && plane.width * plane.height <= MAX_D6M_PIXELS
+      ? auditSparseRasterTopology(plane) : undefined;
+    if (rasterAudit) {
+      const named = (pair: { a: string; b: string }) => [pair.a, pair.b]
+        .map((id) => plane.provinces.find((province) => province.id === id)?.name ?? id).join(" and ");
+      if (rasterAudit.missing.length) {
+        add("warning", `${plane.name} draws ${rasterAudit.missing.length} border${rasterAudit.missing.length === 1 ? "" : "s"} in the exported map between provinces without a Dominions connection (first: ${named(rasterAudit.missing[0]!)}). A passage crosses another chamber or passage; remove that link or Generate again.`, plane.id, rasterAudit.missing[0]!.a);
+      }
+      if (rasterAudit.extra.length) {
+        add("warning", `${plane.name} has ${rasterAudit.extra.length} connection${rasterAudit.extra.length === 1 ? "" : "s"} without a drawn border in the exported map (first: ${named(rasterAudit.extra[0]!)}). Another chamber or crossing covers its passage; remove that link or Generate again.`, plane.id, rasterAudit.extra[0]!.a);
+      }
     }
     const edgeKeys = new Set<string>();
     const edgeIds = new Set<string>();

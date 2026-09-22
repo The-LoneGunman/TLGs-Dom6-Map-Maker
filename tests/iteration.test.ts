@@ -23,7 +23,8 @@ const frozen: Record<string,string> = {
   islands:"5d647f1d3ebb385cbcb068d21e4135e95315cb7b5fc871623def835b5b353d07",
   continents:"2912f015787b08746f286060621250d77079e8828bb1877a66fdb7c4312e47dc",
   caves:"ba79749f126f067b5a80135b46d00d0bbebf80bae2da24958c859f09b8b61dde",
-  eight:"56db7137496d27fb0549f8c056c9b1ea66cd46be30f139d5e2f6bf3b76a0d59b",
+  // Its Underworld now keeps every link drawable, so exported borders equal its connections.
+  eight:"ecaad4a24da33067e10b780e8dec4360dc082620b1707d2bde56737f670725ae",
 };
 function frozenFixture(kind: string): MapProject {
   let p = createDefaultProject(`round-baseline-${kind}`);
