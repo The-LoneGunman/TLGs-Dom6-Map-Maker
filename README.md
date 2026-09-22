@@ -10,7 +10,7 @@ Projects, imported catalogs, and generated packages remain in your browser profi
 
 ## Versions and documentation
 
-Reviewed September 22, 2026, including the [seed and numeric-edit audit repairs](docs/AUDIT_REPAIRS_2026-09-22.md). The package version remains **0.1.5**. **Unreleased development** means source features not yet in the hosted app or Windows v0.1.5 release. Merging source does not deploy or publish either edition.
+Reviewed September 22, 2026, including the [seed and numeric-edit audit repairs](docs/AUDIT_REPAIRS_2026-09-22.md) and the [review round](docs/REVIEW_ROUND_2026-09-22.md) of defect repairs, generation fixes, usability and performance work. The package version remains **0.1.5**. **Unreleased development** means source features not yet in the hosted app or Windows v0.1.5 release. Merging source does not deploy or publish either edition.
 
 | Edition | Where to check the build | Availability |
 | --- | --- | --- |
@@ -75,7 +75,7 @@ For every generator, plane, scenario, province, catalog, validation, and export 
 
 Start provinces and their directly connected neighbors are protected from generated thrones and guardians. Gates prefer endpoints farther from starts and produce a warning when a constrained map requires a closer fallback. Assigning a nation-specific start clears conflicting independent setup from its capital. Start-blocked planes remain available for later manual or nation-specific allocation.
 
-**Inspect starts** separates export validity, the legacy structural score, and analysis limitations. Compare potential graph connections with conservative dry/water-separated routes; inspect nearby population, authored guardians, thrones, competing starts, and realm entrances. Distances are graph hops, not turns, and unknown population or guardian difficulty remains unknown. These diagnostics do not simulate nation strength or certify multiplayer balance.
+**Start analysis…** separates export validity, the structural score, and analysis limitations. Compare potential graph connections with conservative dry/water-separated routes; inspect nearby population, authored guardians, thrones, competing starts, and realm entrances. Distances are graph hops, not turns, and unknown population or guardian difficulty remains unknown. These diagnostics do not simulate nation strength or certify multiplayer balance.
 
 Optional game-patch, era and mod declarations travel with project JSON and host reports. They never enable nation bonuses. When population-matched defenders are enabled, those declarations determine which verified templates may be exported; unsupported contexts retain native armies. Terrain-requirement checks are explicitly host-declared and become unverified when their declarations change. Catalog versions are selector snapshots, not balance rulesets; patches and mods can invalidate nation-specific assumptions.
 

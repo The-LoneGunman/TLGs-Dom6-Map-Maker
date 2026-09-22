@@ -14,7 +14,6 @@ import {
   type MapProject,
   type Plane,
   type Province,
-  type StartType,
   type TerrainKey,
   type ValidationIssue,
 } from "./domain";
@@ -22,18 +21,19 @@ import {
   ISLAND_CHAIN_MIN_WATER_PERCENT,
   adjacencyFor,
   classifyCurrentStart,
-  globalMovementAdjacency,
   distancesToSources,
+  isProjectMarkedImmutable,
   nearestSourceDistances,
   provinceGlobalNumber,
   scaledStartSeparationTarget,
+  sharedGlobalMovementAdjacency,
   shortestDistances,
 } from "./generator";
-import { auditPlaneTopology, createProvinceOwnerResolver, resolvePlaneOwnershipMode, usesConnectedRegions } from "./geometry";
+import { auditPlaneTopology, auditSparseRasterTopology, createProvinceOwnerResolver, resolvePlaneOwnershipMode, usesConnectedRegions } from "./geometry";
 import { BUILTIN_DOM6_CATALOG, findCatalogEntry, siteCompatibility, type Dom6CatalogBundle } from "./catalog";
 import { previewProvinceTerrain, terrainElevation, terrainVisualKey } from "./terrainVisuals";
 import { buildInitialDefensePlan, type VerifiedPopulationDefenseProfile } from "./populationDefenders";
-import { VERIFIED_POPULATION_DEFENSE_PROFILES } from "./populationDefenseProfiles";
+import { verifiedPopulationDefenseProfiles } from "./populationDefenseRegistry";
 import { protectedStartProvinceKeys } from "./authoringLocks";
 import { connectedRegionLayoutNotice } from "./connectedRegions";
 import { blockedTerrainContentConflicts, hasRawIndependentDefenderDirectives } from "./terrainSafety";
@@ -101,6 +101,7 @@ const EDGE_KIND_SET = new Set<EdgeKind>([
 export const ADVANCED_COMMANDS = [
   { command: "#dom2title", scope: "plane", description: "Required first command in every plane file" },
   { command: "#imagefile", scope: "plane", description: "D6M or TGA geography file" },
+  { command: "#winterimagefile", scope: "plane", description: "Winter TGA geography file (illustrated export)" },
   { command: "#mapsize", scope: "plane", description: "Plane pixel dimensions" },
   { command: "#wraparound / #hwraparound / #vwraparound", scope: "plane", description: "Full or axis-specific wrapping" },
   { command: "#domversion", scope: "map", description: "Required game version" },
@@ -217,7 +218,7 @@ export interface MapTextOptions {
 
 /** The optional registry override is for internal verification fixtures, never imported project data. */
 export function compileMapText(project: MapProject, planeIndex: number, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG,
-  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES, options: MapTextOptions = {}): string {
+  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = verifiedPopulationDefenseProfiles(), options: MapTextOptions = {}): string {
   const plane = project.planes[planeIndex];
   if (!plane) throw new Error(`Plane ${planeIndex + 1} does not exist.`);
   const localNumber = (province: Province) => options.numbering?.get(plane.id)?.get(province.id) ?? province.index;
@@ -388,7 +389,7 @@ function hasProvinceBlock(province: Province): boolean {
 }
 
 export function compileTextFiles(project: MapProject, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG,
-  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES): CompiledTextFile[] {
+  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = verifiedPopulationDefenseProfiles()): CompiledTextFile[] {
   const encoder = new TextEncoder();
   const baseName = sanitizeMapName(project.name);
   return project.planes.map((_, index) => ({
@@ -568,14 +569,67 @@ export function inspectD6m(data: Uint8Array) {
   };
 }
 
+let lastImmutableValidation: {
+  project: MapProject;
+  catalog: Dom6CatalogBundle;
+  populationProfiles: readonly VerifiedPopulationDefenseProfile[];
+  issues: readonly ValidationIssue[];
+} | undefined;
+
 export function validateProject(project: MapProject, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG,
-  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES): ValidationIssue[] {
+  populationProfiles: readonly VerifiedPopulationDefenseProfile[] = verifiedPopulationDefenseProfiles()): ValidationIssue[] {
+  if (!isProjectMarkedImmutable(project)) return validateProjectUncached(project, catalog, populationProfiles);
+  // A project marked immutable cannot change, so repeated validation of the
+  // current editor project (for example after Generate) reuses one result.
+  const cached = lastImmutableValidation;
+  if (cached?.project !== project || cached.catalog !== catalog || cached.populationProfiles !== populationProfiles) {
+    lastImmutableValidation = { project, catalog, populationProfiles, issues: validateProjectUncached(project, catalog, populationProfiles) };
+  }
+  return lastImmutableValidation!.issues.map((issue) => ({ ...issue }));
+}
+
+function validateProjectUncached(project: MapProject, catalog: Dom6CatalogBundle,
+  populationProfiles: readonly VerifiedPopulationDefenseProfile[]): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const add = (severity: ValidationIssue["severity"], message: string, planeId?: string, provinceId?: string) => {
     issues.push({ id: `issue-${issues.length + 1}`, severity, message, planeId, provinceId });
   };
+  // Validation never mutates the project, so each plane's graphs and lookups
+  // are built once per run instead of once per check (or once per start).
+  const planeGraphs = new Map<Plane, { all?: Map<string, string[]>; traversable?: Map<string, string[]> }>();
+  const planeAdjacency = (plane: Plane, traversableOnly: boolean) => {
+    let graphs = planeGraphs.get(plane);
+    if (!graphs) planeGraphs.set(plane, graphs = {});
+    return traversableOnly
+      ? graphs.traversable ??= adjacencyFor(plane, { traversableOnly: true })
+      : graphs.all ??= adjacencyFor(plane);
+  };
+  // Same result as `plane.provinces.find((item) => item.id === id)`: the first match wins.
+  const planeProvinceLookups = new Map<Plane, Map<string | undefined, Province>>();
+  const findProvince = (plane: Plane, id: string | undefined) => {
+    let lookup = planeProvinceLookups.get(plane);
+    if (!lookup) {
+      planeProvinceLookups.set(plane, lookup = new Map());
+      for (const province of plane.provinces) if (!lookup.has(province.id)) lookup.set(province.id, province);
+    }
+    return lookup.get(id);
+  };
+  // Same result as `project.planes.find((item) => item.id === id)`.
+  let planeLookup: Map<string, Plane> | undefined;
+  const findPlane = (id: string) => {
+    if (!planeLookup) {
+      planeLookup = new Map();
+      for (const plane of project.planes) if (!planeLookup.has(plane.id)) planeLookup.set(plane.id, plane);
+    }
+    return planeLookup.get(id);
+  };
   if (!project.name.trim()) add("error", "Map name is required.");
-  if (sanitizeMapName(project.name) !== project.name) add("warning", `Export filenames will be normalized to “${sanitizeMapName(project.name)}”.`);
+  const exportName = sanitizeMapName(project.name);
+  if (exportName !== project.name) {
+    // Spaces becoming underscores (as in the default name) is routine; other character changes deserve a warning.
+    const whitespaceOnly = exportName.toLocaleLowerCase() === project.name.trim().replace(/\s+/g, "_").toLocaleLowerCase();
+    add(whitespaceOnly ? "info" : "warning", `Export filenames will be normalized to “${exportName}”.`);
+  }
   if (project.planes.length < 1 || project.planes.length > MAX_PLANES) add("error", "Dominions 6 maps must contain one to eight planes.");
   if (!integerInRange(project.settings.players, 2, 32)) add("error", "Player count must be a whole number from 2 to 32.");
   if (!integerInRange(project.settings.provincesPerPlayer, 8, 30)) add("error", "Provinces per player must be a whole number from 8 to 30.");
@@ -657,7 +711,7 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
     if (overland) {
       const eligible = new Set(overland.provinces.filter((province) => !isWaterProvince(province) && !isBlockedProvince(province))
         .map((province) => province.id));
-      const adjacency = adjacencyFor(overland, { traversableOnly: true });
+      const adjacency = planeAdjacency(overland, true);
       let achieved = 0;
       while (eligible.size) {
         achieved += 1;
@@ -682,8 +736,8 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
     if (province.start || province.teamStart !== undefined) startLocations.set(`${plane.id}:${province.id}`, { plane, province });
   }
   for (const start of project.specificStarts) {
-    const plane = project.planes.find(item => item.id === start.planeId);
-    const province = plane?.provinces.find(item => item.id === start.provinceId);
+    const plane = findPlane(start.planeId);
+    const province = plane && findProvince(plane, start.provinceId);
     if (plane && province) startLocations.set(`${plane.id}:${province.id}`, { plane, province });
   }
   const protectedStartRingKeys = protectedStartProvinceKeys(project, 1);
@@ -765,14 +819,14 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
       capitalPixels.add(key);
     }
 
-    const adjacency = adjacencyFor(plane);
+    const adjacency = planeAdjacency(plane, false);
     const protectedStartIds = new Set(plane.provinces
       .filter((province) => province.start
         || province.teamStart !== undefined
         || project.specificStarts.some((start) => start.planeId === plane.id && start.provinceId === province.id))
       .map((province) => province.id));
     const traversableProvinces = plane.provinces.filter((province) => !isBlockedProvince(province));
-    const traversableAdjacency = adjacencyFor(plane, { traversableOnly: true });
+    const traversableAdjacency = planeAdjacency(plane, true);
     const protectedStartDistances = distancesToSources(traversableAdjacency, protectedStartIds, 2);
     const reachable = traversableProvinces.length
       ? shortestDistances(traversableAdjacency, traversableProvinces[0]!.id)
@@ -802,8 +856,26 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
         topologyAudit.extra[0]?.a,
       );
     }
+    // Chamber-and-corridor planes declare their topology through their links,
+    // so compare the links with the native pixels the export actually draws.
+    const rasterAudit = plane.kind === "underworld" && plane.width * plane.height <= MAX_D6M_PIXELS
+      ? auditSparseRasterTopology(plane) : undefined;
+    if (rasterAudit) {
+      const named = (pair: { a: string; b: string }) => [pair.a, pair.b]
+        .map((id) => plane.provinces.find((province) => province.id === id)?.name ?? id).join(" and ");
+      if (rasterAudit.missing.length) {
+        add("warning", `${plane.name} draws ${rasterAudit.missing.length} border${rasterAudit.missing.length === 1 ? "" : "s"} in the exported map between provinces without a Dominions connection (first: ${named(rasterAudit.missing[0]!)}). A passage crosses another chamber or passage; remove that link or Generate again.`, plane.id, rasterAudit.missing[0]!.a);
+      }
+      if (rasterAudit.extra.length) {
+        add("warning", `${plane.name} has ${rasterAudit.extra.length} connection${rasterAudit.extra.length === 1 ? "" : "s"} without a drawn border in the exported map (first: ${named(rasterAudit.extra[0]!)}). Another chamber or crossing covers its passage; remove that link or Generate again.`, plane.id, rasterAudit.extra[0]!.a);
+      }
+    }
     const edgeKeys = new Set<string>();
+    const edgeIds = new Set<string>();
+    let duplicateEdgeIds = 0;
     for (const edge of plane.edges) {
+      if (edgeIds.has(edge.id)) duplicateEdgeIds += 1;
+      edgeIds.add(edge.id);
       if (!provinceIds.has(edge.a) || !provinceIds.has(edge.b)) add("error", "A connection references a missing province.", plane.id);
       if (edge.a === edge.b) add("error", "A province cannot neighbor itself.", plane.id, edge.a);
       const key = [edge.a, edge.b].sort().join("|");
@@ -818,9 +890,13 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
       }
     }
 
+    if (duplicateEdgeIds) {
+      add("warning", `${plane.name} has ${duplicateEdgeIds} border${duplicateEdgeIds === 1 ? "" : "s"} sharing another border's ID, so border edits may change the wrong border. Use Synchronize borders to repair the IDs.`, plane.id);
+    }
+
+    let startEdges: Map<string, Edge[]> | undefined;
     for (const province of plane.provinces) {
       if (!TERRAIN_KEY_SET.has(province.terrain)) add("error", `${province.name}: unknown terrain ${String(province.terrain)}.`, plane.id, province.id);
-      const degree = adjacency.get(province.id)?.length ?? 0;
       const isStartProvince = protectedStartIds.has(province.id);
       const adjacentStartId = isStartProvince
         ? undefined
@@ -828,18 +904,20 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
       const isStartNeighbor = !isStartProvince && protectedStartRingKeys.has(`${plane.id}:${province.id}`);
       const startRingName = isStartProvince
         ? province.name
-        : plane.provinces.find((item) => item.id === adjacentStartId)?.name ?? gatewayStartNames.get(`${plane.id}:${province.id}`);
+        : findProvince(plane, adjacentStartId)?.name ?? gatewayStartNames.get(`${plane.id}:${province.id}`);
       if (protectedStartIds.has(province.id)) {
         if (province.noStart) add("error", `${province.name} is marked both Start and No start.`, plane.id, province.id);
         if (isBlockedProvince(province)) add("error", `${province.name} is a start on blocked terrain.`, plane.id, province.id);
         const targetDegree = project.settings.startDegreeTarget ?? 4;
         const hardMinimumDegree = Math.min(targetDegree, 4);
-        if (degree < hardMinimumDegree) {
-          add("error", `${province.name} is a start with ${degree} connections; at least ${hardMinimumDegree} are required.`, plane.id, province.id);
-        } else if (degree < targetDegree) {
-          add("warning", `${province.name} achieved ${degree} connections; the requested ${targetDegree} is a best-effort preference above four.`, plane.id, province.id);
+        // Cave Walls and impassable borders are declared neighbours but not exits.
+        const startDegree = traversableAdjacency.get(province.id)?.length ?? 0;
+        if (startDegree < hardMinimumDegree) {
+          add("error", `${province.name} is a start with ${startDegree} traversable connections; at least ${hardMinimumDegree} are required.`, plane.id, province.id);
+        } else if (startDegree < targetDegree) {
+          add("warning", `${province.name} achieved ${startDegree} traversable connections; the requested ${targetDegree} is a best-effort preference above four.`, plane.id, province.id);
         }
-        const blockingEdges = plane.edges.filter((edge) => (edge.a === province.id || edge.b === province.id) && blocksReliableStartMovement(edge));
+        const blockingEdges = (startEdges ??= edgesByEndpoint(plane.edges)).get(province.id)?.filter(blocksReliableStartMovement) ?? [];
         if (blockingEdges.length) add("error", `${province.name} has ${blockingEdges.length} blocking or condition-dependent start border${blockingEdges.length === 1 ? "" : "s"}.`, plane.id, province.id);
         if (province.defenders.length) add("error", `${province.name} is a start with authored independent defenders; capital provinces cannot retain independent guardian groups.`, plane.id, province.id);
       }
@@ -988,10 +1066,10 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
   if (starts.length < project.settings.players) add("error", `Only ${starts.length} distinct start locations exist across all planes for ${project.settings.players} players.`);
   if (starts.length > project.settings.players) add("info", `The atlas has ${starts.length} distinct start locations for ${project.settings.players} players.`);
   if (starts.length > 1) {
-    const localAdjacency = new Map(project.planes.map((plane) => [plane.id, adjacencyFor(plane)]));
+    const localAdjacency = new Map(project.planes.map((plane) => [plane.id, planeAdjacency(plane, false)]));
     const degrees = starts.map(({ plane, province }) => localAdjacency.get(plane.id)!.get(province.id)?.length ?? 0);
     if (Math.min(...degrees) !== Math.max(...degrees)) add("warning", `Start connection counts across the atlas vary from ${Math.min(...degrees)} to ${Math.max(...degrees)}.`);
-    const movement = globalMovementAdjacency(project);
+    const movement = sharedGlobalMovementAdjacency(project);
     const globalKey = (planeId: string, provinceId: string) => `${planeId}:${provinceId}`;
     const nearestDistances = nearestSourceDistances(movement, starts.map(({ plane, province }) => globalKey(plane.id, province.id)));
     // Normal multiplayer maps get individual pair diagnostics. Hostile/imported
@@ -1020,14 +1098,14 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
     }
     const preferredByStart = new Map<string, number>();
     for (const plane of project.planes) {
-      const local = adjacencyFor(plane, { traversableOnly: true });
+      const local = planeAdjacency(plane, true);
       const startKeysOnPlane = new Set(starts.filter((start) => start.plane.id === plane.id)
         .map((start) => start.province.id));
       const visited = new Set<string>();
       for (const province of plane.provinces) {
         if (visited.has(province.id) || isBlockedProvince(province)) continue;
         const component = [...shortestDistances(local, province.id).keys()].filter((id) => {
-          const resolved = plane.provinces.find((item) => item.id === id);
+          const resolved = findProvince(plane, id);
           return resolved ? !isBlockedProvince(resolved) : false;
         });
         for (const id of component) visited.add(id);
@@ -1061,7 +1139,7 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
   }
   if (project.settings.startDistribution) {
     const actual = { land: 0, coastal: 0, water: 0, cave: 0, other: 0 };
-    for (const { plane, province } of genericStarts) actual[classifyStart(plane, province)] += 1;
+    for (const { plane, province } of genericStarts) actual[classifyCurrentStart(plane, province, planeAdjacency(plane, true))] += 1;
     for (const type of ["land", "coastal", "water", "cave", "other"] as const) {
       const requested = project.settings.startDistribution[type];
       if (actual[type] !== requested) add("error", `Requested ${requested} ${type} start${requested === 1 ? "" : "s"}, but generated ${actual[type]}.`);
@@ -1073,8 +1151,8 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
   for (const start of project.specificStarts) {
     if (!isPlayerNationId(start.nation)) add("error", "A nation-specific start requires a player nation ID of 5 or greater.");
     else if (!findCatalogEntry(catalog.nations, start.nation)) add("warning", `Nation-specific start ${start.nation} is not in the active catalog; it requires matching custom content.`);
-    const plane = project.planes.find((item) => item.id === start.planeId);
-    const province = plane?.provinces.find((item) => item.id === start.provinceId);
+    const plane = findPlane(start.planeId);
+    const province = plane && findProvince(plane, start.provinceId);
     if (!plane || !province) add("error", `Nation-specific start for nation ${start.nation} references a missing province.`);
     else {
       if (province.noStart || isBlockedProvince(province)) add("error", `${province.name}: a nation-specific start cannot use no-start or blocked terrain.`, plane.id, province.id);
@@ -1107,10 +1185,10 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
       continue;
     }
     const assignment = assignments[0]!;
-    const plane = project.planes.find((item) => item.id === assignment.planeId);
-    const province = plane?.provinces.find((item) => item.id === assignment.provinceId);
+    const plane = findPlane(assignment.planeId);
+    const province = plane && findProvince(plane, assignment.provinceId);
     if (!plane || !province) continue;
-    if (!province.start || classifyStart(plane, province) !== "cave") {
+    if (!province.start || classifyCurrentStart(plane, province, planeAdjacency(plane, true)) !== "cave") {
       const provenance = assignment.source === "generated-cave" ? "Generated" : "Manual";
       add(
         "error",
@@ -1129,6 +1207,24 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
   }
 
   const gateNumbers = new Set<number>();
+  const gateGroupsByEndpoint = new Map<string, { plane: Plane; province: Province; groups: number[] }>();
+  // Start sets and adjacency depend only on the plane; build them once instead
+  // of once per gate endpoint so large imported gate tables stay responsive.
+  const gatePlaneContext = new Map<string, { protectedStarts: Set<string>; adjacency: Map<string, string[]> }>();
+  const gateContextFor = (plane: Plane) => {
+    let context = gatePlaneContext.get(plane.id);
+    if (!context) {
+      const specificStartIds = new Set(project.specificStarts.filter((start) => start.planeId === plane.id).map((start) => start.provinceId));
+      context = {
+        protectedStarts: new Set(plane.provinces
+          .filter((item) => item.start || item.teamStart !== undefined || specificStartIds.has(item.id))
+          .map((item) => item.id)),
+        adjacency: planeAdjacency(plane, false),
+      };
+      gatePlaneContext.set(plane.id, context);
+    }
+    return context;
+  };
   for (const gate of project.gates) {
     if (!Number.isSafeInteger(gate.gateNumber) || gate.gateNumber < 1) add("error", "Gate numbers must be positive safe integers.");
     if (gateNumbers.has(gate.gateNumber)) add("error", `Gate number ${gate.gateNumber} is duplicated across link groups.`);
@@ -1138,25 +1234,27 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
     if (endpointKeys.size !== gate.endpoints.length) add("error", `Gate ${gate.gateNumber} repeats an endpoint.`);
     const resolvedEndpoints: Array<{ plane: Plane; province: Province }> = [];
     for (const endpoint of gate.endpoints) {
-      const plane = project.planes.find((item) => item.id === endpoint.planeId);
-      const province = plane?.provinces.find((item) => item.id === endpoint.provinceId);
+      const plane = findPlane(endpoint.planeId);
+      const province = plane && findProvince(plane, endpoint.provinceId);
       if (!plane || !province) add("error", `Gate ${gate.gateNumber} references a missing province.`);
       if (!plane || !province) continue;
       resolvedEndpoints.push({ plane, province });
+      const endpointKey = `${plane.id}:${province.id}`;
+      const usage = gateGroupsByEndpoint.get(endpointKey) ?? { plane, province, groups: [] };
+      if (!usage.groups.includes(gate.gateNumber)) usage.groups.push(gate.gateNumber);
+      gateGroupsByEndpoint.set(endpointKey, usage);
       if (isBlockedProvince(province)) {
         add("error", `Gate ${gate.gateNumber} endpoint ${province.name} is on blocked terrain.`, plane.id, province.id);
         continue;
       }
-      const protectedStarts = new Set(plane.provinces
-        .filter((item) => item.start || item.teamStart !== undefined || project.specificStarts.some((start) => start.planeId === plane.id && start.provinceId === item.id))
-        .map((item) => item.id));
+      const { protectedStarts, adjacency: gateAdjacency } = gateContextFor(plane);
       if (protectedStarts.has(province.id)) {
         add("warning", `Gate ${gate.gateNumber} is in start province ${province.name}; regenerate or move it when the plane has another valid endpoint.`, plane.id, province.id);
         continue;
       }
-      const adjacentStart = adjacencyFor(plane).get(province.id)?.find((provinceId) => protectedStarts.has(provinceId));
+      const adjacentStart = gateAdjacency.get(province.id)?.find((provinceId) => protectedStarts.has(provinceId));
       if (adjacentStart) {
-        const startName = plane.provinces.find((item) => item.id === adjacentStart)?.name ?? "a start";
+        const startName = findProvince(plane, adjacentStart)?.name ?? "a start";
         add("warning", `Gate ${gate.gateNumber} in ${province.name} is adjacent to start province ${startName}; prefer an endpoint at least two connections away.`, plane.id, province.id);
       }
     }
@@ -1174,6 +1272,10 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
       }
     }
   }
+  for (const { plane, province, groups } of gateGroupsByEndpoint.values()) {
+    if (groups.length < 2) continue;
+    add("warning", `${province.name} is an endpoint of gates ${groups.join(", ")}; the generator uses one gate per province and Dominions' handling of several #gate lines on one province is unverified.`, plane.id, province.id);
+  }
   if (project.planes.length > 1) {
     const connectedPlanes = new Set<string>([project.planes[0]!.id]);
     let changed = true;
@@ -1181,8 +1283,8 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
       changed = false;
       for (const gate of project.gates) {
         const validEndpoints = gate.endpoints.filter((endpoint) => {
-          const plane = project.planes.find((item) => item.id === endpoint.planeId);
-          const province = plane?.provinces.find((item) => item.id === endpoint.provinceId);
+          const plane = findPlane(endpoint.planeId);
+          const province = plane && findProvince(plane, endpoint.provinceId);
           return !!plane && !!province && !isBlockedProvince(province);
         });
         if (!validEndpoints.some((endpoint) => connectedPlanes.has(endpoint.planeId))) continue;
@@ -1375,16 +1477,18 @@ function quote(value: string): string {
 }
 
 function safeBare(value: string): string {
-  return value.replace(/[\r\n#]+/g, " ").replace(/--/g, "-").trim() || "Untitled";
+  // Collapse whole runs so "a---b" cannot leave a "--" comment marker behind;
+  // quotes and "//" would otherwise start a string or comment in native parsers.
+  return value.replace(/[\r\n#]+/g, " ").replace(/-{2,}/g, "-").replace(/\/{2,}/g, "/").replace(/"/g, "'").trim() || "Untitled";
 }
 
 function safeComment(value: string): string {
-  return value.replace(/[\r\n]+/g, " ").replace(/--/g, "-").trim();
+  return value.replace(/[\r\n]+/g, " ").replace(/-{2,}/g, "-").trim();
 }
 
 function appendRaw(lines: string[], raw: string) {
   const clean = raw
-    .split(/\r?\n/)
+    .split(/\r\n?|\n/)
     .map((line) => line.trim())
     .filter((line) => line.startsWith("#") || line.startsWith("--"));
   if (clean.length) lines.push(...clean);
@@ -1470,12 +1574,24 @@ function powerfulGuardianForce(province: Province): boolean {
 
 function blocksReliableStartMovement(edge: Edge): boolean {
   // Bits 1, 2, and 4 are pass, river, and impassable respectively. Combined
-  // special codes such as 33 and 36 retain the same movement behavior.
-  return (edgeSpecial(edge) & 0b111) !== 0;
+  // special codes such as 33 and 36 retain the same movement behavior. Named
+  // mountain borders match the generator's start-edge rule.
+  return edge.kind === "mountain_border" || (edgeSpecial(edge) & 0b111) !== 0;
 }
 
-function classifyStart(plane: Plane, province: Province): StartType {
-  return classifyCurrentStart(plane, province);
+/** Each edge once per distinct endpoint, matching `edges.filter((edge) => edge.a === id || edge.b === id)`. */
+function edgesByEndpoint(edges: readonly Edge[]): Map<string, Edge[]> {
+  const result = new Map<string, Edge[]>();
+  const append = (id: string, edge: Edge) => {
+    const list = result.get(id);
+    if (list) list.push(edge);
+    else result.set(id, [edge]);
+  };
+  for (const edge of edges) {
+    append(edge.a, edge);
+    if (edge.b !== edge.a) append(edge.b, edge);
+  }
+  return result;
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

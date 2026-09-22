@@ -48,10 +48,27 @@ export interface ConnectedRegionPlan {
   aspect: number;
 }
 
+/**
+ * The native-pixel stabilization of one connected-region layout, in a form
+ * that crosses a worker boundary (the pixel list is transferable). It is a
+ * pure function of `signature`, the plane's full connected-region ownership
+ * signature, and is only ever reused for a plane with that exact signature.
+ */
+export interface ConnectedRegionStabilization {
+  signature: string;
+  /** Ascending native pixel indexes cleared from detached owner fragments. */
+  removedPixels: Uint32Array;
+  notice?: string;
+}
+
+interface StabilizationResult { removed: ReadonlySet<number>; notice?: string }
+
 const EPS = 1e-10;
 const plans = new Map<string, ConnectedRegionPlan>();
-interface RegionOwnershipResult { model?: ProvinceOwnershipModel; notice?: string }
+interface RegionOwnershipResult { model?: ProvinceOwnershipModel; notice?: string; stabilization?: StabilizationResult }
 const ownershipResults = new Map<string, RegionOwnershipResult>();
+/** Worker-computed stabilizations, keyed by the full signature they were computed for. */
+const primedStabilizations = new Map<string, StabilizationResult>();
 const pairKey = (a: string, b: string) => a < b ? `${a}|${b}` : `${b}|${a}`;
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const periodic = (v: number, wrap: boolean) => wrap ? v - Math.round(v) : v;
@@ -194,21 +211,73 @@ export function createConnectedRegionOwnership(plane: Plane): ProvinceOwnershipM
   return connectedRegionOwnershipResult(plane).model;
 }
 
-function connectedRegionOwnershipResult(plane: Plane): RegionOwnershipResult {
-  // Validation and rendering share this cache: a native-resolution safety scan
-  // is paid once per geometry edit, not again for terrain, armies or each render.
-  const signature = JSON.stringify([planeGenerationKey(plane), plane.kind, plane.landformStyle, plane.width, plane.height, plane.wrapX, plane.wrapY,
+/** Everything the regional layout and its native stabilization read. */
+function connectedRegionSignature(plane: Plane): string {
+  return JSON.stringify([planeGenerationKey(plane), plane.kind, plane.landformStyle, plane.width, plane.height, plane.wrapX, plane.wrapY,
     plane.provinces.map(p => [p.id,p.index,p.x,p.y,!!p.small,!!p.large]),
     plane.edges.map(e => pairKey(e.a,e.b)).sort()]);
+}
+
+function connectedRegionOwnershipResult(plane: Plane, signature = connectedRegionSignature(plane)): RegionOwnershipResult {
+  // Validation and rendering share this cache: a native-resolution safety scan
+  // is paid once per geometry edit, not again for terrain, armies or each render.
   const cached = ownershipResults.get(signature);
   if (cached) return cached;
-  const result = buildConnectedRegionOwnership(plane);
+  const result = buildConnectedRegionOwnership(plane,signature);
   if (ownershipResults.size >= 16) ownershipResults.delete(ownershipResults.keys().next().value!);
   ownershipResults.set(signature,result);
   return result;
 }
 
-function buildConnectedRegionOwnership(plane: Plane): RegionOwnershipResult {
+/**
+ * Compute (or reuse) a plane's native stabilization for transfer to another
+ * thread. Undefined for planes that do not use connected regions or whose
+ * layout is rejected before the native scan.
+ */
+export function connectedRegionStabilization(plane: Plane): ConnectedRegionStabilization | undefined {
+  if (!usesConnectedRegions(plane)) return undefined;
+  const signature = connectedRegionSignature(plane);
+  const stabilization = connectedRegionOwnershipResult(plane,signature).stabilization;
+  if (!stabilization) return undefined;
+  return {
+    signature,
+    removedPixels: Uint32Array.from(stabilization.removed),
+    ...(stabilization.notice ? { notice:stabilization.notice } : {}),
+  };
+}
+
+/** Whether this plane's regional ownership can be built without a native scan. */
+export function hasConnectedRegionStabilization(plane: Plane): boolean {
+  if (!usesConnectedRegions(plane)) return true;
+  const signature = connectedRegionSignature(plane);
+  return ownershipResults.has(signature) || primedStabilizations.has(signature);
+}
+
+/**
+ * Seed this thread with a stabilization computed elsewhere, typically by the
+ * generation worker, so the first validation or render skips the native scan.
+ * A result is accepted only when its full signature equals this plane's
+ * current signature; a stale or foreign result is ignored and the scan runs
+ * on demand as before.
+ */
+export function primeConnectedRegionStabilization(plane: Plane, result: ConnectedRegionStabilization): boolean {
+  if (!usesConnectedRegions(plane) || !result || typeof result.signature !== "string"
+    || !(result.removedPixels instanceof Uint32Array)
+    || (result.notice !== undefined && (typeof result.notice !== "string" || !result.notice))) return false;
+  const signature = connectedRegionSignature(plane);
+  if (result.signature !== signature) return false;
+  if (ownershipResults.has(signature) || primedStabilizations.has(signature)) return true;
+  const pixels = plane.width * plane.height;
+  for (const pixel of result.removedPixels) if (pixel >= pixels) return false;
+  if (primedStabilizations.size >= 16) primedStabilizations.delete(primedStabilizations.keys().next().value!);
+  primedStabilizations.set(signature, {
+    removed: new Set(result.removedPixels),
+    ...(result.notice ? { notice:result.notice } : {}),
+  });
+  return true;
+}
+
+function buildConnectedRegionOwnership(plane: Plane, signature: string): RegionOwnershipResult {
   if (plane.provinces.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y) || p.x<0 || p.x>1 || p.y<0 || p.y>1)) {
     return { notice:"Connected regions require valid province positions; compatibility geometry is retained without changing the map's links." };
   }
@@ -225,10 +294,10 @@ function buildConnectedRegionOwnership(plane: Plane): RegionOwnershipResult {
   if (plane.edges.some(e => ids.has(e.a) && ids.has(e.b) && e.a !== e.b && !keys.has(pairKey(e.a,e.b)))) {
     return { notice:"Compatibility geometry is retained because this map has nonlocal authored links or very short frontiers that cannot share regional borders safely. Back up the project and Generate to create a connected-region layout, or keep the existing authored map. Existing links and provinces have not been changed." };
   }
-  return buildRegionalModel(plane,plan);
+  return buildRegionalModel(plane,plan,signature);
 }
 
-function buildRegionalModel(source: Plane, plan: ConnectedRegionPlan): RegionOwnershipResult {
+function buildRegionalModel(source: Plane, plan: ConnectedRegionPlan, signature: string): RegionOwnershipResult {
   // Cached ownership must describe the geometry captured by its cache key.
   // Draft helpers can mutate their input in place; retaining that object in
   // ownerAt would otherwise combine moved centres/wrapping with old contours
@@ -308,14 +377,14 @@ function buildRegionalModel(source: Plane, plan: ConnectedRegionPlan): RegionOwn
   const walls = plan.contacts.map((contacts,owner) => contacts.filter(c => !keys.has(pairKey(plane.provinces[owner]!.id,plane.provinces[c.neighbour]!.id)))
     .map(c => ({...c,shoreLimit:Math.min(...outlets[owner]!.map(outlet =>
       (c.limit-c.nx*outlet.portal.x-c.ny*outlet.portal.y)*.5))})));
-  const toOwnerFrame = (x:number,y:number,owner:number) => ({
-    x:centres[owner]!.x + periodic(x-plane.provinces[owner]!.x,plane.wrapX)*aspect,
-    y:centres[owner]!.y + periodic(y-plane.provinces[owner]!.y,plane.wrapY),
-  });
   let removedPixels: ReadonlySet<number> | undefined;
   const contains = (owner:number,x:number,y:number) => {
     if (removedPixels?.has(nativePixel(plane,x,y))) return false;
-    const point = toOwnerFrame(x,y,owner), centre = centres[owner]!;
+    // PERF: the owner-frame point is inlined as scalars; this runs once per
+    // sampled pixel, so it must not allocate. Same arithmetic as before.
+    const centre = centres[owner]!, source = plane.provinces[owner]!;
+    const pointX = centre.x + periodic(x-source.x,plane.wrapX)*aspect;
+    const pointY = centre.y + periodic(y-source.y,plane.wrapY);
     // Two-sided rock seams at omitted contacts preserve an edited movement
     // graph. A bounded margin keeps even small/high-density centres intact.
     const margin = Math.min(plan.localSpacings[owner]!* .18,Math.max(pixel*1.1,plan.spacing*.025));
@@ -325,11 +394,11 @@ function buildRegionalModel(source: Plane, plan: ConnectedRegionPlan): RegionOwn
       // doorway clearance so a short, valid frontier cannot be swallowed.
       const shore = sky ? Math.max(margin,Math.min(wall.shoreLimit,plan.localSpacings[owner]!*.22,
         Math.max(pixel*1.1,plan.spacing*.045)*(1+.35*Math.sin(
-        (-wall.ny*point.x+wall.nx*point.y)/plan.spacing*4+phases[owner]!,
+        (-wall.ny*pointX+wall.nx*pointY)/plan.spacing*4+phases[owner]!,
       )))) : margin;
-      if (wall.limit-wall.nx*point.x-wall.ny*point.y < shore-EPS) return false;
+      if (wall.limit-wall.nx*pointX-wall.ny*pointY < shore-EPS) return false;
     }
-    const dx=point.x-centre.x,dy=point.y-centre.y;
+    const dx=pointX-centre.x,dy=pointY-centre.y;
     const phase=phases[owner]!,contour=skyContours?.[owner],realm=realmContours?.[owner];
     if (contour) {
       const u=(dx*contour.cos+dy*contour.sin)/contour.radiusX;
@@ -345,26 +414,34 @@ function buildRegionalModel(source: Plane, plan: ConnectedRegionPlan): RegionOwn
       if(dx*dx+dy*dy<=radius*radius)return true;
     }
     for(const outlet of outlets[owner]!) {
-      if(outlet.route ? insideSkyPassage(point,outlet.route)
-        : segmentDistanceSquared(point,centre,outlet.portal)<=outlet.width*outlet.width)return true;
+      if(outlet.route ? insideSkyPassage(pointX,pointY,outlet.route)
+        : segmentDistanceSquared(pointX,pointY,centre,outlet.portal)<=outlet.width*outlet.width)return true;
     }
     return false;
   };
-  const candidateBuckets = exactCandidateBuckets(plane,columns,rows,aspect);
+  const {offsets:candidateOffsets,owners:candidateOwners} = refineCandidateBuckets(
+    plane,exactCandidateBuckets(plane,columns,rows,aspect),columns,rows,aspect);
+  const fineColumns = columns*CANDIDATE_REFINEMENT, fineRows = rows*CANDIDATE_REFINEMENT;
   const ownerAt = (x:number,y:number) => {
     if(!Number.isFinite(x)||!Number.isFinite(y)||(!plane.wrapX&&(x<0||x>1))||(!plane.wrapY&&(y<0||y>1)))return -1;
     x=unit(x,plane.wrapX);y=unit(y,plane.wrapY);
-    const bx=clamp(Math.floor(x*columns),0,columns-1),by=clamp(Math.floor(y*rows),0,rows-1);
+    // Scaling by a power of two is exact, so each fine cell lies inside the
+    // coarse cell the former Math.floor(x*columns) lookup selected.
+    const bx=clamp(Math.floor(x*fineColumns),0,fineColumns-1),by=clamp(Math.floor(y*fineRows),0,fineRows-1);
+    const bucket=by*fineColumns+bx,end=candidateOffsets[bucket+1]!;
     let owner=-1,distance=Infinity;
-    for(const i of candidateBuckets[by*columns+bx]!) {
+    for(let k=candidateOffsets[bucket]!;k<end;k++) {
+      const i=candidateOwners[k]!;
       const p=plane.provinces[i]!,dx=periodic(x-p.x,plane.wrapX)*aspect,dy=periodic(y-p.y,plane.wrapY);
       const d=dx*dx+dy*dy;
       if(d<distance-EPS||(Math.abs(d-distance)<=EPS&&(owner<0||p.index<plane.provinces[owner]!.index))) {owner=i;distance=d;}
     }
     return owner>=0&&contains(owner,x,y)?owner:-1;
   };
-  const safety = stabilizeNativeOwnership(plane,ownerAt);
-  if (safety.notice) return { notice:safety.notice };
+  // PERF: a worker may already have scanned this exact signature (see
+  // primeConnectedRegionStabilization); its result is the scan's own output.
+  const safety: StabilizationResult = primedStabilizations.get(signature) ?? stabilizeNativeOwnership(plane,ownerAt);
+  if (safety.notice) return { notice:safety.notice, stabilization:safety };
   if (safety.removed.size) removedPixels = safety.removed;
   const regionBorders = new Map<string,BorderSegment[]>();
   const corridors: ProvinceCorridorPrimitive[] = [];
@@ -406,7 +483,7 @@ function buildRegionalModel(source: Plane, plan: ConnectedRegionPlan): RegionOwn
       }
     }
   }
-  return { model:{mode:"sparse",metricAspect:aspect,columns,rows,primitives:[...chambers,...corridors],ownerAt,regionBorders} };
+  return { model:{mode:"sparse",metricAspect:aspect,columns,rows,primitives:[...chambers,...corridors],ownerAt,regionBorders}, stabilization:safety };
 }
 
 function naturalRealmProfile(kind: Plane["kind"]): RealmContourProfile {
@@ -644,10 +721,50 @@ function exactCandidateBuckets(plane:Plane,columns:number,rows:number,aspect:num
   });
 }
 
-function segmentDistanceSquared(p:Point,a:Point,b:Point):number {
+/** Fine lookup cells per coarse candidate-bucket axis. */
+const CANDIDATE_REFINEMENT = 4;
+
+/**
+ * PERF: split each exact candidate bucket into 4×4 finer lookup cells, stored
+ * flat (offsets/owners) so a lookup allocates nothing. A fine cell keeps, in
+ * the same ascending order, every candidate of its enclosing coarse bucket
+ * that could come within ownerAt's tie tolerance of the nearest centre
+ * anywhere in the cell. Farther candidates can never change ownerAt's
+ * sequential nearest/EPS-tie scan (a tie chain from the minimum grows by at
+ * most EPS per candidate), so lookups return exactly the former owner while
+ * testing far fewer centres per sample.
+ */
+function refineCandidateBuckets(plane:Plane,coarse:readonly (readonly number[])[],columns:number,rows:number,aspect:number)
+  :{offsets:Int32Array;owners:Int32Array} {
+  const fineColumns=columns*CANDIDATE_REFINEMENT,fineRows=rows*CANDIDATE_REFINEMENT;
+  const radius=Math.hypot(aspect/fineColumns,1/fineRows)/2;
+  // Squared-distance slack: one EPS per possible chained tie plus a rounding margin.
+  const tolerance=(plane.provinces.length+1)*EPS+1e-12;
+  const offsets=new Int32Array(fineColumns*fineRows+1),owners:number[]=[];
+  for(let bucket=0;bucket<fineColumns*fineRows;bucket++) {
+    const column=bucket%fineColumns,row=Math.floor(bucket/fineColumns);
+    const x=(column+.5)/fineColumns,y=(row+.5)/fineRows;
+    const parent=coarse[Math.floor(row/CANDIDATE_REFINEMENT)*columns+Math.floor(column/CANDIDATE_REFINEMENT)]!;
+    const distances=parent.map(i=>{
+      const p=plane.provinces[i]!;
+      return Math.hypot(periodic(x-p.x,plane.wrapX)*aspect,periodic(y-p.y,plane.wrapY));
+    });
+    // Triangle inequality: any sample in this cell is within `radius` of its centre.
+    const reach=(Math.min(...distances)+radius)**2+tolerance;
+    parent.forEach((owner,k)=>{
+      const nearest=Math.max(0,distances[k]!-radius);
+      if(nearest*nearest<=reach)owners.push(owner);
+    });
+    offsets[bucket+1]=owners.length;
+  }
+  return {offsets,owners:Int32Array.from(owners)};
+}
+
+/** Scalar point arguments keep per-pixel ownership tests allocation-free. */
+function segmentDistanceSquared(px:number,py:number,a:Point,b:Point):number {
   const dx=b.x-a.x,dy=b.y-a.y,length=dx*dx+dy*dy;
-  const t=length>EPS?clamp(((p.x-a.x)*dx+(p.y-a.y)*dy)/length,0,1):0;
-  return (p.x-a.x-dx*t)**2+(p.y-a.y-dy*t)**2;
+  const t=length>EPS?clamp(((px-a.x)*dx+(py-a.y)*dy)/length,0,1):0;
+  return (px-a.x-dx*t)**2+(py-a.y-dy*t)**2;
 }
 
 interface SkyPassagePoint extends Point { width: number }
@@ -665,12 +782,12 @@ function skyPassage(from:Point,to:Point,width:number,pixel:number,key:string,reg
   });
 }
 
-function insideSkyPassage(point:Point,route:readonly SkyPassagePoint[]):boolean {
+function insideSkyPassage(px:number,py:number,route:readonly SkyPassagePoint[]):boolean {
   for(let i=1;i<route.length;i++) {
     const a=route[i-1]!,b=route[i]!,dx=b.x-a.x,dy=b.y-a.y,length=dx*dx+dy*dy;
-    const t=length>EPS ? clamp(((point.x-a.x)*dx+(point.y-a.y)*dy)/length,0,1) : 0;
+    const t=length>EPS ? clamp(((px-a.x)*dx+(py-a.y)*dy)/length,0,1) : 0;
     const width=a.width+(b.width-a.width)*t;
-    if((point.x-a.x-dx*t)**2+(point.y-a.y-dy*t)**2<=width*width)return true;
+    if((px-a.x-dx*t)**2+(py-a.y-dy*t)**2<=width*width)return true;
   }
   return false;
 }

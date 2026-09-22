@@ -1,9 +1,13 @@
 # Dominions catalog notices
 
-`dom6-6.37.json` is a compact, generated selector index. It contains only the
-fields needed by Pantokrator Atlas: factual numeric IDs, display names, site
-location/path/rarity/home metadata, unit recruitment roles, nation labels, and
-plane lookup values.
+`dom6-6.37.json` and `dom6-6.37-units.json` together form a compact, generated
+selector index. They contain only the fields needed by Pantokrator Atlas:
+factual numeric IDs, display names, site location/path/rarity/home metadata,
+unit recruitment roles, nation labels, and plane lookup values. The unit table
+(IDs, names and recruitment roles) is stored in `dom6-6.37-units.json` so the
+background map generator can load names and site metadata without it; the
+editor assembles both files into one catalog. Both files are generated from the
+same pinned source below and are covered by the same notice and licence.
 
 `population-recruitment-6.37.json` is a separate static membership catalogue.
 Its provenance, extraction boundary and relationship to initial-army templates
@@ -29,8 +33,10 @@ the compact bundle, download those thirteen raw files from the pinned tree into
 `tmp/catalog-source-6.37/`, then run
 `node scripts/build-dom6-catalog.mjs tmp/catalog-source-6.37`.
 The builder checks SHA-256 fingerprints for all thirteen input files before
-writing output; the compact bundle records the same fingerprints. An older or
-locally modified dump cannot silently inherit the newer provenance label.
+writing both output files; `dom6-6.37.json` records the same fingerprints and
+both files record the source revision, which the application checks when it
+assembles them. An older or locally modified dump cannot silently inherit the
+newer provenance label.
 
 ### 6.35 to 6.37 verification
 

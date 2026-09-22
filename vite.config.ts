@@ -44,6 +44,10 @@ export default defineConfig(async () => {
   const { cloudflare } = await import("@cloudflare/vite-plugin");
 
   return {
+    // Emit imported JSON (the bundled catalogs) as JSON.parse("…") instead of
+    // object literals: V8 parses JSON text markedly faster than equivalent
+    // JavaScript. All JSON imports in the app are default imports.
+    json: { stringify: true, namedExports: false },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,

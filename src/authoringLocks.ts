@@ -1,5 +1,8 @@
 import { clearAllPlayerStartFeatures, cloneProject, isBlockedProvince, isCaveProvince, isWaterProvince, type MapProject, type Province, type ProvinceLockGroup } from "./domain";
-import { BUILTIN_DOM6_CATALOG, findCatalogEntry } from "./catalog";
+// Core catalog and lookup only: the generation worker imports this module and
+// never needs the built-in unit table.
+import { BUILTIN_DOM6_CORE_CATALOG } from "./catalog/builtinCore";
+import { findCatalogEntry } from "./catalog/lookup";
 import { usesConnectedRegions } from "./geometry";
 
 export const PROVINCE_LOCK_GROUPS: readonly ProvinceLockGroup[] = ["name", "terrain", "economy", "sites", "guardians"];
@@ -102,8 +105,8 @@ export function restoreGenerationLocks(previous: MapProject, next: MapProject): 
         if (JSON.stringify(p[key]) !== JSON.stringify(safe[key])) throw new Error(`Locked ${group} at ${plane.name} #${p.index} conflicts with capital safety. Unlock it or keep the original starts.`);
       }
       const key = `${plane.id}:${p.id}`;
-      const rawGuardians = p.rawDirectives.split(/\r?\n/).some(line => /^\s*#(?:commander|comname|bodyguards|units|xp|randomequip|additem|clearmagic|mag_[a-z_]+)\b/i.test(line));
-      const placedThrone = p.sites.some(site => findCatalogEntry(BUILTIN_DOM6_CATALOG.sites, site.value)?.tags?.includes("throne"));
+      const rawGuardians = p.rawDirectives.split(/\r\n?|\n/).some(line => /^\s*#(?:commander|comname|bodyguards|units|xp|randomequip|additem|clearmagic|mag_[a-z_]+)\b/i.test(line));
+      const placedThrone = p.sites.some(site => findCatalogEntry(BUILTIN_DOM6_CORE_CATALOG.sites, site.value)?.tags?.includes("throne"));
       if ((protectedGuardians.has(key) && (p.defenders.length || rawGuardians))
         || (protectedSites.has(key) && (p.throne === "preferred" || p.throne === "fixed" || placedThrone))) {
         throw new Error(`Locked content at ${plane.name} #${p.index} conflicts with a protected start zone.`);

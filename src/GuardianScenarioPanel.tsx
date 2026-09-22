@@ -5,7 +5,8 @@ import { type MapProject } from "./domain";
 import { type Dom6CatalogBundle } from "./catalog";
 import { prepareGuardianScenario, finishGuardianScenario } from "./guardianScenario";
 import { startProjectGeneration, isGenerationAbort, type ProjectGenerationTask } from "./generationWorker";
-import { downloadPackage, downloadProject } from "./export";
+import { downloadProject } from "./projectFile";
+import { loadPackageExporter } from "./packageExporterLoader";
 import { validateProject } from "./dom6";
 
 export function GuardianScenarioPanel({project, catalog}:{project:MapProject;catalog:Dom6CatalogBundle}){
@@ -31,7 +32,7 @@ export function GuardianScenarioPanel({project, catalog}:{project:MapProject;cat
     {error&&<p role="alert">{error}</p>}
     {current&&<div className="iteration-preview"><p>{current.name}: {current.planes[0]!.provinces.length} provinces. Find the province named GUARDIAN TEST in-game. Random independents elsewhere still follow host/game rules.</p><p>{current.description}</p>
       <div className="iteration-actions"><button type="button" className="button quiet" disabled={busy} onClick={()=>downloadProject(current)}>Download fixture JSON</button><button type="button" className="button quiet" disabled={busy||issues.some(i=>i.severity==="error")} onClick={async()=>{
-        setExportBusy(true);try{await downloadPackage(current,undefined,catalog);setError(undefined);}catch(e){setError(e instanceof Error?e.message:"Fixture download failed.");}finally{setExportBusy(false);}
+        setExportBusy(true);try{const {downloadPackage}=await loadPackageExporter();await downloadPackage(current,undefined,catalog);setError(undefined);}catch(e){setError(e instanceof Error?e.message:"Fixture download failed.");}finally{setExportBusy(false);}
       }}>{busy?"Preparing fixture ZIP…":"Download fixture ZIP"}</button></div>
       {issues.filter(i=>i.severity!=="info").slice(0,8).map(i=><p key={i.id}>{i.severity}: {i.message}</p>)}
     </div>}

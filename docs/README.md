@@ -34,6 +34,7 @@ These records preserve the conditions and evidence at the stated revision/date. 
 
 | Record | Role |
 | --- | --- |
+| [September 22 review round](REVIEW_ROUND_2026-09-22.md) | Unreleased defect repairs, natural-water / authored-start / budget / strategic-river / Underworld-border generation fixes, the usability pass and measured performance and memory changes (PR #12). |
 | [September 22 natural landforms](NATURAL_LANDFORMS_2026-09-22.md) | Unreleased shared province curves, natural ocean/basin layouts, realm-specific contours and saved-map compatibility. |
 | [September 22 connected border rivers](CONNECTED_BORDER_RIVERS_2026-09-22.md) | Unreleased continuous river routing, safe bridge crossings, geographic constraints and verification evidence. |
 | [September 22 terrain-edit repairs](TERRAIN_EDIT_REPAIRS_2026-09-22.md) | Unreleased cave-wall cleanup, blocked-content export checks, mixed-terrain relief corrections and verification scope. |

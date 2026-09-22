@@ -1,5 +1,5 @@
 import type { MapProject } from "./domain";
-import { parseProject, serializeProject } from "./export";
+import { parseProject, serializeProject } from "./projectFile";
 
 export const LEGACY_PROJECT_AUTOSAVE_KEY = "pantokrator-atlas-project-v1";
 
@@ -78,6 +78,11 @@ export interface SaveProjectAutosaveOptions {
   expectedRevision?: AutosaveRevision | null;
   /** Explicit conflict resolution: replace only if both copies are still exactly the ones reviewed. */
   expectedBackendRevisions?: Partial<Record<Exclude<AutosaveBackend, "none">, AutosaveRevision | null>>;
+  /**
+   * `serializeProject(project)` when the caller already computed it for this
+   * unchanged project object; saves serializing the atlas a second time.
+   */
+  serialized?: string;
 }
 
 export interface LoadProjectAutosaveOptions {
@@ -113,6 +118,7 @@ export async function loadProjectAutosave(
         try {
           indexedDbProject = parseProject(serialized);
           indexedDbSerialized = serialized;
+          rememberReadableText(serialized, projectTimestamp(indexedDbProject));
         } catch (error) {
           errors.push(issue("indexeddb", "parse", error));
         }
@@ -133,6 +139,7 @@ export async function loadProjectAutosave(
         try {
           localStorageProject = parseProject(serialized);
           localStorageSerialized = serialized;
+          rememberReadableText(serialized, projectTimestamp(localStorageProject));
         } catch (error) {
           errors.push(issue("localstorage", "parse", error));
         }
@@ -310,12 +317,16 @@ export async function saveProjectAutosave(
   const errors: AutosaveIssue[] = [];
   let serialized: string;
   try {
-    serialized = serializeProject(project);
+    serialized = options.serialized ?? serializeProject(project);
   } catch (error) {
     errors.push(issue("indexeddb", "serialize", error));
     return { backend: "none", errors, migrated: false };
   }
   const nextRevision = autosaveRevision(serialized);
+  // serializeProject shape-checks the project before JSON encoding, so the
+  // written text parses back to this project; a later inspection of exactly
+  // this durable text need not parse the whole atlas again.
+  const rememberWritten = () => rememberReadableText(serialized, projectTimestamp(project));
   const expectedRevision = options.expectedRevision;
   const expectedBackendRevisions = options.expectedBackendRevisions;
   const resolvingConflict = expectedBackendRevisions !== undefined;
@@ -363,6 +374,7 @@ export async function saveProjectAutosave(
           errors.push(issue("localstorage", "remove", error));
         }
       }
+      rememberWritten();
       return { backend: "indexeddb", errors, migrated: false, revision: nextRevision };
     } catch (error) {
       errors.push(issue("indexeddb", "write", error));
@@ -383,6 +395,7 @@ export async function saveProjectAutosave(
       } else {
         await drivers.localstorage.set(serialized);
       }
+      rememberWritten();
       return { backend: "localstorage", errors, migrated: false, revision: nextRevision };
     } catch (error) {
       errors.push(issue("localstorage", "write", error));
@@ -483,7 +496,11 @@ export function createLocalStorageDriver(
     },
     async removeIfRevision(expectedRevision) {
       if (!lockManager) {
-        return { removed: false, current: storage.getItem(LEGACY_PROJECT_AUTOSAVE_KEY) };
+        const current = storage.getItem(LEGACY_PROJECT_AUTOSAVE_KEY);
+        // Nothing stored and nothing expected: there is nothing to delete or
+        // race against, so report success rather than a false tab conflict.
+        if (current === null && expectedRevision === null) return { removed: true, current: null };
+        return { removed: false, current };
       }
       return lockManager.request(LEGACY_PROJECT_AUTOSAVE_KEY, () => {
         const current = storage.getItem(LEGACY_PROJECT_AUTOSAVE_KEY);
@@ -630,7 +647,8 @@ interface AutosaveCandidate {
   available: boolean;
   raw: string | null;
   revision: AutosaveRevision | null;
-  project?: MapProject;
+  /** `projectTimestamp` of the parsed record; undefined when absent or unreadable. */
+  timestamp?: number;
 }
 
 async function inspectAutosave(drivers: AutosaveDrivers): Promise<AutosaveSnapshot> {
@@ -650,8 +668,14 @@ async function inspectAutosave(drivers: AutosaveDrivers): Promise<AutosaveSnapsh
         revision: revisionForStoredValue(raw),
       };
       if (raw !== null) {
-        try { candidate.project = parseProject(raw); }
-        catch (error) { errors.push(issue(backend, "parse", error)); }
+        const known = readableTextTimestamp(raw);
+        if (known !== undefined) candidate.timestamp = known;
+        else {
+          try {
+            candidate.timestamp = projectTimestamp(parseProject(raw));
+            rememberReadableText(raw, candidate.timestamp);
+          } catch (error) { errors.push(issue(backend, "parse", error)); }
+        }
       }
       return candidate;
     } catch (error) {
@@ -670,11 +694,11 @@ async function inspectAutosave(drivers: AutosaveDrivers): Promise<AutosaveSnapsh
     selected = indexeddb;
   } else if (localstorage.raw !== null && indexeddb.raw === null) {
     selected = localstorage;
-  } else if (indexeddb.project && (
-    !localstorage.project || projectTimestamp(indexeddb.project) > projectTimestamp(localstorage.project)
+  } else if (indexeddb.timestamp !== undefined && (
+    localstorage.timestamp === undefined || indexeddb.timestamp > localstorage.timestamp
   )) {
     selected = indexeddb;
-  } else if (localstorage.project) {
+  } else if (localstorage.timestamp !== undefined) {
     selected = localstorage;
   } else if (indexeddb.raw !== null) {
     selected = indexeddb;
@@ -691,9 +715,9 @@ async function inspectAutosave(drivers: AutosaveDrivers): Promise<AutosaveSnapsh
     },
     errors,
     readSafe,
-    divergentCopies: Boolean(indexeddb.project && localstorage.project && indexeddb.raw !== localstorage.raw),
+    divergentCopies: indexeddb.timestamp !== undefined && localstorage.timestamp !== undefined && indexeddb.raw !== localstorage.raw,
     recoveryCopies: [indexeddb, localstorage].flatMap((candidate) =>
-      candidate.raw !== null && !candidate.project ? [{ backend: candidate.backend, text: candidate.raw }] : []),
+      candidate.raw !== null && candidate.timestamp === undefined ? [{ backend: candidate.backend, text: candidate.raw }] : []),
   };
 }
 
@@ -787,14 +811,65 @@ async function conflictAfterRace(
   return conflictState(expectedRevision, latest, [...errors, ...latest.errors]);
 }
 
+/**
+ * One save fingerprints the same atlas text several times (the new text, then
+ * the stored copy read back from each backend and inside compare-and-set), so
+ * the most recent results are reused for byte-identical text.
+ */
+const recentRevisions: { text: string; revision: AutosaveRevision }[] = [];
+const RECENT_REVISION_LIMIT = 2;
+
 /** Stable compact fingerprint used as an optimistic autosave revision token. */
 export function autosaveRevision(serialized: string): AutosaveRevision {
-  let hash = 0xcbf29ce484222325n;
+  for (const entry of recentRevisions) if (entry.text === serialized) return entry.revision;
+  const revision = fnv1a64Revision(serialized);
+  recentRevisions.unshift({ text: serialized, revision });
+  if (recentRevisions.length > RECENT_REVISION_LIMIT) recentRevisions.length = RECENT_REVISION_LIMIT;
+  return revision;
+}
+
+/**
+ * 64-bit FNV-1a over UTF-16 code units, computed in four 16-bit limbs instead
+ * of BigInt arithmetic. Tokens are identical to the former BigInt version:
+ * `hash ^= code; hash = (hash * 0x100000001b3) mod 2^64` per code unit.
+ */
+function fnv1a64Revision(serialized: string): AutosaveRevision {
+  // Offset basis 0xcbf29ce484222325, least significant limb first.
+  let h0 = 0x2325;
+  let h1 = 0x8422;
+  let h2 = 0x9ce4;
+  let h3 = 0xcbf2;
   for (let index = 0; index < serialized.length; index += 1) {
-    hash ^= BigInt(serialized.charCodeAt(index));
-    hash = BigInt.asUintN(64, hash * 0x100000001b3n);
+    h0 ^= serialized.charCodeAt(index);
+    // The prime is 2^40 + 0x1b3: multiply each limb by 0x1b3, add the limbs
+    // shifted by 40 bits (two limbs plus 8 bits), and propagate carries.
+    const t0 = h0 * 0x1b3;
+    const t1 = h1 * 0x1b3 + (t0 >>> 16);
+    const t2 = h2 * 0x1b3 + (t1 >>> 16) + (h0 << 8);
+    const t3 = h3 * 0x1b3 + (t2 >>> 16) + (h1 << 8);
+    h0 = t0 & 0xffff;
+    h1 = t1 & 0xffff;
+    h2 = t2 & 0xffff;
+    h3 = t3 & 0xffff;
   }
-  return `fnv1a64:${serialized.length}:${hash.toString(16).padStart(16, "0")}`;
+  const high = ((h3 << 16) | h2) >>> 0;
+  const low = ((h1 << 16) | h0) >>> 0;
+  return `fnv1a64:${serialized.length}:${high.toString(16).padStart(8, "0")}${low.toString(16).padStart(8, "0")}`;
+}
+
+/**
+ * The most recent durable text known to parse, with the `projectTimestamp` its
+ * parse yields. Inspection before every guarded save reads back the record the
+ * previous save wrote; recognising it avoids re-parsing the whole atlas.
+ */
+let knownReadableText: { text: string; timestamp: number } | undefined;
+
+function rememberReadableText(text: string, timestamp: number): void {
+  knownReadableText = { text, timestamp };
+}
+
+function readableTextTimestamp(text: string): number | undefined {
+  return knownReadableText?.text === text ? knownReadableText.timestamp : undefined;
 }
 
 function revisionForStoredValue(value: string | null): AutosaveRevision | null {

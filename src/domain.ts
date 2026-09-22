@@ -545,7 +545,7 @@ export const MAGIC_PATH_LABELS: Record<MagicPath, string> = {
 export const RESOLUTION_PRESETS = {
   compact: { width: 1536, height: 1024, label: "Compact · 1536×1024" },
   "2k": { width: 2048, height: 1152, label: "2K · 2048×1152" },
-  "4k": { width: 3840, height: 2160, label: "ChatGPT max · 3840×2160" },
+  "4k": { width: 3840, height: 2160, label: "4K · 3840×2160" },
   "square-max": { width: 2880, height: 2880, label: "Square max · 2880×2880" },
 } as const;
 
@@ -620,17 +620,49 @@ export function effectiveProvinceTerrainFlags(
   return flags;
 }
 
+/**
+ * Allocation-free `effectiveProvinceTerrainFlags(province).has(flag)`. These
+ * predicates run inside generation's hottest loops, so they must not build a
+ * Set per call; the primary-terrain cases mirror the switch above exactly.
+ */
+function hasAuthoredTerrainFlag(
+  province: Pick<Province, "terrainFlags">,
+  first: TerrainFlag,
+  second?: TerrainFlag,
+): boolean {
+  for (const flag of province.terrainFlags ?? []) {
+    if (flag === first || (second !== undefined && flag === second)) return true;
+  }
+  return false;
+}
+
 export function isWaterProvince(province: Pick<Province, "terrain" | "terrainFlags" | "freshwater">): boolean {
-  return effectiveProvinceTerrainFlags(province).has("sea");
+  switch (province.terrain) {
+    case "sea":
+    case "deepsea":
+    case "kelp":
+      return true;
+    default:
+      return hasAuthoredTerrainFlag(province, "sea");
+  }
 }
 
 export function isCaveProvince(province: Pick<Province, "terrain" | "terrainFlags" | "freshwater">): boolean {
-  const flags = effectiveProvinceTerrainFlags(province);
-  return flags.has("cave") || flags.has("cavewall");
+  switch (province.terrain) {
+    case "cave":
+    case "caveforest":
+    case "caveswamp":
+    case "cavewaste":
+    case "cavehighland":
+    case "cavewall":
+      return true;
+    default:
+      return hasAuthoredTerrainFlag(province, "cave", "cavewall");
+  }
 }
 
 export function isBlockedProvince(province: Pick<Province, "terrain" | "terrainFlags" | "freshwater">): boolean {
-  return effectiveProvinceTerrainFlags(province).has("cavewall");
+  return province.terrain === "cavewall" || hasAuthoredTerrainFlag(province, "cavewall");
 }
 
 /**

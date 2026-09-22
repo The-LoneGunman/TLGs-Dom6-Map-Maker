@@ -87,6 +87,7 @@ test("installer payload contains only runtime, documentation, and required licen
       await readFile(path.join(fixture.output, "licenses", "dom6-catalog", "NOTICE.md"), "utf8"),
       "src/catalog/data/NOTICE.md",
     );
+    assert.equal(JSON.parse(await readFile(path.join(fixture.output, "package.json"), "utf8")).type, "module");
     await assert.rejects(readFile(path.join(fixture.output, "package-lock.json"), "utf8"));
   } finally {
     await rm(fixture.root, { recursive: true, force: true });

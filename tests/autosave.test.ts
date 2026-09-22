@@ -506,3 +506,19 @@ test("localStorage conditional writes require a cross-tab lock and serialize con
   assert.equal(refused.saved, false);
   assert.equal(JSON.parse(value!).seed, first.seed);
 });
+
+test("without a cross-tab lock, an empty legacy slot is not reported as a tab conflict", async () => {
+  let value: string | null = null;
+  const storage = {
+    getItem: () => value,
+    setItem: (_key: string, next: string) => { value = next; },
+    removeItem: () => { value = null; },
+  };
+  const unlocked = createLocalStorageDriver(storage, null);
+  assert.deepEqual(await unlocked.removeIfRevision!(null), { removed: true, current: null });
+
+  value = JSON.stringify(createDefaultProject("autosave-unlocked-remove"));
+  const refused = await unlocked.removeIfRevision!(autosaveRevision(value));
+  assert.equal(refused.removed, false);
+  assert.notEqual(value, null);
+});

@@ -174,6 +174,27 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
 
   useEffect(() => { onZoomChange?.(1); }, [onZoomChange]);
 
+  const wheelStateRef = useRef({ zoom: view.zoom, onZoomChange });
+  useEffect(() => { wheelStateRef.current = { zoom: view.zoom, onZoomChange }; }, [onZoomChange, view.zoom]);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    // React attaches wheel listeners as passive, where preventDefault is
+    // ignored and the page scrolls or pinch-zooms along with the map.
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const state = wheelStateRef.current;
+      const nextZoom = clamp(state.zoom * Math.exp(-event.deltaY * 0.001), 0.78, 4);
+      state.zoom = nextZoom;
+      setView((current) => ({ ...current, zoom: nextZoom }));
+      state.onZoomChange?.(nextZoom);
+    };
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", handleWheel);
+  }, []);
+
+  const drawnSizeRef = useRef<{ width: number; height: number } | undefined>(undefined);
+  const frameRef = useRef<number | undefined>(undefined);
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     const wrapper = wrapperRef.current;
@@ -191,6 +212,7 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
     }
     const context = canvas.getContext("2d");
     if (!context) return;
+    drawnSizeRef.current = { width, height };
     context.setTransform(dpr, 0, 0, dpr, 0, 0);
     context.clearRect(0, 0, width, height);
     context.fillStyle = mapBackgroundColor(plane, ownership);
@@ -207,11 +229,42 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
     drawVignette(context, width, height);
   }, [analysisProvinceIds, backgroundImage, cells, markerAnnotations, materialImages, ownership, plane, previewCondition, selectedId, topology, view]);
 
+  // Repaint once per change. Bursts of pan/zoom/hover updates coalesce into one
+  // paint per animation frame, always with the newest `draw`. A per-draw
+  // ResizeObserver used to repaint again on its initial notification, so every
+  // pan, zoom, edit and selection drew twice; one long-lived observer now
+  // repaints only when the wrapper's drawn size actually changes.
+  const drawRef = useRef(draw);
   useEffect(() => {
-    draw();
-    const observer = new ResizeObserver(draw);
-    if (wrapperRef.current) observer.observe(wrapperRef.current);
-    return () => observer.disconnect();
+    const wrapper = wrapperRef.current;
+    const drawNow = () => {
+      if (frameRef.current !== undefined) cancelAnimationFrame(frameRef.current);
+      frameRef.current = undefined;
+      drawRef.current();
+    };
+    // Resizes paint synchronously (before the browser presents the frame) so
+    // the canvas never shows a stale size.
+    const observer = new ResizeObserver(() => {
+      if (!wrapper) return;
+      const bounds = wrapper.getBoundingClientRect();
+      const drawn = drawnSizeRef.current;
+      if (drawn && drawn.width === Math.max(1, Math.floor(bounds.width)) && drawn.height === Math.max(1, Math.floor(bounds.height))) return;
+      drawNow();
+    });
+    if (wrapper) observer.observe(wrapper);
+    return () => {
+      observer.disconnect();
+      if (frameRef.current !== undefined) cancelAnimationFrame(frameRef.current);
+      frameRef.current = undefined;
+    };
+  }, []);
+  useEffect(() => {
+    drawRef.current = draw;
+    if (frameRef.current !== undefined) return;
+    frameRef.current = requestAnimationFrame(() => {
+      frameRef.current = undefined;
+      drawRef.current();
+    });
   }, [draw]);
 
   const screenToWorld = (clientX: number, clientY: number) => {
@@ -262,13 +315,6 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
     if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
   };
 
-  const handleWheel = (event: React.WheelEvent<HTMLCanvasElement>) => {
-    event.preventDefault();
-    const nextZoom = clamp(view.zoom * Math.exp(-event.deltaY * 0.001), 0.78, 4);
-    setView((current) => ({ ...current, zoom: nextZoom }));
-    onZoomChange?.(nextZoom);
-  };
-
   return (
     <>
       <div
@@ -307,7 +353,6 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
           onPointerUp={handlePointerUp}
           onPointerCancel={cancelPointer}
           onLostPointerCapture={cancelPointer}
-          onWheel={handleWheel}
           title={readableProvince ? `${readableProvince.index}. ${readableProvince.name}${readableBadges.length ? ` — ${readableBadges.map(badge => badge.label).join("; ")}` : ""}` : undefined}
         />
         {readableProvince && <div className="map-province-summary" aria-hidden="true">
@@ -354,7 +399,7 @@ export async function renderPlanePng(plane: Plane, condition: PreviewCondition, 
   const materialImages = await loadArtworkImages(procedural ? [] : planeMaterialAssets(plane, condition));
   const topology = computeProvinceTopology(plane);
   const cells = ownership.mode === "solid" ? topology.cells : [];
-  paintPlane(context, plane, cells, topology, ownership, condition, canvas.width, canvas.height, { labels: true, detail: true, materialImages, markerAnnotations });
+  paintPlane(context, plane, cells, topology, ownership, condition, canvas.width, canvas.height, { labels: true, detail: true, materialImages, markerAnnotations, transientMasks: true });
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("The preview image could not be encoded.")), "image/png");
   });
@@ -522,7 +567,7 @@ function paintPlane(
   condition: PreviewCondition,
   width: number,
   height: number,
-  options: { selectedId?: string; labels?: boolean; detail?: boolean; materialImages?: Map<string, HTMLImageElement>; markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations>; analysisProvinceIds?: ReadonlySet<string>; screenScale?: number },
+  options: { selectedId?: string; labels?: boolean; detail?: boolean; materialImages?: Map<string, HTMLImageElement>; markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations>; analysisProvinceIds?: ReadonlySet<string>; screenScale?: number; transientMasks?: boolean },
 ) {
   if (usesProceduralArtwork(plane)
     && paintProceduralPlane(context, plane, topology, ownership, condition, width, height, options)) return;
@@ -614,13 +659,14 @@ function proceduralPreviewKey(plane: Plane, condition: PreviewCondition): string
 function paintProceduralPlane(
   context: CanvasRenderingContext2D, plane: Plane, topology: ProvinceTopology,
   ownership: ProvinceOwnershipModel, condition: PreviewCondition, width: number, height: number,
-  options: { selectedId?: string; labels?: boolean; markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations>; analysisProvinceIds?: ReadonlySet<string>; screenScale?: number },
+  options: { selectedId?: string; labels?: boolean; markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations>; analysisProvinceIds?: ReadonlySet<string>; screenScale?: number; transientMasks?: boolean },
 ): boolean {
   // Raster at display density for interactive use and full density for PNGs.
   const size = proceduralPreviewSize(plane, width, height);
   if (!size) return false;
   const { width: rasterWidth, height: rasterHeight } = size;
   const key = proceduralPreviewKey(plane, condition);
+  let rasterOwners: Int16Array | undefined;
   if (!proceduralPreviewCache || proceduralPreviewCache.key !== key || proceduralPreviewCache.ownership !== ownership
     || proceduralPreviewCache.width !== rasterWidth || proceduralPreviewCache.height !== rasterHeight) {
     const canvas = document.createElement("canvas");
@@ -630,6 +676,7 @@ function paintProceduralPlane(
     const displayed: Plane = { ...plane, width: rasterWidth, height: rasterHeight,
       provinces: plane.provinces.map(province => ({ ...province, ...previewProvinceTerrain(province, condition) })) };
     const owners = samplePlaneOwnership(plane, rasterWidth, rasterHeight, ownership);
+    rasterOwners = owners;
     const rgb = plane.kind === "cloud" || plane.kind === "air"
       ? renderSkyRgb(displayed, owners, skyVariantForPreview(condition), `${planeGenerationKey(plane)}:sky-art`)
       : renderRealmRgb(displayed, owners, `${planeGenerationKey(plane)}:realm-art`);
@@ -646,7 +693,9 @@ function paintProceduralPlane(
   context.drawImage(proceduralPreviewCache.canvas, 0, 0, width, height);
   const maskWidth = Math.max(1, Math.round(width));
   const maskHeight = Math.max(1, Math.round(height));
-  const mask = sparsePaintMask(plane, ownership, maskWidth, maskHeight);
+  // Same integer size means the raster already sampled these exact pixel centres.
+  const mask = sparsePaintMask(plane, ownership, maskWidth, maskHeight, options.transientMasks,
+    rasterWidth === maskWidth && rasterHeight === maskHeight ? rasterOwners : undefined);
   context.save();
   context.scale(width / maskWidth, height / maskHeight);
   plane.provinces.forEach((province, index) => {
@@ -717,7 +766,7 @@ function paintSparsePlane(
   condition: PreviewCondition,
   width: number,
   height: number,
-  options: { selectedId?: string; labels?: boolean; detail?: boolean; materialImages?: Map<string, HTMLImageElement>; markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations>; analysisProvinceIds?: ReadonlySet<string>; screenScale?: number },
+  options: { selectedId?: string; labels?: boolean; detail?: boolean; materialImages?: Map<string, HTMLImageElement>; markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations>; analysisProvinceIds?: ReadonlySet<string>; screenScale?: number; transientMasks?: boolean },
 ) {
   const displayWidth = width;
   const displayHeight = height;
@@ -728,7 +777,7 @@ function paintSparsePlane(
   layer.height = height;
   const layerContext = layer.getContext("2d");
   if (!layerContext) return;
-  const mask = sparsePaintMask(plane, ownership, width, height);
+  const mask = sparsePaintMask(plane, ownership, width, height, options.transientMasks);
   const materialLayouts = new Map<string, SeamlessTileLayout>();
 
   plane.provinces.forEach((province, owner) => {
@@ -765,18 +814,38 @@ function paintSparsePlane(
   drawProvinceMarkers(context, plane, displayWidth, displayHeight, options);
 }
 
+/**
+ * Interactive masks are always cached: a 2560-pixel-wide window already exceeds
+ * 1.5 MP, and resampling on every pan/zoom repaint dominated sparse planes. At
+ * most two sizes per ownership model bound the memory. One-off PNG exports
+ * (`transient`) keep the former rule so native-size masks are not pinned.
+ * `owners` may supply an existing samplePlaneOwnership(plane, width, height) raster.
+ */
 function sparsePaintMask(
   plane: Plane,
   ownership: ProvinceOwnershipModel,
   width: number,
   height: number,
+  transient = false,
+  owners?: Int16Array,
 ): SparsePaintMask {
   const key = `${width}x${height}:${plane.provinces.length}`;
-  const cacheable = width * height <= 1_500_000;
+  const cacheable = !transient || width * height <= 1_500_000;
   const cached = sparsePaintMaskCache.get(ownership)?.get(key);
   if (cached) return cached;
-  const owners = samplePlaneOwnership(plane, width, height, ownership);
-  const ownerPaths = Array.from({ length: plane.provinces.length }, () => new Path2D());
+  const mask = buildSparsePaintMask(owners ?? samplePlaneOwnership(plane, width, height, ownership), plane.provinces.length, width, height);
+  if (cacheable) {
+    const masks = sparsePaintMaskCache.get(ownership) ?? new Map<string, SparsePaintMask>();
+    if (masks.size >= 2) masks.delete(masks.keys().next().value!);
+    masks.set(key, mask);
+    sparsePaintMaskCache.set(ownership, masks);
+  }
+  return mask;
+}
+
+/** Scanline runs of a width×height owner raster as per-owner and combined clip paths. */
+function buildSparsePaintMask(owners: Int16Array, ownerCount: number, width: number, height: number): SparsePaintMask {
+  const ownerPaths = Array.from({ length: ownerCount }, () => new Path2D());
   const combinedPath = new Path2D();
   for (let y = 0; y < height; y += 1) {
     const row = y * width;
@@ -794,14 +863,7 @@ function sparsePaintMask(
       runOwner = owner;
     }
   }
-  const mask = { ownerPaths, combinedPath };
-  if (cacheable) {
-    const masks = sparsePaintMaskCache.get(ownership) ?? new Map<string, SparsePaintMask>();
-    if (masks.size >= 2) masks.delete(masks.keys().next().value!);
-    masks.set(key, mask);
-    sparsePaintMaskCache.set(ownership, masks);
-  }
-  return mask;
+  return { ownerPaths, combinedPath };
 }
 
 function drawSparseTopologyBorders(

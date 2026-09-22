@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { type DryTerrainPreference, type Plane, type PlaneGenerationOverrides, type RegionalTerrainPlan } from "./domain";
+import { TERRAIN_LABELS, type DryTerrainPreference, type Plane, type PlaneGenerationOverrides, type RegionalTerrainPlan } from "./domain";
 import { assertPlaneGenerationOverrides, DRY_TERRAIN_PREFERENCES, generationControlSummary } from "./generationControls";
 
 /** Optional values are committed only on blur so incomplete keystrokes never change the atlas. */
@@ -39,20 +39,20 @@ export function PlanePreferencesPanel({ plane, onChange }: { plane: Plane; onCha
     {cave && <PreferenceNumber label="Cave ocean preference (%)" value={c.caveWaterPercent} max={60} onChange={v=>set("caveWaterPercent",v)} />}
     {plane.kind === "underworld" && <p>The River Styx remains an edge-to-edge barrier; water preferences never remove it.</p>}
     <details><summary>Dry-terrain weights and regional plans</summary>
-      <p>Weights 0–5 bias dry terrain; 1 inherits normal preference. Cave equivalents are used underground, where farm has no effect. Water and walls are excluded.</p>
-      <div className="field-grid two">{DRY_TERRAIN_PREFERENCES.map(t=><PreferenceNumber key={t} label={`${t} weight`} value={c.terrainWeights?.[t]} max={5} onChange={v=>{
+      <p>Weights 0–5 bias dry terrain; 1 inherits normal preference. Cave equivalents are used underground, where Farmland has no effect. Water and walls are excluded.</p>
+      <div className="field-grid two">{DRY_TERRAIN_PREFERENCES.map(t=><PreferenceNumber key={t} label={`${TERRAIN_LABELS[t]} weight`} value={c.terrainWeights?.[t]} max={5} onChange={v=>{
         const weights={...c.terrainWeights}; if(v===undefined)delete weights[t];else weights[t]=v;return update({...c,terrainWeights:weights});
       }} />)}</div>
       <label className="field"><span>Regional plan name</span><input maxLength={80} value={regionName} onChange={e=>setRegionName(e.target.value)} /></label>
       <label className="field"><span>Regional area</span><select value={regionArea} onChange={e=>setRegionArea(e.target.value)}><option value="north">North half</option><option value="south">South half</option><option value="west">West half</option><option value="east">East half</option><option value="center">Central quarter</option></select></label>
-      <label className="field"><span>Regional dry terrain</span><select value={regionTerrain} onChange={e=>setRegionTerrain(e.target.value as DryTerrainPreference)}>{DRY_TERRAIN_PREFERENCES.map(t=><option key={t}>{t}</option>)}</select></label>
+      <label className="field"><span>Regional dry terrain</span><select value={regionTerrain} onChange={e=>setRegionTerrain(e.target.value as DryTerrainPreference)}>{DRY_TERRAIN_PREFERENCES.map(t=><option key={t} value={t}>{TERRAIN_LABELS[t]}</option>)}</select></label>
       <button type="button" className="button quiet wide" disabled={!regionName.trim() || (c.regions?.length ?? 0)>=16} onClick={()=>{
         const bounds: Record<string, [number,number,number,number]>={north:[0,0,1,.5],south:[0,.5,1,1],west:[0,0,.5,1],east:[.5,0,1,1],center:[.25,.25,.75,.75]};
         const [x0,y0,x1,y1]=bounds[regionArea]!;
         const region:RegionalTerrainPlan={name:regionName.trim(),terrain:regionTerrain,x0,y0,x1,y1};update({...c,regions:[...c.regions??[],region]});
       }}>Add regional plan</button>
       <p>First matching region wins. Bounds are normalized to any map size; recipes support custom rectangles.</p>
-      {c.regions?.map((r,i)=><div className="iteration-actions" key={i}><span>{r.name}: {r.terrain}</span><button className="text-button" type="button" aria-label={`Remove regional plan ${r.name}`} onClick={()=>update({...c,regions:c.regions!.filter((_,j)=>j!==i)})}>Remove</button></div>)}
+      {c.regions?.map((r,i)=><div className="iteration-actions" key={i}><span>{r.name}: {TERRAIN_LABELS[r.terrain]}</span><button className="text-button" type="button" aria-label={`Remove regional plan ${r.name}`} onClick={()=>update({...c,regions:c.regions!.filter((_,j)=>j!==i)})}>Remove</button></div>)}
     </details>
     {surface && plane.ownershipMode !== "sparse" && <details><summary>Eligible dry-land border mix</summary>
       <p>Optional shares total at most 100%. Capital access, water, impassable borders and mountain barriers are preserved. These replace the selected topology policy on eligible edges only. River share budgets complete connected routes, including bridges; safe outlets and barriers can reduce the achieved share.</p>

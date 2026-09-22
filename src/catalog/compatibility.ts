@@ -53,17 +53,20 @@ export function provinceSiteLocationMask(province: Province, plane: Plane): numb
   const hasMountain = flags.has("highland") || flags.has("mountains");
   const hasSpecificLandType = flags.has("forest") || hasMountain || flags.has("waste")
     || flags.has("farm") || flags.has("sea") || flags.has("swamp") || flags.has("cave");
+  // Underwater forest and highland have their own site bits, so the dry-land
+  // bits describe only provinces without the sea flag.
+  const sea = flags.has("sea");
   if (!hasSpecificLandType) mask |= 1;
-  if (flags.has("forest")) mask |= 2;
-  if (hasMountain) mask |= 4;
-  if (flags.has("waste")) mask |= 8;
-  if (flags.has("farm")) mask |= 16;
-  if (flags.has("sea")) mask |= 32;
-  if (flags.has("swamp")) mask |= 128;
-  if (flags.has("deep") && flags.has("sea")) mask |= 256;
+  if (!sea && flags.has("forest")) mask |= 2;
+  if (!sea && hasMountain) mask |= 4;
+  if (!sea && flags.has("waste")) mask |= 8;
+  if (!sea && flags.has("farm")) mask |= 16;
+  if (sea) mask |= 32;
+  if (!sea && flags.has("swamp")) mask |= 128;
+  if (flags.has("deep") && sea) mask |= 256;
   if (flags.has("cave")) mask |= 512;
-  if (flags.has("sea") && hasMountain) mask |= 32_768;
-  if (flags.has("sea") && flags.has("forest")) mask |= 65_536;
+  if (sea && hasMountain) mask |= 32_768;
+  if (sea && flags.has("forest")) mask |= 65_536;
   const neighbors = plane.edges
     .filter((edge) => edge.a === province.id || edge.b === province.id)
     .map((edge) => plane.provinces.find((item) => item.id === (edge.a === province.id ? edge.b : edge.a)))

@@ -19,12 +19,12 @@ export function GenerationPlanSummary({ project, onReview }: { project: MapProje
     <details><summary>Province budget by plane</summary>
       <ul className="budget-planes">{budget.planes.map((row, i) => <li key={row.planeId}>
         <strong>{i + 1}. {row.name}: {row.current} → {row.target}</strong>
-        <span>{row.core ? "Core" : "Bonus"}{row.reserved ? " · generated starts blocked" : ""}. {row.reason}.</span>
+        <span>{row.core ? "Core" : "Bonus"}{row.reserved ? " · generated starts blocked" : ` · ${row.allocatedStarts} generated start${row.allocatedStarts === 1 ? "" : "s"}`}. {row.reason}.</span>
       </li>)}</ul>
       {budget.usesFallbackCore && <p>No core planes: bonus sizes reference Players × Provinces/player ({budget.referenceCore}), not a hidden core layer.</p>}
-      <p>Counts are planned, not a spacing guarantee. Review generation-plan errors before generating. Water quotas and themed guardian coverage can also produce best-effort notices.</p>
+      <p>Generate sizes each plane and places its generated starts from this same plan. Counts are planned, not a spacing guarantee. Review generation-plan errors before generating. Water quotas and themed guardian coverage can also produce best-effort notices.</p>
     </details>
-    <button type="button" className="button quiet wide" onClick={onReview} aria-haspopup="dialog">Review current starts</button>
+    <button type="button" className="button quiet wide" onClick={onReview} aria-haspopup="dialog">Start analysis…</button>
   </section>;
 }
 
@@ -59,10 +59,10 @@ export function StartBalancePanel({ project, fairness, errors, catalogVersion, o
   return <div className="balance-panel">
     <div className="analysis-status-grid">
       <div><span>Structural validity</span><strong>{errors ? `${errors} export blocker${errors === 1 ? "" : "s"}` : "No export blockers"}</strong></div>
-      <div><span>Legacy structural score</span><strong>{fairness.overall}/100</strong><small>{weakMetrics.length ? `Review: ${weakMetrics.map(([label, value]) => `${label} ${value}`).join("; ")}` : "No low headline subscores"}</small></div>
+      <div><span>Structural score</span><strong>{fairness.overall}/100</strong><small>{weakMetrics.length ? `Review: ${weakMetrics.map(([label, value]) => `${label} ${value}`).join("; ")}` : "No low headline subscores"}</small></div>
       <div><span>Analysis confidence</span><strong>Limited / assumptions shown</strong><small>Not a nation, economy, or combat balance certificate</small></div>
     </div>
-    <p>The legacy score uses population/farmland and graph-distance heuristics. A high average cannot override an export error or an individual weak region.</p>
+    <p>The structural score uses population/farmland and graph-distance heuristics. A high average cannot override an export error or an individual weak region.</p>
     <details className="ruleset-context"><summary>Game patch, era and mod assumptions</summary>
       <p>These declarations travel with project JSON and the host report; nothing is auto-detected. They never apply nation bonuses. When population-matched defenders are enabled, changing the patch, era or mods rechecks which verified army templates can be exported.</p>
       <label className="field"><span>Declared game patch <span className="scope-badge">Current Map</span></span>
@@ -90,7 +90,7 @@ export function StartBalancePanel({ project, fairness, errors, catalogVersion, o
     </label>
     <p>{mode === "structural" ? "Includes land/water transitions, rivers and passes as potential graph connections. Gates count as one step."
       : "Dry starts stay on dry provinces; water starts stay underwater. Rivers, passes, mountain borders, and corresponding custom border bits are excluded conservatively. Gates must remain in the same medium."}
-      {" "}Neither model simulates sailing, flight, seasonal scales, terrain movement costs, ownership, or conquest turns. Team-start labels are treated as alliances here; the host must configure the intended teams. The legacy score above is unchanged by this view.</p>
+      {" "}Neither model simulates sailing, flight, seasonal scales, terrain movement costs, ownership, or conquest turns. Team-start labels are treated as alliances here; the host must configure the intended teams. The structural score above is unchanged by this view.</p>
     {report.truncated && <p className="analysis-caution" role="alert">Showing only {report.starts.length} of {report.totalStarts} starts. Competition and overall spread are incomplete; reduce the start count for a complete comparison.</p>}
     {!report.starts.length ? <p>No generic, team, or nation-specific starts exist. Add starts or generate a map before comparing regions.</p> : <>
       {/* Keyboard users need a focus target to scroll this wide comparison without activating a row. */}
@@ -116,7 +116,7 @@ export function StartBalancePanel({ project, fairness, errors, catalogVersion, o
       <p>Fractional opportunity gives a full share for a distance lead, splits rival ties, and gives zero when a rival is closer. Allies do not compete; do not sum these as a team economy. Frontier exposure counts distinct hostile team/start regions touching the two-step neighbourhood, not individual gateway links. Shared surroundings include allies.</p>
       <p>Throne markers are planned locations, not confirmation of the engine’s final selection. Guardian counts cover authored groups only; random independents remain unknown. Resources, recruitment points, and actual income are not modeled.</p>
     </>}
-    <details><summary>All legacy subscores and notes</summary><ul>{metricEntries(fairness).map(([label, value]) => <li key={label}>{label}: {value}/100</li>)}</ul><ul>{fairness.notes.map(note => <li key={note}>{note}</li>)}</ul></details>
+    <details><summary>All structural subscores and notes</summary><ul>{metricEntries(fairness).map(([label, value]) => <li key={label}>{label}: {value}/100</li>)}</ul><ul>{fairness.notes.map(note => <li key={note}>{note}</li>)}</ul></details>
     <small>Model: {report.modelVersion} · neutral diagnostics only · selector snapshot {catalogVersion}</small>
   </div>;
 }

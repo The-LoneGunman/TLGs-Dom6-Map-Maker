@@ -46,7 +46,7 @@ export interface ProvinceChamberPrimitive {
   kind: "chamber";
   owner: number;
   center: Point;
-  /** Conservative outer radius in units of the plane's shorter pixel axis. */
+  /** Conservative outer radius in metric units: (dx * width / height, dy), i.e. plane-height pixels. */
   radius: number;
   /** Oriented contour radii in the same metric; their product controls chamber area. */
   radiusX: number;
@@ -131,9 +131,23 @@ interface TaggedPoint extends Point {
   incoming?: string;
 }
 
+/** The only province fields the periodic Voronoi partition reads. */
+type VoronoiSite = Pick<Province, "id" | "index" | "x" | "y">;
+interface VoronoiInput extends Pick<Plane, "wrapX" | "wrapY"> {
+  provinces: readonly VoronoiSite[];
+}
+
 const EPSILON = 1e-9;
 const topologyCache = new Map<string, ProvinceTopology>();
+/**
+ * PERF: the base Voronoi partition keyed only by what it reads (site order,
+ * identity, position and wrapping). Terrain, flags, edges and landform
+ * provenance change the full topology signature but never this partition, so
+ * content edits reuse it instead of re-clipping every cell.
+ */
+const voronoiCache = new Map<string, ProvinceTopology>();
 const ownershipCache = new Map<string, ProvinceOwnershipModel>();
+const rasterAuditCache = new Map<string, TopologyAudit | undefined>();
 
 export function connectionKey(a: string, b: string): string {
   return a < b ? `${a}|${b}` : `${b}|${a}`;
@@ -156,8 +170,8 @@ export function computeProvinceTopology(plane: Plane): ProvinceTopology {
     return cacheTopology(signature, { cells: [], pairs: [], pairKeys: new Set(), sharedBorders: new Map() });
   }
 
-  const solid = computeSolidProvinceTopology(plane);
   if (resolvePlaneOwnershipMode(plane) === "solid") {
+    const solid = baseVoronoiTopology(plane);
     const warp = createNaturalLandformWarp(plane);
     if (!warp) return cacheTopology(signature, solid);
     return cacheTopology(signature, {
@@ -172,10 +186,43 @@ export function computeProvinceTopology(plane: Plane): ProvinceTopology {
   const pairKeys = new Set(pairs.map((pair) => pair.key));
   const ownership = createProvinceOwnershipModel(plane, pairs);
   const sharedBorders = ownership.regionBorders ?? sparseSharedBorders(plane, ownership, pairKeys);
-  return cacheTopology(signature, { cells: solid.cells, pairs, pairKeys, sharedBorders });
+  // Sparse previews, exports and topology never read these legacy Voronoi
+  // cells, so build them on first access. The snapshot pins the geometry this
+  // topology was cached for; the enumerable getter keeps `.cells`, spreads,
+  // JSON and deep equality returning the same polygons as an eager field.
+  const sites: VoronoiInput = {
+    wrapX: plane.wrapX,
+    wrapY: plane.wrapY,
+    provinces: plane.provinces.map(({ id, index, x, y }) => ({ id, index, x, y })),
+  };
+  let cells: Cell[] | undefined;
+  return cacheTopology(signature, {
+    get cells() { return cells ??= baseVoronoiTopology(sites).cells; },
+    pairs,
+    pairKeys,
+    sharedBorders,
+  });
 }
 
-function computeSolidProvinceTopology(plane: Plane): ProvinceTopology {
+function baseVoronoiTopology(plane: VoronoiInput): ProvinceTopology {
+  const signature = voronoiSignature(plane);
+  const cached = voronoiCache.get(signature);
+  if (cached) return cached;
+  const topology = computeSolidProvinceTopology(plane);
+  if (voronoiCache.size >= 12) voronoiCache.delete(voronoiCache.keys().next().value!);
+  voronoiCache.set(signature, topology);
+  return topology;
+}
+
+function voronoiSignature(plane: VoronoiInput): string {
+  // Quoted IDs and exact number spellings (including -0) keep the key unambiguous.
+  const number = (value: number) => Object.is(value, -0) ? "-0" : String(value);
+  return `${plane.wrapX ? 1 : 0}${plane.wrapY ? 1 : 0}|${plane.provinces
+    .map((province) => `${JSON.stringify(province.id)}:${number(province.index)}:${number(province.x)}:${number(province.y)}`)
+    .join(";")}`;
+}
+
+function computeSolidProvinceTopology(plane: VoronoiInput): ProvinceTopology {
   const xImages = plane.wrapX ? [-1, 0, 1] : [0];
   const yImages = plane.wrapY ? [-1, 0, 1] : [0];
   const provinceIndex = new Map(plane.provinces.map((province, index) => [province.id, index]));
@@ -246,7 +293,7 @@ function computeSolidProvinceTopology(plane: Plane): ProvinceTopology {
   return { cells, pairs, pairKeys, sharedBorders };
 }
 
-function clippingCandidates(province: Province, plane: Plane): Province[] {
+function clippingCandidates(province: VoronoiSite, plane: VoronoiInput): VoronoiSite[] {
   const others = plane.provinces.filter((other) => other.id !== province.id);
   if (others.length <= 128) return others;
   const ranked = others.map((other) => {
@@ -264,7 +311,7 @@ function clippingCandidates(province: Province, plane: Plane): Province[] {
     const sector = Math.min(15, Math.floor(((angle + Math.PI) / (Math.PI * 2)) * 16));
     return { province: other, distance: dx * dx + dy * dy, sector };
   }).sort((left, right) => left.distance - right.distance || left.province.index - right.province.index);
-  const selected = new Map<string, Province>();
+  const selected = new Map<string, VoronoiSite>();
   for (const item of ranked.slice(0, 64)) selected.set(item.province.id, item.province);
   const sectorCounts = new Array<number>(16).fill(0);
   for (const item of ranked) {
@@ -286,6 +333,187 @@ export function auditPlaneTopology(plane: Plane, topology = computeProvinceTopol
     missing: topology.pairs.filter((pair) => !edgeByKey.has(pair.key)),
     extra: [...edgeByKey.values()].filter((pair) => !topology.pairKeys.has(pair.key)),
   };
+}
+
+/**
+ * Native-resolution audit of a chamber-and-corridor plane, in the same terms
+ * as auditPlaneTopology: `missing` lists provinces whose exported pixels touch
+ * (8-connected) without a connection, `extra` lists connections without a
+ * 4-connected shared border. Only windows where two unlinked shapes come
+ * within reach, plus each link's frontier, are sampled; a consistent plane
+ * costs a small fraction of rasterizing it. Connected-region and solid planes
+ * derive their borders differently and return undefined.
+ */
+export function auditSparseRasterTopology(plane: Plane): TopologyAudit | undefined {
+  if (resolvePlaneOwnershipMode(plane) !== "sparse" || usesConnectedRegions(plane) || !plane.provinces.length) return undefined;
+  const width = plane.width, height = plane.height;
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) return undefined;
+  if (plane.provinces.some((province) => !Number.isFinite(province.x) || !Number.isFinite(province.y))) return undefined;
+  // Validation reruns on every edit; the raster only changes with the ownership signature.
+  const signature = ownershipSignature(plane);
+  if (rasterAuditCache.has(signature)) return rasterAuditCache.get(signature);
+  const result = sparseRasterAudit(plane, width, height);
+  if (rasterAuditCache.size >= 8) rasterAuditCache.delete(rasterAuditCache.keys().next().value!);
+  rasterAuditCache.set(signature, result);
+  return result;
+}
+
+function sparseRasterAudit(plane: Plane, width: number, height: number): TopologyAudit {
+  const model = createProvinceOwnershipModel(plane);
+  const aspect = model.metricAspect;
+  const pixelX = aspect / width, pixelY = 1 / height, pixel = Math.max(pixelX, pixelY);
+  const reach = pixel * 2;
+  const indexById = new Map(plane.provinces.map((province, index) => [province.id, index]));
+  const linked = new Set<string>();
+  for (const edge of plane.edges) if (edge.a !== edge.b) linked.add(connectionKey(edge.a, edge.b));
+  const isLinked = (a: number, b: number) => linked.has(connectionKey(plane.provinces[a]!.id, plane.provinces[b]!.id));
+  // Mirrors samplePlaneOwnership and the D6M encoder, including forced capital pixels.
+  const capitals = new Map<number, number>();
+  plane.provinces.forEach((province, owner) => {
+    const x = clampNumber(Math.round(province.x * (width - 1)), 0, width - 1);
+    const y = clampNumber(Math.round(province.y * (height - 1)), 0, height - 1);
+    capitals.set(y * width + x, owner);
+  });
+  // Owners + 2, so 0 marks a pixel not sampled yet (D6M owners fit 16 bits).
+  const sampled = new Uint16Array(width * height);
+  const ownerAt = (x: number, y: number): number => {
+    if (plane.wrapX) x = ((x % width) + width) % width; else if (x < 0 || x >= width) return -1;
+    if (plane.wrapY) y = ((y % height) + height) % height; else if (y < 0 || y >= height) return -1;
+    const pixelIndex = y * width + x;
+    const cached = sampled[pixelIndex]!;
+    if (cached) return cached - 2;
+    let owner = capitals.get(pixelIndex) ?? model.ownerAt((x + 0.5) / width, (y + 0.5) / height);
+    if (owner >= plane.provinces.length) owner = -1;
+    sampled[pixelIndex] = owner + 2;
+    return owner;
+  };
+  const steps = [[1, 0, true], [0, 1, true], [1, 1, false], [-1, 1, false]] as const;
+  /** Visits each contact in a metric window; stops when `visit` returns true. */
+  const scan = (minX: number, minY: number, maxX: number, maxY: number, visit: (a: number, b: number, orthogonal: boolean) => boolean) => {
+    const x0 = Math.floor(minX / aspect * width) - 1, x1 = Math.ceil(maxX / aspect * width) + 1;
+    const y0 = Math.floor(minY * height) - 1, y1 = Math.ceil(maxY * height) + 1;
+    for (let y = y0; y <= y1; y += 1) for (let x = x0; x <= x1; x += 1) {
+      const a = ownerAt(x, y);
+      if (a < 0) continue;
+      for (const [dx, dy, orthogonal] of steps) {
+        const b = ownerAt(x + dx, y + dy);
+        if (b >= 0 && b !== a && visit(a, b, orthogonal)) return true;
+      }
+    }
+    return false;
+  };
+
+  // Every owned pixel lies inside one of its owner's pieces: a chamber, one
+  // half of a passage (split at the owners' bisector), a stub or its capital.
+  interface Piece { owner: number; ax: number; ay: number; bx: number; by: number; radius: number }
+  const pieces: Piece[] = [];
+  const tolerance = pixel * 2;
+  for (const primitive of model.primitives) {
+    if (primitive.kind === "chamber") {
+      const x = primitive.center.x * aspect, y = primitive.center.y;
+      pieces.push({ owner: primitive.owner, ax: x, ay: y, bx: x, by: y, radius: Math.max(primitive.radius, pixel * 2) });
+    } else if (primitive.kind === "boundary") {
+      pieces.push({ owner: primitive.owner, ax: primitive.from.x * aspect, ay: primitive.from.y,
+        bx: primitive.to.x * aspect, by: primitive.to.y, radius: primitive.halfWidth + tolerance });
+    } else {
+      const path = primitive.path ?? [primitive.from,
+        { x: (primitive.from.x + primitive.to.x) / 2, y: (primitive.from.y + primitive.to.y) / 2 }, primitive.to];
+      const middle = (path.length - 1) / 2;
+      for (let segment = 0; segment < path.length - 1; segment += 1) {
+        const from = path[segment]!, to = path[segment + 1]!;
+        const radius = primitive.halfWidths
+          ? Math.max(primitive.halfWidths[segment]!, primitive.halfWidths[segment + 1]!) : primitive.halfWidth;
+        pieces.push({ owner: primitive.owners[segment < middle ? 0 : 1], ax: from.x * aspect, ay: from.y,
+          bx: to.x * aspect, by: to.y, radius: radius + tolerance });
+      }
+    }
+  }
+  const offsetsX = plane.wrapX ? [-aspect, 0, aspect] : [0];
+  const offsetsY = plane.wrapY ? [-1, 0, 1] : [0];
+  // Bucket pieces on a province-spaced grid so only neighbouring pieces are compared.
+  const cellSize = Math.max(pixel, medianSpacing(nearestProvinceSpacings(plane, aspect)));
+  const columns = Math.max(1, Math.ceil(aspect / cellSize)), rows = Math.max(1, Math.ceil(1 / cellSize));
+  const span = (low: number, high: number, count: number, extent: number, wrap: boolean): [number, number] => {
+    const first = Math.floor(low / extent * count), last = Math.floor(high / extent * count);
+    return wrap ? [first, last] : [clampNumber(first, 0, count - 1), clampNumber(last, 0, count - 1)];
+  };
+  const wrapCell = (cell: number, count: number) => ((cell % count) + count) % count;
+  const cells = new Map<number, number[]>();
+  pieces.forEach((piece, index) => {
+    const pad = piece.radius + reach;
+    const [left, right] = span(Math.min(piece.ax, piece.bx) - pad, Math.max(piece.ax, piece.bx) + pad, columns, aspect, plane.wrapX);
+    const [top, bottom] = span(Math.min(piece.ay, piece.by) - pad, Math.max(piece.ay, piece.by) + pad, rows, 1, plane.wrapY);
+    for (let row = top; row <= bottom; row += 1) for (let column = left; column <= right; column += 1) {
+      const key = wrapCell(row, rows) * columns + wrapCell(column, columns);
+      const list = cells.get(key) ?? [];
+      if (list.at(-1) !== index) list.push(index);
+      cells.set(key, list);
+    }
+  });
+  const unlinked = new Map<string, TopologyPair>();
+  const compared = new Set<string>();
+  const record = (a: number, b: number) => {
+    if (isLinked(a, b)) return false;
+    const [first, second] = plane.provinces[a]!.index <= plane.provinces[b]!.index ? [a, b] : [b, a];
+    const key = connectionKey(plane.provinces[first]!.id, plane.provinces[second]!.id);
+    unlinked.set(key, { a: plane.provinces[first]!.id, b: plane.provinces[second]!.id, key });
+    return false;
+  };
+  for (const list of cells.values()) {
+    for (let left = 0; left < list.length; left += 1) for (let right = left + 1; right < list.length; right += 1) {
+      const p = pieces[list[left]!]!, q = pieces[list[right]!]!;
+      if (p.owner === q.owner || isLinked(p.owner, q.owner)) continue;
+      const pairKey = `${Math.min(list[left]!, list[right]!)}:${Math.max(list[left]!, list[right]!)}`;
+      if (compared.has(pairKey)) continue;
+      compared.add(pairKey);
+      for (const oy of offsetsY) for (const ox of offsetsX) {
+        const gap = Math.sqrt(segmentDistanceSquared(p.ax, p.ay, p.bx, p.by, q.ax + ox, q.ay + oy, q.bx + ox, q.by + oy));
+        if (gap >= p.radius + q.radius + reach) continue;
+        // Sample where the two dilated pieces overlap.
+        const minX = Math.max(Math.min(p.ax, p.bx) - p.radius, Math.min(q.ax, q.bx) + ox - q.radius) - reach;
+        const maxX = Math.min(Math.max(p.ax, p.bx) + p.radius, Math.max(q.ax, q.bx) + ox + q.radius) + reach;
+        const minY = Math.max(Math.min(p.ay, p.by) - p.radius, Math.min(q.ay, q.by) + oy - q.radius) - reach;
+        const maxY = Math.min(Math.max(p.ay, p.by) + p.radius, Math.max(q.ay, q.by) + oy + q.radius) + reach;
+        if (minX <= maxX && minY <= maxY) scan(minX, minY, maxX, maxY, record);
+      }
+    }
+  }
+
+  const edgesWithoutBorder: TopologyPair[] = [];
+  const corridors = new Map(model.primitives.flatMap((primitive) =>
+    primitive.kind === "corridor" ? [[primitive.key, primitive] as const] : []));
+  for (const pair of intentionalPairs(plane)) {
+    const a = indexById.get(pair.a)!, b = indexById.get(pair.b)!;
+    const corridor = corridors.get(pair.key);
+    const meets = (left: number, right: number, orthogonal: boolean) => orthogonal
+      && ((left === a && right === b) || (left === b && right === a));
+    let found = false;
+    if (corridor) {
+      const radius = Math.max(corridor.halfWidth, ...(corridor.halfWidths ?? [])) + tolerance;
+      const middleX = (corridor.from.x + corridor.to.x) / 2 * aspect, middleY = (corridor.from.y + corridor.to.y) / 2;
+      // The two owners meet on their bisector: probe along it first.
+      const dx = (corridor.to.x - corridor.from.x) * aspect, dy = corridor.to.y - corridor.from.y;
+      const length = Math.hypot(dx, dy);
+      if (length > EPSILON) {
+        const nx = -dy / length, ny = dx / length;
+        for (let offset = -radius; offset <= radius && !found; offset += pixel / 2) {
+          const x = Math.floor((middleX + nx * offset) / aspect * width), y = Math.floor((middleY + ny * offset) * height);
+          const owner = ownerAt(x, y);
+          if (owner !== a && owner !== b) continue;
+          const other = owner === a ? b : a;
+          found = ownerAt(x + 1, y) === other || ownerAt(x - 1, y) === other
+            || ownerAt(x, y + 1) === other || ownerAt(x, y - 1) === other;
+        }
+      }
+      if (!found) {
+        const points = corridor.path ?? [corridor.from, corridor.to];
+        found = scan(Math.min(...points.map((point) => point.x)) * aspect - radius, Math.min(...points.map((point) => point.y)) - radius,
+          Math.max(...points.map((point) => point.x)) * aspect + radius, Math.max(...points.map((point) => point.y)) + radius, meets);
+      }
+    }
+    if (!found) edgesWithoutBorder.push(pair);
+  }
+  return { missing: [...unlinked.values()], extra: edgesWithoutBorder };
 }
 
 export function resolvePlaneOwnershipMode(plane: Pick<Plane, "kind" | "ownershipMode">): PlaneOwnershipMode {
@@ -389,16 +617,11 @@ export function createProvinceOwnershipModel(
     const b = provinceById.get(pair.b);
     if (!a || !b || a.index === b.index) continue;
     const to = shortestPeriodicEndpoint(a.province, b.province, plane);
-    const widthRoll = deterministicUnit(`${planeGenerationKey(plane)}:${plane.kind}:${pair.key}:corridor-width`);
-    const floodedCaveConnector = isCaveFamilyKind(plane.kind)
-      && (isWaterProvince(a.province) || isWaterProvince(b.province));
     const styxConnector = plane.kind === "underworld"
       && isWaterProvince(a.province)
       && isWaterProvince(b.province);
-    const widthScale = interpolate(profile.corridorWidthRange[0], profile.corridorWidthRange[1], widthRoll)
-      * (floodedCaveConnector ? 1.12 : 1)
-      * (styxConnector ? 1.34 : 1);
-    const halfWidth = Math.max(pixelFloor * 0.72, spacing * profile.corridorScale * widthScale);
+    const halfWidth = sparseCorridorHalfWidth(plane, profile, spacing, pixelFloor, pair.key,
+      isWaterProvince(a.province), isWaterProvince(b.province));
     primitives.push({
       kind: "corridor",
       owners: [a.index, b.index],
@@ -440,9 +663,32 @@ export function createProvinceOwnershipModel(
   }
 
   const primitiveCopies = buildSparsePrimitiveCopies(primitives, plane, metricAspect);
-  const buckets = bucketSparsePrimitiveCopies(primitiveCopies, columns, rows);
+  const copies = packSparsePrimitiveCopies(primitiveCopies, metricAspect);
+  const lookup = refineSparseBuckets(bucketSparsePrimitiveCopies(primitiveCopies, columns, rows), copies, columns, rows);
+  const { fineColumns, fineRows, offsets: lookupOffsets, entries: lookupEntries } = lookup;
   const styxEdgeInsetX = 1 / Math.max(1, Math.round(plane.width));
   const styxEdgeInsetY = 1 / Math.max(1, Math.round(plane.height));
+  // An explicit Styx crossing is drawn over the river it crosses: its straight
+  // tube stays with its two banks, so the crossing remains a shared border and
+  // the water it cuts meets it only as the ford links the generator declares.
+  const crossingKeys = plane.kind === "underworld"
+    ? new Set(plane.edges.filter(isExplicitBridge).map((edge) => connectionKey(edge.a, edge.b)))
+    : new Set<string>();
+  const crossings = new Uint8Array(primitives.length);
+  primitives.forEach((primitive, index) => {
+    if (primitive.kind === "corridor" && !primitive.path && crossingKeys.has(primitive.key)) crossings[index] = 1;
+  });
+  // PERF: per-sample scratch, reused instead of two Sets per call. Linear
+  // de-duplication keeps the Sets' first-insertion order, which the nearest
+  // owner's EPSILON tie scan depends on. A bucket copy adds at most two owners.
+  const scratchSize = 2 * Math.max(1, lookup.longest);
+  const candidates = new Int32Array(scratchSize);
+  const crossingOwners = new Int32Array(scratchSize);
+  const addOwner = (list: Int32Array, count: number, owner: number): number => {
+    for (let index = 0; index < count; index += 1) if (list[index] === owner) return count;
+    list[count] = owner;
+    return count + 1;
+  };
   return cacheOwnership(signature, {
     mode,
     metricAspect,
@@ -460,45 +706,63 @@ export function createProvinceOwnershipModel(
         if (styxBoundary.axis === "x" ? ySide : xSide) return -1;
         restrictedStyxSide = styxBoundary.axis === "x" ? xSide : ySide;
       }
-      const bucketX = Math.max(0, Math.min(columns - 1, Math.floor(nx * columns)));
-      const bucketY = Math.max(0, Math.min(rows - 1, Math.floor(ny * rows)));
-      const candidates = new Set<number>();
-      for (const copy of buckets[bucketY * columns + bucketX]!) {
-        const primitive = primitives[copy.primitiveIndex]!;
+      // Scaling by a power of two is exact, so this fine cell lies inside the
+      // coarse bucket floor(n * columns/rows) the lookup has always used.
+      const bucketX = Math.max(0, Math.min(fineColumns - 1, Math.floor(nx * fineColumns)));
+      const bucketY = Math.max(0, Math.min(fineRows - 1, Math.floor(ny * fineRows)));
+      const bucket = bucketY * fineColumns + bucketX;
+      // A non-finite coordinate has no bucket; keep the former lookup failure.
+      if (Number.isNaN(bucket)) throw new TypeError("Sparse ownership cannot sample a non-finite coordinate.");
+      let candidateCount = 0;
+      let crossingCount = 0;
+      for (let slot = lookupOffsets[bucket]!, end = lookupOffsets[bucket + 1]!; slot < end; slot += 1) {
+        const copy = lookupEntries[slot]!;
+        // PERF: every shape test below is false outside its copy's padded
+        // bounding box, so skipping those copies cannot change the owner.
+        if (nx < copies.minX[copy]! || nx > copies.maxX[copy]! || ny < copies.minY[copy]! || ny > copies.maxY[copy]!) continue;
+        const primitiveIndex = copies.primitiveIndex[copy]!;
+        const offsetX = copies.offsetX[copy]!, offsetY = copies.offsetY[copy]!;
+        const primitive = primitives[primitiveIndex]!;
         if (restrictedStyxSide
           && (primitive.kind !== "boundary"
             || primitive.axis !== styxBoundary?.axis
             || primitive.side !== restrictedStyxSide)) continue;
         if (primitive.kind === "chamber") {
-          const dx = (nx - (primitive.center.x + copy.offsetX)) * metricAspect;
-          const dy = ny - (primitive.center.y + copy.offsetY);
-          if (pointInsideChamber(dx, dy, primitive)) candidates.add(primitive.owner);
+          const dx = (nx - (primitive.center.x + offsetX)) * metricAspect;
+          const dy = ny - (primitive.center.y + offsetY);
+          if (pointInsideChamber(dx, dy, primitive)) candidateCount = addOwner(candidates, candidateCount, primitive.owner);
           continue;
         }
-        if (primitive.kind === "corridor" && primitive.path && copy.segmentIndex !== undefined) {
-          if (pointInsideCorridorSegment(nx - copy.offsetX, ny - copy.offsetY, primitive, copy.segmentIndex, metricAspect)) {
-            candidates.add(primitive.owners[0]);
-            candidates.add(primitive.owners[1]);
+        const segmentIndex = copies.segmentIndex[copy]!;
+        if (primitive.kind === "corridor" && primitive.path && segmentIndex >= 0) {
+          if (pointInsideCorridorSegment(nx - offsetX, ny - offsetY, primitive, segmentIndex, metricAspect)) {
+            candidateCount = addOwner(candidates, candidateCount, primitive.owners[0]);
+            candidateCount = addOwner(candidates, candidateCount, primitive.owners[1]);
           }
           continue;
         }
         const distance = pointSegmentDistanceSquared(
           nx * metricAspect,
           ny,
-          (primitive.from.x + copy.offsetX) * metricAspect,
-          primitive.from.y + copy.offsetY,
-          (primitive.to.x + copy.offsetX) * metricAspect,
-          primitive.to.y + copy.offsetY,
+          (primitive.from.x + offsetX) * metricAspect,
+          primitive.from.y + offsetY,
+          (primitive.to.x + offsetX) * metricAspect,
+          primitive.to.y + offsetY,
         );
         if (distance <= primitive.halfWidth * primitive.halfWidth + EPSILON) {
-          if (primitive.kind === "boundary") candidates.add(primitive.owner);
+          if (primitive.kind === "boundary") candidateCount = addOwner(candidates, candidateCount, primitive.owner);
           else {
-            candidates.add(primitive.owners[0]);
-            candidates.add(primitive.owners[1]);
+            candidateCount = addOwner(candidates, candidateCount, primitive.owners[0]);
+            candidateCount = addOwner(candidates, candidateCount, primitive.owners[1]);
+            if (crossings[primitiveIndex]) {
+              crossingCount = addOwner(crossingOwners, crossingCount, primitive.owners[0]);
+              crossingCount = addOwner(crossingOwners, crossingCount, primitive.owners[1]);
+            }
           }
         }
       }
-      return candidates.size ? nearestMetricOwner(nx, ny, [...candidates], plane, metricAspect) : -1;
+      if (crossingCount) return nearestMetricOwner(nx, ny, crossingOwners, crossingCount, plane, metricAspect);
+      return candidateCount ? nearestMetricOwner(nx, ny, candidates, candidateCount, plane, metricAspect) : -1;
     },
   });
 }
@@ -506,6 +770,296 @@ export function createProvinceOwnershipModel(
 /** Backward-compatible resolver name; sparse models can now return -1. */
 export function createProvinceOwnerResolver(plane: Plane): ProvinceOwnerResolver {
   return createProvinceOwnershipModel(plane);
+}
+
+/** A planned straight passage: a movement pair, or a Styx stub from one owner to a nonwrapped map edge. */
+export interface SparsePassage {
+  a: string;
+  b?: string;
+  boundary?: { axis: "x" | "y"; side: "low" | "high" };
+}
+
+/**
+ * Conservative analytic clearance for generated chamber-and-corridor planes.
+ * Every chamber is bounded by the same outer radius cap the ownership model
+ * applies. Passages use their exact corridor width once the water that
+ * widens Styx corridors is known (`water`), or the widest possible width
+ * before then. A graph accepted here cannot acquire a native raster contact
+ * between two provinces that are not linked, nor lose a declared link's contact.
+ */
+export interface SparsePassagePlanner {
+  /** A passage keeps a drawable gap from every chamber except its own endpoints'. */
+  clear(passage: SparsePassage): boolean;
+  /** Provinces whose chambers a passage would reach. */
+  blockers(passage: SparsePassage): string[];
+  /**
+   * Two passages cannot create a contact that is not one of their own links.
+   * Passages sharing one endpoint only interact through their far halves;
+   * `linked` may exempt a far-end pair that is itself a protected link.
+   */
+  compatible(first: SparsePassage, second: SparsePassage, linked?: (a: string, b: string) => boolean): boolean;
+  /**
+   * Contacts a straight explicit bridge creates when it crosses other shapes,
+   * as bridge endpoint plus touched owner. Undefined when the bridge would cut
+   * the shared frontier of another link, or cover another province's centre
+   * unless `coverCentres` accepts that (the covered province then touches both
+   * halves, and its contacts are marked `covered`).
+   */
+  bridgeContacts(
+    a: string,
+    b: string,
+    passages: Iterable<SparsePassage>,
+    options?: { coverCentres?: boolean },
+  ): Array<{ endpoint: string; owner: string; covered?: boolean }> | undefined;
+  /**
+   * Whether a ford from a bridge endpoint keeps its own contact with that
+   * endpoint: its shared frontier lies outside the straight bridge, or it
+   * leaves the bridge beside the endpoint's own half of the crossing.
+   */
+  fordMeetsBank(endpoint: string, water: string, bridge: readonly [string, string]): boolean;
+}
+
+interface MetricSegment { ax: number; ay: number; bx: number; by: number }
+interface MetricPassage {
+  owners: readonly number[];
+  segment: MetricSegment;
+  halfWidth: number;
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
+/** Native pixels kept between unrelated sparse shapes; above the √2 reach of an 8-connected pixel. */
+const SPARSE_RASTER_MARGIN_PIXELS = 2;
+
+export function createSparsePassagePlanner(plane: Plane, water?: (provinceId: string) => boolean): SparsePassagePlanner {
+  const aspect = plane.height > 0 && Number.isFinite(plane.width / plane.height)
+    ? Math.max(0.08, Math.min(12, plane.width / plane.height))
+    : 1;
+  const pixel = Math.max(aspect / Math.max(1, plane.width), 1 / Math.max(1, plane.height));
+  const margin = pixel * SPARSE_RASTER_MARGIN_PIXELS;
+  const pixelFloor = 2 / Math.max(1, Math.min(plane.width, plane.height));
+  const nearest = nearestProvinceSpacings(plane, aspect);
+  const spacing = medianSpacing(nearest);
+  const profile = sparseProfile(plane.kind);
+  // Mirrors createChamberPrimitive's safe outer radius and the widest
+  // (flooded/Styx) corridor roll in createProvinceOwnershipModel. Styx edge
+  // stubs average their owner's water corridors, so they use that bound too.
+  const chamberBound = nearest.map((local) => Math.max(pixelFloor * 1.25, local * 0.43));
+  const maximumChamber = Math.max(0, ...chamberBound);
+  const halfWidth = Math.max(pixelFloor * 0.72, spacing * profile.corridorScale * profile.corridorWidthRange[1]
+    * (isCaveFamilyKind(plane.kind) ? 1.12 : 1) * (plane.kind === "underworld" ? 1.34 : 1));
+  const corridorHalfWidth = (a: number, b: number) => water
+    ? sparseCorridorHalfWidth(plane, profile, spacing, pixelFloor, connectionKey(idOf(a), idOf(b)), water(idOf(a)), water(idOf(b)))
+    : halfWidth;
+  const indexById = new Map(plane.provinces.map((province, index) => [province.id, index]));
+  const idOf = (index: number) => plane.provinces[index]!.id;
+  const offsetsX = plane.wrapX ? [-aspect, 0, aspect] : [0];
+  const offsetsY = plane.wrapY ? [-1, 0, 1] : [0];
+  const resolved = new Map<string, MetricPassage | null>();
+  const blockerCache = new Map<string, string[]>();
+  const keyOf = (passage: SparsePassage) => passage.boundary
+    ? `${passage.a}>${passage.boundary.axis}:${passage.boundary.side}`
+    : passage.b === undefined ? passage.a : connectionKey(passage.a, passage.b);
+  const metric = (owners: readonly number[], ax: number, ay: number, bx: number, by: number): MetricPassage => ({
+    owners, halfWidth: owners.length === 2 ? corridorHalfWidth(owners[0]!, owners[1]!) : halfWidth, segment: { ax, ay, bx, by },
+    minX: Math.min(ax, bx), maxX: Math.max(ax, bx), minY: Math.min(ay, by), maxY: Math.max(ay, by),
+  });
+
+  const resolve = (passage: SparsePassage): MetricPassage | undefined => {
+    const key = keyOf(passage);
+    const cached = resolved.get(key);
+    if (cached !== undefined) return cached ?? undefined;
+    let result: MetricPassage | undefined;
+    const a = indexById.get(passage.a);
+    if (a !== undefined) {
+      const from = plane.provinces[a]!;
+      if (passage.boundary) {
+        const to = passage.boundary.axis === "x"
+          ? { x: passage.boundary.side === "low" ? 0 : 1, y: from.y }
+          : { x: from.x, y: passage.boundary.side === "low" ? 0 : 1 };
+        result = metric([a], from.x * aspect, from.y, to.x * aspect, to.y);
+      } else {
+        const b = passage.b === undefined ? undefined : indexById.get(passage.b);
+        if (b !== undefined && b !== a) {
+          const to = shortestPeriodicEndpoint(from, plane.provinces[b]!, plane);
+          result = metric([a, b], from.x * aspect, from.y, to.x * aspect, to.y);
+        }
+      }
+    }
+    resolved.set(key, result ?? null);
+    return result;
+  };
+  const half = (passage: MetricPassage, owner: number): MetricSegment => {
+    const { ax, ay, bx, by } = passage.segment;
+    const mx = (ax + bx) / 2, my = (ay + by) / 2;
+    return passage.owners[0] === owner ? { ax, ay, bx: mx, by: my } : { ax: mx, ay: my, bx, by };
+  };
+  const boxesNear = (left: MetricPassage, right: MetricPassage, reach: number): boolean => {
+    for (const oy of offsetsY) for (const ox of offsetsX) {
+      const dx = Math.max(0, right.minX + ox - left.maxX, left.minX - right.maxX - ox);
+      const dy = Math.max(0, right.minY + oy - left.maxY, left.minY - right.maxY - oy);
+      if (dx * dx + dy * dy < reach * reach) return true;
+    }
+    return false;
+  };
+  const segmentGap = (left: MetricSegment, right: MetricSegment): number => {
+    let best = Infinity;
+    for (const oy of offsetsY) for (const ox of offsetsX) {
+      best = Math.min(best, segmentDistanceSquared(left.ax, left.ay, left.bx, left.by,
+        right.ax + ox, right.ay + oy, right.bx + ox, right.by + oy));
+    }
+    return Math.sqrt(best);
+  };
+  const pointGap = (x: number, y: number, segment: MetricSegment): number => {
+    let best = Infinity;
+    for (const oy of offsetsY) for (const ox of offsetsX) {
+      best = Math.min(best, pointSegmentDistanceSquared(x + ox, y + oy, segment.ax, segment.ay, segment.bx, segment.by));
+    }
+    return Math.sqrt(best);
+  };
+  const nearbyChambers = (passage: MetricPassage, reach: number): number[] => {
+    const extent = reach + maximumChamber;
+    const found: number[] = [];
+    plane.provinces.forEach((province, index) => {
+      for (const oy of offsetsY) for (const ox of offsetsX) {
+        const x = province.x * aspect + ox, y = province.y + oy;
+        if (x >= passage.minX - extent && x <= passage.maxX + extent && y >= passage.minY - extent && y <= passage.maxY + extent) {
+          found.push(index);
+          return;
+        }
+      }
+    });
+    return found;
+  };
+  /**
+   * A passage leaving a straight bridge endpoint keeps its own contact with
+   * that endpoint when its frontier lies outside the crossing, or when it
+   * leaves the crossing beside the endpoint's own half.
+   */
+  const meetsBank = (passage: MetricPassage, endpoint: number, crossing: MetricPassage): boolean => {
+    // Both passages start at the endpoint; compare them in its frame.
+    const s = crossing.segment, f = passage.segment;
+    const ux = crossing.owners[0] === endpoint ? s.bx - s.ax : s.ax - s.bx;
+    const uy = crossing.owners[0] === endpoint ? s.by - s.ay : s.ay - s.by;
+    const vx = passage.owners[0] === endpoint ? f.bx - f.ax : f.ax - f.bx;
+    const vy = passage.owners[0] === endpoint ? f.by - f.ay : f.ay - f.by;
+    const length = Math.hypot(ux, uy), passageLength = Math.hypot(vx, vy);
+    if (length <= EPSILON || passageLength <= EPSILON) return false;
+    const reach = passage.halfWidth + crossing.halfWidth + margin;
+    // Distance from the crossing grows monotonically along the passage.
+    for (let step = 1; step <= 64; step += 1) {
+      const t = step / 64, x = vx * t, y = vy * t;
+      if (Math.sqrt(pointSegmentDistanceSquared(x, y, 0, 0, ux, uy)) < reach) continue;
+      if (t * passageLength <= passageLength / 2 - margin) return true;
+      return (x * ux + y * uy) / length + passage.halfWidth <= length / 2 - margin;
+    }
+    return false;
+  };
+  const blockers = (passage: SparsePassage): string[] => {
+    const key = keyOf(passage);
+    const cached = blockerCache.get(key);
+    if (cached) return cached;
+    const metricPassage = resolve(passage);
+    const result: string[] = [];
+    if (metricPassage) {
+      for (const index of nearbyChambers(metricPassage, metricPassage.halfWidth + margin)) {
+        if (metricPassage.owners.includes(index)) continue;
+        const province = plane.provinces[index]!;
+        if (pointGap(province.x * aspect, province.y, metricPassage.segment)
+          < chamberBound[index]! + metricPassage.halfWidth + margin) result.push(province.id);
+      }
+    }
+    blockerCache.set(key, result);
+    return result;
+  };
+
+  return {
+    clear: (passage) => !!resolve(passage) && !blockers(passage).length,
+    blockers,
+    compatible(first, second, linked) {
+      const left = resolve(first), right = resolve(second);
+      if (!left || !right) return false;
+      const reach = left.halfWidth + right.halfWidth + margin;
+      if (!boxesNear(left, right, reach)) return true;
+      const shared = left.owners.filter((owner) => right.owners.includes(owner));
+      const leftOnly = left.owners.filter((owner) => !shared.includes(owner));
+      const rightOnly = right.owners.filter((owner) => !shared.includes(owner));
+      // The same link, or a stub and a passage of its own owner: any contact is linked.
+      if (!leftOnly.length || !rightOnly.length) return true;
+      if (!shared.length) return segmentGap(left.segment, right.segment) >= reach;
+      const p = leftOnly[0]!, q = rightOnly[0]!;
+      if (linked?.(idOf(p), idOf(q))) return true;
+      // Pixels on the shared owner's half belong to it and may touch either
+      // neighbour; only the two far halves could meet as an unlinked pair.
+      return segmentGap(half(left, p), half(right, q)) >= reach;
+    },
+    bridgeContacts(a, b, passages, options) {
+      const bridge = resolve({ a, b });
+      if (!bridge) return undefined;
+      const [ai, bi] = bridge.owners as [number, number];
+      const halves = [{ owner: ai, segment: half(bridge, ai) }, { owner: bi, segment: half(bridge, bi) }];
+      const contacts = new Map<string, { endpoint: string; owner: string; covered?: boolean }>();
+      const covered = new Set<number>();
+      const add = (endpoint: number, owner: number) => {
+        if (endpoint === owner || bridge.owners.includes(owner)) return;
+        contacts.set(`${endpoint}:${owner}`, {
+          endpoint: idOf(endpoint), owner: idOf(owner), ...(covered.has(owner) ? { covered: true } : {}),
+        });
+      };
+      for (const index of nearbyChambers(bridge, bridge.halfWidth + margin)) {
+        if (bridge.owners.includes(index)) continue;
+        const province = plane.provinces[index]!;
+        // A covered centre strands that province's forced capital pixel inside
+        // the crossing and splits its chamber across both halves.
+        if (pointGap(province.x * aspect, province.y, bridge.segment) < bridge.halfWidth + margin) {
+          if (!options?.coverCentres) return undefined;
+          covered.add(index);
+          add(ai, index);
+          add(bi, index);
+          continue;
+        }
+        for (const bridgeHalf of halves) {
+          if (pointGap(province.x * aspect, province.y, bridgeHalf.segment) < chamberBound[index]! + bridge.halfWidth + margin) {
+            add(bridgeHalf.owner, index);
+          }
+        }
+      }
+      for (const passage of passages) {
+        const other = resolve(passage);
+        if (!other) continue;
+        if (other.owners.length === 2 && other.owners.every((owner) => bridge.owners.includes(owner))) continue;
+        const reach = bridge.halfWidth + other.halfWidth + margin;
+        if (!boxesNear(bridge, other, reach)) continue;
+        if (other.owners.length === 2) {
+          // The crossing may not sever another link at its shared frontier;
+          // a passage from a bridge endpoint may instead leave the crossing
+          // beside that endpoint's own half, or end at a covered centre whose
+          // split chamber meets both halves.
+          const shared = other.owners.find((owner) => bridge.owners.includes(owner));
+          const far = other.owners.find((owner) => owner !== shared);
+          const { ax, ay, bx, by } = other.segment;
+          if (shared === undefined ? pointGap((ax + bx) / 2, (ay + by) / 2, bridge.segment) < reach
+            : !covered.has(far!) && !meetsBank(other, shared, bridge)) return undefined;
+        }
+        for (const owner of other.owners) {
+          const segment = other.owners.length === 2 ? half(other, owner) : other.segment;
+          for (const bridgeHalf of halves) {
+            if (segmentGap(bridgeHalf.segment, segment) < reach) add(bridgeHalf.owner, owner);
+          }
+        }
+      }
+      return [...contacts.values()];
+    },
+    fordMeetsBank(endpoint, waterId, bridge) {
+      const ford = resolve({ a: endpoint, b: waterId });
+      const crossing = resolve({ a: bridge[0], b: bridge[1] });
+      const endpointIndex = indexById.get(endpoint);
+      return !!ford && !!crossing && endpointIndex !== undefined && crossing.owners.includes(endpointIndex)
+        && meetsBank(ford, endpointIndex, crossing);
+    },
+  };
 }
 
 interface SparsePrimitiveCopy {
@@ -1034,6 +1588,7 @@ function shapeUndergroundCorridors(
   const bridgeKeys = new Set(plane.edges.filter(isExplicitBridge).map(edge => connectionKey(edge.a, edge.b)));
   const offsetsX = plane.wrapX ? [-1, 0, 1] : [0];
   const offsetsY = plane.wrapY ? [-1, 0, 1] : [0];
+  const nativeGap = 2.5 * Math.max(aspect / Math.max(1, plane.width), 1 / Math.max(1, plane.height));
   for (const corridor of primitives) {
     if (corridor.kind !== "corridor") continue;
     // Never introduce a dry detour around the Styx or bend an explicit crossing.
@@ -1048,16 +1603,26 @@ function shapeUndergroundCorridors(
     const flare = corridor.halfWidth * 0.72;
     const desiredGrowth = bend * 1.15 + flare;
     let growth = desiredGrowth;
-    const gap = pixelFloor * 0.25;
+    // The Styx plane keeps an 8-connected native-pixel gap after both
+    // neighbouring passages have spent their share of it.
+    const gap = plane.kind === "underworld" ? nativeGap : pixelFloor * 0.25;
     for (const other of primitives) {
       if (other === corridor) continue;
-      const related = other.kind === "chamber" || other.kind === "boundary"
-        ? corridor.owners.includes(other.owner)
-        : other.owners.some(owner => corridor.owners.includes(owner));
-      if (related) continue;
+      const shared = other.kind === "chamber" || other.kind === "boundary"
+        ? corridor.owners.filter(owner => owner === other.owner)
+        : other.owners.filter(owner => corridor.owners.includes(owner));
+      // Elsewhere any shared owner exempts the pair. On the Underworld two
+      // passages from one chamber can still meet as an unlinked pair through
+      // their far halves, so only those halves are kept apart.
+      const sibling = plane.kind === "underworld" && other.kind === "corridor" && shared.length === 1;
+      if (shared.length && !sibling) continue;
+      const own = sibling ? farHalf(corridor, shared[0]!, aspect) : { ax, ay, bx, by };
+      const far = sibling && other.kind === "corridor" ? farHalf(other, shared[0]!, aspect) : undefined;
       for (const oy of offsetsY) for (const ox of offsetsX) {
         const separation = other.kind === "chamber"
           ? Math.sqrt(pointSegmentDistanceSquared((other.center.x + ox) * aspect, other.center.y + oy, ax, ay, bx, by)) - other.radius
+          : far ? Math.sqrt(segmentDistanceSquared(own.ax, own.ay, own.bx, own.by,
+            far.ax + ox * aspect, far.ay + oy, far.bx + ox * aspect, far.by + oy)) - other.halfWidth
           : Math.sqrt(segmentDistanceSquared(ax, ay, bx, by,
             (other.from.x + ox) * aspect, other.from.y + oy,
             (other.to.x + ox) * aspect, other.to.y + oy)) - other.halfWidth;
@@ -1089,6 +1654,32 @@ function shapeUndergroundCorridors(
     corridor.path = path;
     corridor.halfWidths = halfWidths;
   }
+}
+
+/** One passage's half-width; shared by the ownership model and the passage planner. */
+function sparseCorridorHalfWidth(
+  plane: Plane,
+  profile: SparseShapeProfile,
+  spacing: number,
+  pixelFloor: number,
+  key: string,
+  aWater: boolean,
+  bWater: boolean,
+): number {
+  const widthRoll = deterministicUnit(`${planeGenerationKey(plane)}:${plane.kind}:${key}:corridor-width`);
+  const floodedCaveConnector = isCaveFamilyKind(plane.kind) && (aWater || bWater);
+  const styxConnector = plane.kind === "underworld" && aWater && bWater;
+  const widthScale = interpolate(profile.corridorWidthRange[0], profile.corridorWidthRange[1], widthRoll)
+    * (floodedCaveConnector ? 1.12 : 1)
+    * (styxConnector ? 1.34 : 1);
+  return Math.max(pixelFloor * 0.72, spacing * profile.corridorScale * widthScale);
+}
+
+/** The half of a straight corridor envelope owned by the endpoint that is not `shared`. */
+function farHalf(corridor: ProvinceCorridorPrimitive, shared: number, aspect: number): MetricSegment {
+  const ax = corridor.from.x * aspect, ay = corridor.from.y, bx = corridor.to.x * aspect, by = corridor.to.y;
+  const mx = (ax + bx) / 2, my = (ay + by) / 2;
+  return corridor.owners[0] === shared ? { ax: mx, ay: my, bx, by } : { ax, ay, bx: mx, by: my };
 }
 
 function isExplicitBridge(edge: Plane["edges"][number]): boolean {
@@ -1162,18 +1753,115 @@ function buildSparsePrimitiveCopies(
   return copies;
 }
 
-function bucketSparsePrimitiveCopies(copies: readonly SparsePrimitiveCopy[], columns: number, rows: number): SparsePrimitiveCopy[][] {
-  const buckets = Array.from({ length: columns * rows }, () => [] as SparsePrimitiveCopy[]);
-  for (const copy of copies) {
+/** Copy indexes per bucket, each list in ascending copy order. */
+function bucketSparsePrimitiveCopies(copies: readonly SparsePrimitiveCopy[], columns: number, rows: number): Int32Array[] {
+  const buckets = Array.from({ length: columns * rows }, () => [] as number[]);
+  copies.forEach((copy, index) => {
     const left = Math.max(0, Math.min(columns - 1, Math.floor(copy.minX * columns)));
     const right = Math.max(0, Math.min(columns - 1, Math.floor(Math.min(1 - Number.EPSILON, copy.maxX) * columns)));
     const top = Math.max(0, Math.min(rows - 1, Math.floor(copy.minY * rows)));
     const bottom = Math.max(0, Math.min(rows - 1, Math.floor(Math.min(1 - Number.EPSILON, copy.maxY) * rows)));
     for (let y = top; y <= bottom; y += 1) {
-      for (let x = left; x <= right; x += 1) buckets[y * columns + x]!.push(copy);
+      for (let x = left; x <= right; x += 1) buckets[y * columns + x]!.push(index);
+    }
+  });
+  return buckets.map((bucket) => Int32Array.from(bucket));
+}
+
+/**
+ * Metric slack added around each copy's bounding box for the ownerAt
+ * early-out. Every sparse shape test accepts a point at most
+ * sqrt(r² + EPSILON) <= r + sqrt(EPSILON) ~ r + 3.2e-5 from its core (chamber
+ * contours are bounded by their conservative outer radius), so 1e-4 keeps the
+ * skip exact with ample floating-point margin; it is under a quarter of a
+ * native pixel.
+ */
+const SPARSE_COPY_BOUND_SLACK = 1e-4;
+
+/** Fine lookup cells per coarse sparse bucket axis; a power of two. */
+const SPARSE_BUCKET_REFINEMENT = 4;
+
+interface SparseBucketLookup {
+  fineColumns: number;
+  fineRows: number;
+  /** Flat per-fine-cell copy lists: entries[offsets[cell] .. offsets[cell + 1]). */
+  offsets: Int32Array;
+  entries: Int32Array;
+  longest: number;
+}
+
+/**
+ * PERF: split each coarse bucket into 4x4 finer lookup cells. A fine cell
+ * keeps, in the same ascending order, every copy of its enclosing coarse
+ * bucket whose padded bounds reach the cell (with rounding slack). The copies
+ * it drops are exactly those ownerAt's bounding-box test would skip for every
+ * point in the cell, so owners and their insertion order are unchanged.
+ */
+function refineSparseBuckets(
+  buckets: readonly Int32Array[],
+  copies: PackedSparsePrimitiveCopies,
+  columns: number,
+  rows: number,
+): SparseBucketLookup {
+  const fineColumns = columns * SPARSE_BUCKET_REFINEMENT, fineRows = rows * SPARSE_BUCKET_REFINEMENT;
+  const slack = 1e-12;
+  const offsets = new Int32Array(fineColumns * fineRows + 1);
+  const entries: number[] = [];
+  let longest = 0;
+  for (let row = 0; row < fineRows; row += 1) {
+    const top = row / fineRows - slack, bottom = (row + 1) / fineRows + slack;
+    const parentRow = Math.floor(row / SPARSE_BUCKET_REFINEMENT) * columns;
+    for (let column = 0; column < fineColumns; column += 1) {
+      const left = column / fineColumns - slack, right = (column + 1) / fineColumns + slack;
+      const start = entries.length;
+      for (const copy of buckets[parentRow + Math.floor(column / SPARSE_BUCKET_REFINEMENT)]!) {
+        if (copies.maxX[copy]! < left || copies.minX[copy]! > right || copies.maxY[copy]! < top || copies.minY[copy]! > bottom) continue;
+        entries.push(copy);
+      }
+      longest = Math.max(longest, entries.length - start);
+      offsets[row * fineColumns + column + 1] = entries.length;
     }
   }
-  return buckets;
+  return { fineColumns, fineRows, offsets, entries: Int32Array.from(entries), longest };
+}
+
+interface PackedSparsePrimitiveCopies {
+  primitiveIndex: Int32Array;
+  /** Curved-corridor segment index, or -1. */
+  segmentIndex: Int32Array;
+  offsetX: Float64Array;
+  offsetY: Float64Array;
+  /** Padded normalized bounds; a point outside cannot be inside the copy. */
+  minX: Float64Array;
+  maxX: Float64Array;
+  minY: Float64Array;
+  maxY: Float64Array;
+}
+
+function packSparsePrimitiveCopies(copies: readonly SparsePrimitiveCopy[], metricAspect: number): PackedSparsePrimitiveCopies {
+  const count = copies.length;
+  const packed: PackedSparsePrimitiveCopies = {
+    primitiveIndex: new Int32Array(count),
+    segmentIndex: new Int32Array(count),
+    offsetX: new Float64Array(count),
+    offsetY: new Float64Array(count),
+    minX: new Float64Array(count),
+    maxX: new Float64Array(count),
+    minY: new Float64Array(count),
+    maxY: new Float64Array(count),
+  };
+  const slackX = SPARSE_COPY_BOUND_SLACK / metricAspect;
+  copies.forEach((copy, index) => {
+    packed.primitiveIndex[index] = copy.primitiveIndex;
+    packed.segmentIndex[index] = copy.segmentIndex ?? -1;
+    packed.offsetX[index] = copy.offsetX;
+    packed.offsetY[index] = copy.offsetY;
+    packed.minX[index] = copy.minX - slackX;
+    packed.maxX[index] = copy.maxX + slackX;
+    packed.minY[index] = copy.minY - SPARSE_COPY_BOUND_SLACK;
+    packed.maxY[index] = copy.maxY + SPARSE_COPY_BOUND_SLACK;
+  });
+  return packed;
 }
 
 function pointSegmentDistanceSquared(
@@ -1194,10 +1882,18 @@ function pointSegmentDistanceSquared(
   return (px - qx) ** 2 + (py - qy) ** 2;
 }
 
-function nearestMetricOwner(x: number, y: number, candidates: readonly number[], plane: Plane, metricAspect: number): number {
-  let best = candidates[0] ?? -1;
+function nearestMetricOwner(
+  x: number,
+  y: number,
+  candidates: Int32Array,
+  count: number,
+  plane: Plane,
+  metricAspect: number,
+): number {
+  let best = count ? candidates[0]! : -1;
   let bestDistance = Infinity;
-  for (const index of candidates) {
+  for (let slot = 0; slot < count; slot += 1) {
+    const index = candidates[slot]!;
     const province = plane.provinces[index];
     if (!province) continue;
     const distance = metricDistanceSquared(x, y, province.x, province.y, plane, metricAspect);
@@ -1288,7 +1984,7 @@ function sparseSharedBorders(
   return borders;
 }
 
-function initialPeriodicFrame(province: Province, plane: Pick<Plane, "wrapX" | "wrapY">): TaggedPoint[] {
+function initialPeriodicFrame(province: VoronoiSite, plane: Pick<Plane, "wrapX" | "wrapY">): TaggedPoint[] {
   const left = plane.wrapX ? province.x - 0.5 : 0;
   const right = plane.wrapX ? province.x + 0.5 : 1;
   const top = plane.wrapY ? province.y - 0.5 : 0;

@@ -1,5 +1,5 @@
 import { GAME_ERA_LABELS, isBlockedProvince, isWaterProvince, type GenerationInputSnapshot, type MapProject, type Province } from "./domain";
-import { globalMovementAdjacency, isImpassableEdge, shortestDistances } from "./generator";
+import { isImpassableEdge, sharedGlobalMovementAdjacency, shortestDistances } from "./generator";
 import { requirementReportLines } from "./nationRequirements";
 import { usesConnectedRegions } from "./geometry";
 
@@ -120,10 +120,13 @@ export function analyzeStarts(project: MapProject, mode: AnalysisMode = "structu
   const startKeys = new Set(allStarts.map(ref => ref.key));
   const selectedStarts = allStarts.slice(0, MAX_ANALYSIS_STARTS);
   const graphs = new Map<string, Map<string, string[]>>();
-  const structural = globalMovementAdjacency(project);
   // Invalid repeated gate endpoints can otherwise manufacture a self-exit.
   // Validation still reports the malformed record; diagnostics must not count it.
-  for (const [key, neighbours] of structural) structural.set(key, neighbours.filter(neighbour => neighbour !== key));
+  // The movement graph may be shared with validation, so filter into a copy.
+  const structural = new Map<string, string[]>();
+  for (const [key, neighbours] of sharedGlobalMovementAdjacency(project)) {
+    structural.set(key, neighbours.includes(key) ? neighbours.filter(neighbour => neighbour !== key) : neighbours);
+  }
   const graphFor = (ref: ProvinceReference) => {
     if (mode === "structural") return structural;
     const medium = isWaterProvince(ref.province) ? "water" : "dry";
@@ -214,10 +217,24 @@ export function coefficientOfVariation(values: number[]): number | undefined {
 
 function conservativeGraph(project: MapProject, refs: ProvinceReference[], water: boolean): Map<string, string[]> {
   const graph = new Map(refs.filter(r => !isBlockedProvince(r.province) && isWaterProvince(r.province) === water).map(r => [r.key, [] as string[]]));
+  // Set-backed de-duplication (links are symmetric, so one membership test
+  // covers both lists); each list keeps its first-link insertion order.
+  const linked = new Map<string, Set<string>>();
+  const linkedFrom = (key: string) => {
+    let neighbours = linked.get(key);
+    if (!neighbours) linked.set(key, neighbours = new Set());
+    return neighbours;
+  };
   const link = (a: string, b: string) => {
-    if (!graph.has(a) || !graph.has(b) || a === b) return;
-    if (!graph.get(a)!.includes(b)) graph.get(a)!.push(b);
-    if (!graph.get(b)!.includes(a)) graph.get(b)!.push(a);
+    const fromA = graph.get(a);
+    const fromB = graph.get(b);
+    if (!fromA || !fromB || a === b) return;
+    const seenFromA = linkedFrom(a);
+    if (seenFromA.has(b)) return;
+    seenFromA.add(b);
+    linkedFrom(b).add(a);
+    fromA.push(b);
+    fromB.push(a);
   };
   for (const plane of project.planes) for (const edge of plane.edges) {
     if (isImpassableEdge(edge) || ["river", "mountain_pass", "mountain_border"].includes(edge.kind)

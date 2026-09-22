@@ -54,6 +54,37 @@ export function appendHistorySnapshot<T>(stack: T[], snapshot: T, limit = 30): T
   return [...stack.slice(-Math.max(0, limit - 1)), snapshot];
 }
 
+/** Plane JSON of the most recent draft, so the next edit need not re-encode it. */
+let lastPlaneTexts: { project: MapProject; texts: string[] } | undefined;
+
+/**
+ * Structural sharing for editor history. After an edit recipe ran on a full
+ * clone of `previous`, keep `previous`'s plane objects wherever the edit left
+ * a plane's JSON unchanged, so Undo snapshots and the new project share them
+ * instead of each holding a copy. Only for projects that are never mutated in
+ * place after being committed.
+ */
+export function shareUnchangedPlanes(previous: MapProject, draft: MapProject): MapProject {
+  const previousTexts = lastPlaneTexts?.project === previous ? lastPlaneTexts.texts : previous.planes.map((plane) => JSON.stringify(plane));
+  const texts = draft.planes.map((plane, index) => {
+    const text = JSON.stringify(plane);
+    const before = previous.planes[index];
+    if (before && text === previousTexts[index]) draft.planes[index] = before;
+    return text;
+  });
+  lastPlaneTexts = { project: draft, texts };
+  return draft;
+}
+
+/**
+ * Typing in one field is one Undo step. A commit dispatched by the field that
+ * started the current session joins it; any other commit (a different field,
+ * a button, Generate, an import) records its own step and ends the session.
+ */
+export function textEditHistoryStep<T>(session: T | undefined, changeTarget: T | undefined): { record: boolean; session: T | undefined } {
+  return { record: changeTarget === undefined || session !== changeTarget, session: changeTarget };
+}
+
 /**
  * Apply the province inspector's primary-terrain choice as one project edit.
  * Cave walls are impassable map space, so they cannot safely retain any kind

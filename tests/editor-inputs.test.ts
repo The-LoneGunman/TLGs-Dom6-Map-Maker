@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createElement, isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
@@ -84,6 +85,15 @@ test("unit and site catalog fields retain free-text mod references", () => {
   }), "input");
   input.props.onBlur!({ currentTarget: { value: "My Mod Commander" } });
   assert.deepEqual(commits, ["My Mod Commander"]);
+});
+
+test("catalog results stay out of the Tab order so Tab leaves the combobox for the next control", () => {
+  const source = readFileSync(new URL("../src/catalog/CatalogCombobox.tsx", import.meta.url), "utf8");
+  const option = source.slice(source.indexOf('role="option"'), source.indexOf("onClick={() => commit(String(entry.id))}"));
+  assert.match(option, /tabIndex=\{-1\}/, "a tabbable option would vanish on blur and drop focus to the page body");
+  assert.match(source, /role="listbox" tabIndex=\{-1\}/, "the overflowing result list must not become a keyboard-focusable scroller either");
+  assert.match(option, /onMouseDown=\{\(event\) => event\.preventDefault\(\)\}/, "pointer selection still commits before the input blurs");
+  assert.match(source, /aria-activedescendant=/, "arrow keys still move through the results");
 });
 
 test("typing a valid multi-digit count does not commit its out-of-range prefix", () => {

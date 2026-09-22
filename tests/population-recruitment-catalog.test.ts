@@ -10,7 +10,7 @@ import {
 import { parseExtractionArguments } from "../scripts/catalog/extract-population-recruitment.mjs";
 
 const snapshot = JSON.parse(readFileSync(new URL("../src/catalog/data/population-recruitment-6.37.json", import.meta.url), "utf8")) as ReturnType<typeof extractPopulationRecruitment>;
-const compact = JSON.parse(readFileSync(new URL("../src/catalog/data/dom6-6.37.json", import.meta.url), "utf8")) as { gameVersion: string; units: [number, string, number][] };
+const compact = JSON.parse(readFileSync(new URL("../src/catalog/data/dom6-6.37-units.json", import.meta.url), "utf8")) as { gameVersion: string; units: [number, string, number][] };
 const catalog = new Map(compact.units.map(([id, name]) => [id, name]));
 const cli = fileURLToPath(new URL("../scripts/catalog/extract-population-recruitment.mjs", import.meta.url));
 

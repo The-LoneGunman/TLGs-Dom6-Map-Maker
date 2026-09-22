@@ -216,8 +216,10 @@ export function measureSparseProvinceArtwork(
     );
   }
 
-  const radiusX = Math.max(1, chamber.radiusX * shortPixelAxis);
-  const radiusY = Math.max(1, chamber.radiusY * shortPixelAxis);
+  // Sparse ownership measures distance as (dx * width / height, dy), so one
+  // metric unit is the plane height in pixels, not the shorter axis.
+  const radiusX = Math.max(1, chamber.radiusX * height);
+  const radiusY = Math.max(1, chamber.radiusY * height);
   const cosine = chamber.rotationCos;
   const sine = chamber.rotationSin;
   const halfWidth = Math.sqrt((radiusX * cosine) ** 2 + (radiusY * sine) ** 2);

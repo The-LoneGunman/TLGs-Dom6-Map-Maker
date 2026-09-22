@@ -17,6 +17,8 @@ import {
 } from "../src/catalog";
 import { createDefaultProject } from "../src/generator";
 import compactCatalog from "../src/catalog/data/dom6-6.37.json";
+import compactUnits from "../src/catalog/data/dom6-6.37-units.json";
+import { BUILTIN_DOM6_CORE_CATALOG } from "../src/catalog/builtinCore";
 
 test("6.37 catalog refresh changes provenance without changing established identities or selector metadata", () => {
   assert.equal(BUILTIN_DOM6_CATALOG.gameVersion, "6.37");
@@ -26,7 +28,11 @@ test("6.37 catalog refresh changes provenance without changing established ident
   assert.equal(compactCatalog.sourceFileSha256["BaseU.csv"], "185675d8906b87dc94070d52776e19cfefec4d2efcee9b6e8084aeba059e4ec5");
   // Frozen from the prior 6.35 compact collections before rebuilding. All
   // names/IDs/roles/site metadata must remain stable in this source refresh.
-  const collections = Object.fromEntries(Object.entries(compactCatalog).filter(([, value]) => Array.isArray(value)));
+  // The unit table now lives in its own file; reassemble the collections in
+  // the original single-file order so the frozen fingerprint still applies.
+  const { units } = compactUnits;
+  const collections = { units, ...Object.fromEntries(Object.entries(compactCatalog).filter(([, value]) => Array.isArray(value))) };
+  assert.deepEqual(Object.keys(collections), ["units", "sites", "nations", "poptypes", "forts", "planes", "siteTerrainTypes"]);
   assert.equal(createHash("sha256").update(JSON.stringify(collections)).digest("hex"),
     "1993af4dda1eb2d1794d9795ff5617e49bf50755fff7421f529fdad8d57b29e7");
   const source = BUILTIN_DOM6_CATALOG.provenance.find(entry => entry.id === "dom6inspector-6.37-c30c6c14");
@@ -39,6 +45,25 @@ test("6.37 catalog refresh changes provenance without changing established ident
   }
   assert.equal(findCatalogEntry(BUILTIN_DOM6_CATALOG.poptypes, 81)?.name, "Pale Ones");
   assert.equal(findCatalogEntry(BUILTIN_DOM6_CATALOG.poptypes, 81)?.provenanceId, "illwinter-map-manual-6.26");
+});
+
+test("the split compact bundle keeps one source identity and the generator core shares the full catalog's collections", () => {
+  assert.equal(compactCatalog.format, "pantokrator-atlas/compact-catalog");
+  assert.equal(compactUnits.format, "pantokrator-atlas/compact-catalog-units");
+  assert.equal(compactUnits.formatVersion, compactCatalog.formatVersion);
+  assert.equal(compactUnits.gameVersion, compactCatalog.gameVersion);
+  assert.equal(compactUnits.sourceRevision, compactCatalog.sourceRevision);
+  assert.equal(compactCatalog.unitsFile, "dom6-6.37-units.json");
+  assert.equal("units" in compactCatalog, false, "the generator core must not carry the unit table");
+  // Same data and the same key order as the former single-file bundle.
+  assert.deepEqual(Object.keys(BUILTIN_DOM6_CATALOG), ["schema", "schemaVersion", "gameVersion", "catalogVersion", "provenance",
+    "poptypes", "sites", "units", "nations", "forts", "planes", "siteTerrainTypes"]);
+  const { units, ...core } = BUILTIN_DOM6_CATALOG;
+  assert.equal(units.length, 4091);
+  assert.deepEqual(Object.keys(BUILTIN_DOM6_CORE_CATALOG), Object.keys(core));
+  for (const [key, value] of Object.entries(core)) {
+    assert.equal(BUILTIN_DOM6_CORE_CATALOG[key as keyof typeof core], value, `${key} is shared by reference`);
+  }
 });
 
 test("ships the complete pinned Dominions selector catalogs", () => {

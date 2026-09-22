@@ -1,7 +1,7 @@
 import { cloneProject, effectiveProvinceTerrainFlags, isBlockedProvince, isWaterProvince, type MagicPath, type MapProject, type Province, type ProvinceLockGroup, type TerrainFlag, type TerrainKey, type ValidationIssue } from "./domain";
 import { assertProjectLocks, changedLockedGroups, copyFieldGroup, fieldIsLocked, protectedStartProvinceKeys } from "./authoringLocks";
 import { validateProject } from "./dom6";
-import { serializeProject } from "./export";
+import { serializeProject } from "./projectFile";
 import { BUILTIN_DOM6_CATALOG, type Dom6CatalogBundle } from "./catalog";
 import { rerollPlaneDetails } from "./generator";
 import { regenerateGeneratedProvinceNames } from "./naming";

@@ -35,7 +35,15 @@ import {
   type StartType,
   type TerrainKey,
 } from "./domain";
-import { computeProvinceTopology, connectionKey, resolvePlaneOwnershipMode, usesConnectedRegions } from "./geometry";
+import {
+  computeProvinceTopology,
+  connectionKey,
+  createSparsePassagePlanner,
+  resolvePlaneOwnershipMode,
+  usesConnectedRegions,
+  type SparsePassage,
+  type SparsePassagePlanner,
+} from "./geometry";
 import { buildConnectedRegionPlan } from "./connectedRegions";
 import { regenerateGeneratedProvinceNames } from "./naming";
 import { assertCanRebuildLayout, pruneAuthoringRegions, restoreGenerationLocks } from "./authoringLocks";
@@ -441,46 +449,112 @@ export interface ProvinceBudgetRow {
   reason: string;
 }
 
-/** The same planning calculation feeds generation and its read-only budget preview. */
-export function previewProvinceBudget(project: MapProject) {
+type StartPlaneTargets = Map<StartType, Map<string, number>>;
+
+/** Start families a plane can host; the families never share a plane. */
+function plannedStartTypesForPlane(plane: Pick<Plane, "kind" | "variant" | "ownershipMode">): StartType[] {
+  if (!isCorePlaneForSizing(plane)) return ["cave", "other"];
+  return isTrueCaveCorePlane(plane) ? ["cave"] : ["land", "coastal", "water"];
+}
+
+function plannedStartsOnPlane(targets: StartPlaneTargets, plane: Pick<Plane, "id" | "kind" | "variant" | "ownershipMode">): number {
+  return plannedStartTypesForPlane(plane).reduce((sum, type) => sum + (targets.get(type)?.get(plane.id) ?? 0), 0);
+}
+
+/**
+ * Auto-sized planes grow with the starts they receive, while the capacity
+ * greedy split depends on those sizes. Iterate from the historical stand-in
+ * split until the greedy reproduces the split on the sizes it implies, so the
+ * preview, the generated plane sizes and start placement share one plan. If
+ * the iteration ever revisits a split, the split reached before the repeat is
+ * kept; placement uses that frozen split rather than re-deriving another.
+ */
+function settleStartSplit(
+  planes: PlanningPlane[],
+  requested: StartDistribution,
+  initialSizes: readonly number[],
+  resize: (plane: PlanningPlane, allocatedStarts: number) => number | undefined,
+): StartPlaneTargets {
+  const project = { planes };
+  let targets = allocateGeneratedStartsBySize(project, initialSizes, requested);
+  const signature = (split: StartPlaneTargets) => planes.map((plane) => plannedStartsOnPlane(split, plane)).join(":");
+  const sizesFor = (split: StartPlaneTargets) => planes.map((plane, index) =>
+    resize(plane, plannedStartsOnPlane(split, plane)) ?? initialSizes[index]!);
+  const seen = new Set<string>([signature(targets)]);
+  for (let iteration = 0; iteration < 16; iteration += 1) {
+    const next = allocateGeneratedStartsBySize(project, sizesFor(targets), requested);
+    const nextSignature = signature(next);
+    if (nextSignature === signature(targets) || seen.has(nextSignature)) break;
+    seen.add(nextSignature);
+    targets = next;
+  }
+  return targets;
+}
+
+type PlanningPlane = Plane & { autoSize: boolean };
+
+interface GeneratedStartPlan {
+  rows: ProvinceBudgetRow[];
+  /** The one per-plane start split used by the budget and by placement. */
+  targets: StartPlaneTargets;
+  actualCore: number;
+  referenceCore: number;
+}
+
+function planGeneratedStarts(project: Pick<MapProject, "planes" | "settings">, requestedOverride?: StartDistribution): GeneratedStartPlan {
   const settings = { ...project.settings,
     players: clamp(Math.round(project.settings.players), 2, 32),
     provincesPerPlayer: clamp(Math.round(project.settings.provincesPerPlayer), 8, 30),
     specialPlaneSizePercent: clamp(Math.round(project.settings.specialPlaneSizePercent ?? 30), 1, 500),
     startDegreeTarget: clamp(Math.round(project.settings.startDegreeTarget ?? 4), 1, 8),
   };
-  const planes = project.planes.map((plane, index) => ({ ...plane,
+  const planes: PlanningPlane[] = project.planes.map((plane, index) => ({ ...plane,
     kind: normalizePlaneKind(plane.kind),
     variant: plane.variant ?? ARCHETYPE_PROFILES[normalizePlaneKind(plane.kind)].defaultVariant,
     autoSize: plane.autoSize ?? index === 0,
     provinceTarget: clamp(Math.round(plane.provinceTarget), 8, 800),
   }));
-  const requestedStarts = normalizeStartDistribution(settings.startDistribution, settings.players);
+  const requestedStarts = requestedOverride ?? normalizeStartDistribution(settings.startDistribution, settings.players);
+  // Manual planes are measured by their next-generation target. Their current
+  // province count may be stale (an edited target is applied only by Generate).
+  const autoCore = (plane: PlanningPlane) => plane.autoSize && isCorePlaneForSizing(plane);
+  const autoCoreTarget = (allocated: number) => Math.max(18, Math.round(allocated * settings.provincesPerPlayer));
+  const coreStartTargets = settleStartSplit(
+    planes,
+    requestedStarts,
+    planes.map((plane) => autoCore(plane) ? settings.provincesPerPlayer : plane.provinceTarget),
+    (plane, allocated) => autoCore(plane) ? clamp(autoCoreTarget(allocated), 8, 800) : undefined,
+  );
   const coreTargets = new Map<number, number>();
-  const corePlanningPlanes = planes.map(plane => plane.autoSize && isCorePlaneForSizing(plane)
-    ? { ...plane, provinces: [], provinceTarget: settings.provincesPerPlayer } : plane);
-  const coreStartTargets = generatedStartPlaneTargets({ planes: corePlanningPlanes }, requestedStarts);
-  const count = (targets: Map<StartType, Map<string, number>>, id: string, types: StartType[]) =>
-    types.reduce((sum, type) => sum + (targets.get(type)?.get(id) ?? 0), 0);
   planes.forEach((plane, index) => {
     if (!isCorePlaneForSizing(plane)) return;
-    const allocated = count(coreStartTargets, plane.id, isTrueCaveCorePlane(plane) ? ["cave"] : ["land", "coastal", "water"]);
-    coreTargets.set(index, plane.autoSize ? Math.max(18, Math.round(allocated * settings.provincesPerPlayer)) : plane.provinceTarget);
+    coreTargets.set(index, plane.autoSize ? autoCoreTarget(plannedStartsOnPlane(coreStartTargets, plane)) : plane.provinceTarget);
   });
   const actualCore = [...coreTargets.values()].reduce((sum, value) => sum + clamp(value, 8, 800), 0);
   const referenceCore = actualCore || settings.players * settings.provincesPerPlayer;
   const percentageTarget = Math.round(referenceCore * settings.specialPlaneSizePercent / 100);
-  const bonusPlanningPlanes = planes.map((plane, index) => ({ ...plane, provinces: [],
-    provinceTarget: plane.autoSize
+  const autoBonus = (plane: PlanningPlane) => plane.autoSize && !isCorePlaneForSizing(plane);
+  const bonusStartTargets = settleStartSplit(
+    planes,
+    requestedStarts,
+    planes.map((plane, index) => plane.autoSize
       ? isCorePlaneForSizing(plane) ? coreTargets.get(index) ?? plane.provinceTarget : Math.max(18, percentageTarget)
-      : plane.provinceTarget,
-  }));
-  const bonusStartTargets = generatedStartPlaneTargets({ planes: bonusPlanningPlanes }, requestedStarts);
+      : plane.provinceTarget),
+    (plane, allocated) => autoBonus(plane)
+      ? clamp(Math.max(18, allocated ? allocated * (12 + 2 * settings.startDegreeTarget) : 18, percentageTarget), 8, 800)
+      : undefined,
+  );
+  const targets: StartPlaneTargets = new Map(START_TYPES.map((type) => [type, new Map<string, number>()]));
+  for (const plane of planes) {
+    const source = isCorePlaneForSizing(plane) ? coreStartTargets : bonusStartTargets;
+    for (const type of plannedStartTypesForPlane(plane)) {
+      const count = source.get(type)?.get(plane.id) ?? 0;
+      if (count) targets.get(type)!.set(plane.id, count);
+    }
+  }
   const rows: ProvinceBudgetRow[] = planes.map((plane, index) => {
     const core = isCorePlaneForSizing(plane);
-    const allocatedStarts = core
-      ? count(coreStartTargets, plane.id, isTrueCaveCorePlane(plane) ? ["cave"] : ["land", "coastal", "water"])
-      : count(bonusStartTargets, plane.id, ["cave", "other"]);
+    const allocatedStarts = plannedStartsOnPlane(targets, plane);
     const minimumForStarts = allocatedStarts ? allocatedStarts * (12 + 2 * settings.startDegreeTarget) : 18;
     const requested = !plane.autoSize ? plane.provinceTarget : core ? coreTargets.get(index) ?? plane.provinceTarget
       : Math.max(18, minimumForStarts, percentageTarget);
@@ -492,6 +566,12 @@ export function previewProvinceBudget(project: MapProject) {
     return { planeId: plane.id, name: plane.name, core, autoSize: plane.autoSize, reserved: plane.noGeneratedStarts ?? false,
       current: plane.provinces.length, target, requested, allocatedStarts, reason };
   });
+  return { rows, targets, actualCore, referenceCore };
+}
+
+/** The same planning calculation feeds generation and its read-only budget preview. */
+export function previewProvinceBudget(project: MapProject) {
+  const { rows, actualCore, referenceCore } = planGeneratedStarts(project);
   return { planes: rows, core: actualCore, bonus: rows.filter(r => !r.core).reduce((sum, r) => sum + r.target, 0),
     total: rows.reduce((sum, r) => sum + r.target, 0), referenceCore, usesFallbackCore: actualCore === 0 };
 }
@@ -552,6 +632,8 @@ export function generateProject(project: MapProject): MapProject {
   remapGenerationPlaneIds(working, ids);
   const generated = generateProjectWithIdentities(working);
   remapGenerationPlaneIds(generated, new Map([...ids].map(([from, to]) => [to, from])));
+  // After gateways and final names, so the notice matches export validation.
+  appendAuthoredStartSpacingWarnings(generated);
   return generated;
 }
 
@@ -803,6 +885,7 @@ function feasibleDenseStartPlan(
     .filter((degree) => degree >= minimumUsefulDegree && degree <= 8))];
   const preferredDegree = target === 4 ? 5 : target;
   degrees.sort((a, b) => Math.abs(a - preferredDegree) - Math.abs(b - preferredDegree) || a - b);
+  const searchMemo = createStartSearchMemo();
   for (const degree of degrees) {
     const selected: ProvinceRef[] = [];
     let feasible = true;
@@ -818,6 +901,10 @@ function feasibleDenseStartPlan(
           `${project.seed}:distributed:degree-${degree}:${type}:${slot}`,
           degree,
           minimumSeparation,
+          undefined,
+          undefined,
+          undefined,
+          searchMemo,
         );
         if (!candidate) {
           feasible = false;
@@ -881,20 +968,38 @@ function ensureOverlandStartCategoriesOnPlane(
     .filter((degree) => degree >= minimumUsefulDegree && degree <= 8))]
     .sort((a, b) => Math.abs(a - preferredDegree) - Math.abs(b - preferredDegree) || a - b);
   const byId = new Map(plane.provinces.map((province) => [province.id, province]));
-  const distanceCache = new Map<string, Map<string, number>>();
-  const distancesFrom = (id: string) => {
-    let distances = distanceCache.get(id);
-    if (!distances) {
-      distances = shortestDistances(spacingAdjacency, id);
-      distanceCache.set(id, distances);
-    }
-    return distances;
-  };
 
   const preferredAnchorSeparation = scaledStartSeparationTarget(
     plane.provinces.filter((province) => !isBlockedProvince(province)).length,
     total,
   );
+  // Anchor spacing only asks whether a pair is closer than a separation of
+  // at most preferredAnchorSeparation, so each BFS stops one move short of
+  // it. A pair missing from that bounded map is either at least that far
+  // apart or unreachable; the connected-component label tells them apart
+  // (the graph is undirected between provinces).
+  const spacingRadius = Math.max(0, preferredAnchorSeparation - 1);
+  const spacingComponent = new Map<string, number>();
+  for (const province of plane.provinces) {
+    if (spacingComponent.has(province.id)) continue;
+    const label = spacingComponent.size;
+    for (const id of shortestDistances(spacingAdjacency, province.id).keys()) spacingComponent.set(id, label);
+  }
+  const distanceCache = new Map<string, Map<string, number>>();
+  const nearbyDistancesFrom = (id: string) => {
+    let distances = distanceCache.get(id);
+    if (!distances) {
+      distances = shortestDistances(spacingAdjacency, id, spacingRadius);
+      distanceCache.set(id, distances);
+    }
+    return distances;
+  };
+  /** Exactly `(fullDistance(from, to) ?? 0) < separation` for separation <= preferredAnchorSeparation. */
+  const closerThan = (from: string, to: string, separation: number) => {
+    const distance = nearbyDistancesFrom(from).get(to);
+    if (distance !== undefined) return distance < separation;
+    return spacingComponent.get(from) === spacingComponent.get(to) ? false : 0 < separation;
+  };
   const anchorSeparations = Array.from(
     { length: preferredAnchorSeparation - 2 },
     (_, index) => preferredAnchorSeparation - index,
@@ -913,28 +1018,47 @@ function ensureOverlandStartCategoriesOnPlane(
     let coastal: Province[];
     let water: Province[];
     const dry = new Set<string>();
+    // Candidates are addressed by their position in `candidates`.
+    // close[a * candidateCount + b] marks candidate b closer than the
+    // separation measured from candidate a (unreachable counts as close);
+    // conflictCounts[a] counts the other candidates close to a.
+    const candidateCount = candidates.length;
+    const close = new Uint8Array(candidateCount * candidateCount);
+    const conflictCounts = new Int32Array(candidateCount);
+    for (let from = 0; from < candidateCount; from += 1) {
+      const fromId = candidates[from]!.id;
+      for (let to = 0; to < candidateCount; to += 1) {
+        if (!closerThan(fromId, candidates[to]!.id, minimumStartSeparation)) continue;
+        close[from * candidateCount + to] = 1;
+        if (to !== from) conflictCounts[from] += 1;
+      }
+    }
     if (total < 18) {
-      const compatible = (candidate: Province, selected: readonly Province[]) => selected.every((other) =>
-        (distancesFrom(other.id).get(candidate.id) ?? 0) >= minimumStartSeparation);
-      const conflictCount = new Map(candidates.map((candidate) => [candidate.id, candidates.reduce((count, other) =>
-        count + (other.id !== candidate.id && (distancesFrom(candidate.id).get(other.id) ?? 0) < minimumStartSeparation ? 1 : 0), 0)]));
-      const ranked = [...candidates].sort((a, b) => (conflictCount.get(a.id) ?? 0) - (conflictCount.get(b.id) ?? 0)
-        || (hashString(`${project.seed}:category-anchor:${degreeLabel}:${a.id}`) % 100000)
-          - (hashString(`${project.seed}:category-anchor:${degreeLabel}:${b.id}`) % 100000)
-        || a.index - b.index);
+      const jitter = candidates.map((candidate) =>
+        hashString(`${project.seed}:category-anchor:${degreeLabel}:${candidate.id}`) % 100000);
+      // Rank positions with precomputed keys; the stable sort yields the same
+      // order as ranking the candidates with the equivalent comparator.
+      const ranked = candidates.map((_, index) => index).sort((a, b) => conflictCounts[a]! - conflictCounts[b]!
+        || jitter[a]! - jitter[b]!
+        || candidates[a]!.index - candidates[b]!.index);
       const selected: Province[] = [];
       let visitedNodes = 0;
       const nodeBudget = Math.max(250_000, total * 20_000);
-      const findSeparatedAnchors = (available: Province[]): Province[] | undefined => {
+      const findSeparatedAnchors = (available: readonly number[]): Province[] | undefined => {
         const needed = total - selected.length;
         if (needed === 0) return [...selected];
         if (available.length < needed || visitedNodes >= nodeBudget) return undefined;
         for (let cursor = 0; cursor <= available.length - needed && visitedNodes < nodeBudget; cursor += 1) {
           visitedNodes += 1;
           const candidate = available[cursor]!;
-          if (!compatible(candidate, selected)) continue;
-          selected.push(candidate);
-          const remaining = available.slice(cursor + 1).filter((other) => compatible(other, selected));
+          // Every entry of `available` is already separated from the current
+          // selection, so only the newly added anchor needs checking.
+          selected.push(candidates[candidate]!);
+          const row = candidate * candidateCount;
+          const remaining: number[] = [];
+          for (let next = cursor + 1; next < available.length; next += 1) {
+            if (!close[row + available[next]!]) remaining.push(available[next]!);
+          }
           const result = findSeparatedAnchors(remaining);
           if (result) return result;
           selected.pop();
@@ -947,26 +1071,52 @@ function ensureOverlandStartCategoriesOnPlane(
       coastal = anchors.slice(requested.land, requested.land + requested.coastal);
       water = anchors.slice(requested.land + requested.coastal);
     } else {
-      const conflicts = new Map(candidates.map((candidate) => [candidate.id, new Set(candidates
-        .filter((other) => other.id !== candidate.id
-          && (distancesFrom(candidate.id).get(other.id) ?? 0) < minimumStartSeparation)
-        .map((other) => other.id))]));
+      // Greedy minimum-conflict packing. conflicts[slot] lists the other
+      // candidates close to that candidate and conflictedBy is its reverse,
+      // so each removal updates the live conflict counts instead of
+      // recounting them.
+      const conflicts: number[][] = Array.from({ length: candidateCount }, () => []);
+      const conflictedBy: number[][] = Array.from({ length: candidateCount }, () => []);
+      for (let slot = 0; slot < candidateCount; slot += 1) {
+        for (let other = 0; other < candidateCount; other += 1) {
+          if (other === slot || !close[slot * candidateCount + other]) continue;
+          conflicts[slot]!.push(other);
+          conflictedBy[other]!.push(slot);
+        }
+      }
       let anchors: Province[] | undefined;
       for (let variant = 0; variant < 24 && !anchors; variant += 1) {
-        const available = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+        const jitter = candidates.map((candidate) =>
+          hashString(`${project.seed}:large-anchor:${degreeLabel}:${variant}:${candidate.id}`) % 100000);
+        const available = new Uint8Array(candidateCount).fill(1);
+        const liveConflicts = Int32Array.from(conflictCounts);
+        let availableCount = candidateCount;
+        const remove = (slot: number) => {
+          if (!available[slot]) return;
+          available[slot] = 0;
+          availableCount -= 1;
+          for (const other of conflictedBy[slot]!) liveConflicts[other] -= 1;
+        };
         const chosen: Province[] = [];
-        while (available.size && chosen.length < total) {
-          const candidate = [...available.values()].sort((a, b) => {
-            const conflictsA = [...(conflicts.get(a.id) ?? [])].filter((id) => available.has(id)).length;
-            const conflictsB = [...(conflicts.get(b.id) ?? [])].filter((id) => available.has(id)).length;
-            const jitterA = hashString(`${project.seed}:large-anchor:${degreeLabel}:${variant}:${a.id}`) % 100000;
-            const jitterB = hashString(`${project.seed}:large-anchor:${degreeLabel}:${variant}:${b.id}`) % 100000;
-            return conflictsA - conflictsB || jitterA - jitterB || a.index - b.index;
-          })[0];
-          if (!candidate) break;
-          chosen.push(candidate);
-          available.delete(candidate.id);
-          for (const id of conflicts.get(candidate.id) ?? []) available.delete(id);
+        while (availableCount && chosen.length < total) {
+          // The first available candidate, in candidate order, that is least
+          // conflicted, then lowest jitter, then lowest index: exactly the
+          // head of a stable sort by that comparator.
+          let best = -1;
+          for (let slot = 0; slot < candidateCount; slot += 1) {
+            if (!available[slot]) continue;
+            if (best < 0) {
+              best = slot;
+              continue;
+            }
+            const order = liveConflicts[slot]! - liveConflicts[best]!
+              || jitter[slot]! - jitter[best]!
+              || candidates[slot]!.index - candidates[best]!.index;
+            if (order < 0) best = slot;
+          }
+          chosen.push(candidates[best]!);
+          remove(best);
+          for (const other of conflicts[best]!) remove(other);
         }
         if (chosen.length === total) anchors = chosen;
       }
@@ -988,7 +1138,9 @@ function ensureOverlandStartCategoriesOnPlane(
         .filter((province): province is Province => Boolean(province)
           && !dry.has(province!.id)
           && !coastalWater.has(province!.id))
-        .sort((a, b) => a.index - b.index)[0];
+        // Reuse generated water that already borders the coastal capital
+        // before converting a dry neighbour.
+        .sort((a, b) => Number(isWaterProvince(b)) - Number(isWaterProvince(a)) || a.index - b.index)[0];
       if (!neighbour) {
         coastFeasible = false;
         break;
@@ -997,7 +1149,12 @@ function ensureOverlandStartCategoriesOnPlane(
     }
     if (!coastFeasible) continue;
     const forcedWater = new Set([...coastalWater, ...water.map((province) => province.id)]);
-    const waterTarget = Math.max(forcedWater.size, Math.round(plane.provinces.length * (plane.generationOverrides?.waterPercent ?? project.settings.waterPercent) / 100));
+    // This plane was generated moments ago, so its water count is exactly the
+    // effective quota enforceWaterQuota applied: the start-driven increase,
+    // the Oceanic floor and the 60% clamp are already included. Re-deriving
+    // the target from settings would silently discard those adjustments.
+    const generatedWater = plane.provinces.filter(isWaterProvince).length;
+    const waterTarget = Math.max(forcedWater.size, generatedWater);
     const waterRank = plane.provinces.filter((province) => !dry.has(province.id))
       .sort((a, b) => Number(isWaterProvince(b)) - Number(isWaterProvince(a))
         || field(a.x * 2.1, a.y * 2.3, hashString(`${project.seed}:category-water`) % 97)
@@ -1007,23 +1164,14 @@ function ensureOverlandStartCategoriesOnPlane(
       .filter((province) => !forcedWater.has(province.id))
       .slice(0, Math.max(0, waterTarget - forcedWater.size))
       .map((province) => province.id)]);
-    for (const province of plane.provinces) {
-      const shouldBeWater = waterIds.has(province.id);
-      if (shouldBeWater) {
-        province.terrain = "sea";
-        province.terrainFlags = province.terrainFlags?.filter((flag) => flag !== "deep");
-        province.biome = "archipelago";
-        province.population = Math.round(TERRAIN_POPULATION.sea * ARCHETYPE_PROFILES[plane.kind].populationScale);
-        province.siteBias = mergePaths(["water"], ARCHETYPE_PROFILES[plane.kind].sitePaths, 3);
-      } else if (isWaterProvince(province)) {
-        province.terrain = "plains";
-        province.terrainFlags = province.terrainFlags?.filter((flag) => flag !== "sea" && flag !== "deep");
-        province.biome = "heartland";
-        province.population = Math.round(TERRAIN_POPULATION.plains * ARCHETYPE_PROFILES[plane.kind].populationScale);
-        province.siteBias = mergePaths([], ARCHETYPE_PROFILES[plane.kind].sitePaths, 3);
-      }
-    }
-    assignArchetypeDetails(plane.provinces, plane.kind, plane.variant, `${project.seed}:category-repair:${planeIndex}`);
+    // Only provinces whose land/water status must change are rewritten. Water
+    // that stays water keeps its generated Sea/Deep Sea/Kelp terrain, biome,
+    // population and site bias. Conversions in either direction use the same
+    // terrain rules as the other ocean layouts, applied to the changed subset.
+    const converted = plane.provinces.filter((province) => waterIds.has(province.id) !== isWaterProvince(province));
+    const repairSeed = `${project.seed}:category-repair:${planeIndex}`;
+    applyOverlandWaterSelection({ ...plane, provinces: converted }, waterIds, repairSeed);
+    assignArchetypeDetails(converted, plane.kind, plane.variant, repairSeed);
     return [
       ...land.map((province) => ({ planeId: plane.id, provinceId: province.id, type: "land" as const })),
       ...coastal.map((province) => ({ planeId: plane.id, provinceId: province.id, type: "coastal" as const })),
@@ -1099,6 +1247,7 @@ function repairSparseStartBasins(
     twoRingCapacity,
     (province) => startType === "cave" ? isCaveProvince(province) && !isWaterProvince(province) : !isWaterProvince(province),
     seed,
+    createPassageGuard(plane),
   );
   const existing = new Map(plane.edges.map((edge) => [connectionKey(edge.a, edge.b), edge]));
   plane.edges = [...selected.values()]
@@ -2102,18 +2251,58 @@ function applySubterraneanWaters(plane: Plane, seed: string) {
 function applyRiverStyx(plane: Plane, seed: string) {
   const active = plane.provinces.filter((province) => !isBlockedProvince(province));
   if (active.length < 8) return;
-  const horizontal = plane.width >= plane.height;
   const byId = new Map(active.map((province) => [province.id, province]));
+  const provisional = plane.edges.map((edge) => ({ ...edge }));
+  let styx: ReturnType<typeof planRiverStyx>;
+  // Prefer two candidate necks per crossing; fewer necks can leave the banks
+  // larger on small planes.
+  for (const necksPerCrossing of [2, 1, 0]) {
+    const guard = createPassageGuard(plane, new Set());
+    if (!guard) break;
+    plane.edges = provisional.map((edge) => ({ ...edge }));
+    const planned = planRiverStyx(plane, seed, guard, necksPerCrossing);
+    if (planned && styxLayoutHolds(plane, planned.water, planned.bankMinimum)) {
+      styx = planned;
+      break;
+    }
+  }
+  // Very small planes may leave no drawable river with two connected banks.
+  // The movement invariants win: keep the original construction there.
+  if (!styx) {
+    plane.edges = provisional;
+    styx = planRiverStyx(plane, seed);
+  }
+  if (!styx) return;
+  [...styx.water].sort((a, b) => byId.get(a)!.index - byId.get(b)!.index).forEach((id, index) => {
+    const province = byId.get(id)!;
+    floodCaveProvince(province, "underworld", index % 4 === 1);
+    // Authored (and legacy unmarked) names survive regeneration.
+    if (province.nameSource === "generated") province.name = `${STYX_NAMES[index % STYX_NAMES.length]} ${index + 1}`;
+  });
+}
+
+function planRiverStyx(
+  plane: Plane,
+  seed: string,
+  guard?: PassageGuard,
+  necksPerCrossing = 0,
+): { water: Set<string>; bankMinimum: number } | undefined {
+  const active = plane.provinces.filter((province) => !isBlockedProvince(province));
+  const horizontal = plane.width >= plane.height;
   const target = clamp(Math.round(active.length * 0.23), 2, active.length - 4);
   const dryTarget = active.length - target;
   const bankMinimum = Math.max(2, Math.min(Math.floor(dryTarget / 2), Math.floor(dryTarget * 0.34)));
   const along = (province: Province) => horizontal ? province.x : province.y;
-  const low = [...active].sort((a, b) => along(a) - along(b) || Math.abs(styxSignedDistance(a, horizontal, seed))
+  // A drawn river enters and leaves beside its course in the outermost
+  // generated column, rather than at whichever corner lies furthest out.
+  const column = (province: Province) => horizontal ? province.gridX : province.gridY;
+  const outward = guard && active.every((province) => Number.isInteger(column(province))) ? column : along;
+  const low = [...active].sort((a, b) => outward(a) - outward(b) || Math.abs(styxSignedDistance(a, horizontal, seed))
     - Math.abs(styxSignedDistance(b, horizontal, seed)) || a.index - b.index)[0];
   const high = [...active].filter((province) => province.id !== low?.id)
-    .sort((a, b) => along(b) - along(a) || Math.abs(styxSignedDistance(a, horizontal, seed))
+    .sort((a, b) => outward(b) - outward(a) || Math.abs(styxSignedDistance(a, horizontal, seed))
       - Math.abs(styxSignedDistance(b, horizontal, seed)) || a.index - b.index)[0];
-  if (!low || !high) return;
+  if (!low || !high) return undefined;
   const endpointIds = new Set([low.id, high.id]);
   const bySignedDistance = active.filter((province) => !endpointIds.has(province.id)).sort((a, b) => styxSignedDistance(a, horizontal, seed)
     - styxSignedDistance(b, horizontal, seed) || a.index - b.index);
@@ -2129,12 +2318,66 @@ function applyRiverStyx(plane: Plane, seed: string) {
     if (selected.size >= target) break;
     selected.add(province.id);
   }
-  enforceStyxBanks(plane, selected, horizontal, seed);
-  [...selected].sort((a, b) => byId.get(a)!.index - byId.get(b)!.index).forEach((id, index) => {
-    const province = byId.get(id)!;
-    floodCaveProvince(province, "underworld", index % 4 === 1);
-    province.name = `${STYX_NAMES[index % STYX_NAMES.length]} ${index + 1}`;
-  });
+  // Several candidate necks per crossing leave the crossing search a choice.
+  if (guard) carveStyxNecks(active, selected, reserved, endpointIds, horizontal, seed, (dryTarget >= 70 ? 2 : 1) * necksPerCrossing);
+  enforceStyxBanks(plane, selected, horizontal, seed, guard, reserved);
+  return { water: selected, bankMinimum };
+}
+
+/**
+ * A straight crossing can only be drawn where the river is one province
+ * wide. Where the band is thicker, keep just the course province in each
+ * evenly spaced crossing column; its former water joins the nearer bank.
+ */
+function carveStyxNecks(
+  active: readonly Province[],
+  selected: Set<string>,
+  reserved: Set<string>,
+  endpointIds: ReadonlySet<string>,
+  horizontal: boolean,
+  seed: string,
+  count: number,
+) {
+  const column = (province: Province) => horizontal ? province.gridX : province.gridY;
+  if (!active.every((province) => Number.isInteger(column(province)))) return;
+  const columns = [...new Set(active.map(column))].sort((a, b) => a - b);
+  if (columns.length < 5) return;
+  const interior = columns.slice(1, -1);
+  // Necks narrow the band; they never shrink the river below a fifth of the plane.
+  const floor = Math.ceil(active.length * 0.2);
+  for (let neck = 0; neck < count; neck += 1) {
+    const ideal = columns[0]! + (columns.at(-1)! - columns[0]!) * (neck + 1) / (count + 1);
+    const chosen = [...interior].sort((a, b) => Math.abs(a - ideal) - Math.abs(b - ideal) || a - b)[0]!;
+    const water = active.filter((province) => column(province) === chosen && selected.has(province.id))
+      .sort((a, b) => Math.abs(styxSignedDistance(a, horizontal, seed)) - Math.abs(styxSignedDistance(b, horizontal, seed))
+        || a.index - b.index);
+    for (const province of water.slice(1)) {
+      if (endpointIds.has(province.id) || selected.size <= floor) continue;
+      selected.delete(province.id);
+      reserved.add(province.id);
+    }
+  }
+}
+
+/** The Styx movement contract: one connected river, two dry banks joined only by 1-2 crossings. */
+function styxLayoutHolds(plane: Plane, styx: ReadonlySet<string>, bankMinimum: number): boolean {
+  const active = plane.provinces.filter((province) => !isBlockedProvince(province));
+  const connected = (ids: ReadonlySet<string>, include: (edge: Edge) => boolean) => {
+    const adjacency = new Map([...ids].map((id) => [id, [] as string[]]));
+    for (const edge of plane.edges) {
+      if (!include(edge) || isImpassableEdge(edge) || !ids.has(edge.a) || !ids.has(edge.b)) continue;
+      adjacency.get(edge.a)!.push(edge.b);
+      adjacency.get(edge.b)!.push(edge.a);
+    }
+    return graphComponents(adjacency, new Set(ids));
+  };
+  const bridges = plane.edges.filter((edge) => edge.kind === "bridge").length;
+  const dry = new Set(active.filter((province) => !styx.has(province.id)).map((province) => province.id));
+  const banks = connected(dry, (edge) => edge.kind !== "bridge");
+  return bridges >= 1 && bridges <= 2
+    && connected(new Set(active.map((province) => province.id)), () => true).length === 1
+    && connected(new Set([...styx]), () => true).length === 1
+    && banks.length === 2 && banks.every((bank) => bank.length >= bankMinimum);
 }
 
 function styxSignedDistance(province: Pick<Province, "x" | "y">, horizontal: boolean, seed: string): number {
@@ -2145,9 +2388,26 @@ function styxSignedDistance(province: Pick<Province, "x" | "y">, horizontal: boo
   return orthogonal - center;
 }
 
-function enforceStyxBanks(plane: Plane, styx: ReadonlySet<string>, horizontal: boolean, seed: string) {
-  const dry = plane.provinces.filter((province) => !styx.has(province.id) && !isBlockedProvince(province));
-  const bank = (province: Province) => styxSignedDistance(province, horizontal, seed) < 0 ? 0 : 1;
+/** The first unused ID in a scope; generated links may be displaced and re-added during a pass. */
+function nextEdgeId(plane: Plane, seed: string, scope: string): string {
+  const used = new Set(plane.edges.map((edge) => edge.id));
+  for (let index = plane.edges.length; ; index += 1) {
+    const id = idFor(seed, scope, index);
+    if (!used.has(id)) return id;
+  }
+}
+
+function enforceStyxBanks(
+  plane: Plane,
+  styx: Set<string>,
+  horizontal: boolean,
+  seed: string,
+  guard?: PassageGuard,
+  reserved: ReadonlySet<string> = new Set(),
+) {
+  const banks = new Map(plane.provinces.map((province) => [province.id, styxSignedDistance(province, horizontal, seed) < 0 ? 0 : 1]));
+  const bank = (province: Province) => banks.get(province.id) ?? 0;
+  const dryProvinces = () => plane.provinces.filter((province) => !styx.has(province.id) && !isBlockedProvince(province));
   const byId = new Map(plane.provinces.map((province) => [province.id, province]));
   const crossBank: Edge[] = [];
   plane.edges = plane.edges.filter((edge) => {
@@ -2157,63 +2417,85 @@ function enforceStyxBanks(plane: Plane, styx: ReadonlySet<string>, horizontal: b
     crossBank.push(edge);
     return false;
   });
+  // A drawn Styx is continuous before either bank is joined around it.
+  if (guard) connectDrawableStyx(plane, styx, reserved, guard, horizontal, seed);
 
-  const existing = new Set(plane.edges.map((edge) => connectionKey(edge.a, edge.b)));
-  for (const group of [
-    { nodes: plane.provinces.filter((province) => styx.has(province.id)), scope: "styx-water" },
-    { nodes: dry.filter((province) => bank(province) === 0), scope: "styx-bank-0" },
-    { nodes: dry.filter((province) => bank(province) === 1), scope: "styx-bank-1" },
-  ]) {
-    const nodes = group.nodes;
-    if (nodes.length < 2) continue;
-    const { pairs } = spatialPairs(nodes, plane);
-    const position = new Map(nodes.map((province, index) => [province.id, index]));
-    const parent = nodes.map((_, index) => index);
-    const find = (value: number): number => parent[value] === value ? value : (parent[value] = find(parent[value]!));
-    const union = (a: string, b: string) => {
-      const left = find(position.get(a)!);
-      const right = find(position.get(b)!);
-      if (left === right) return false;
-      parent[right] = left;
-      return true;
-    };
-    for (const edge of plane.edges) {
-      if (position.has(edge.a) && position.has(edge.b)) union(edge.a, edge.b);
+  const joinGroups = () => {
+    const dry = dryProvinces();
+    for (const group of [
+      { nodes: plane.provinces.filter((province) => styx.has(province.id)), scope: "styx-water" },
+      { nodes: dry.filter((province) => bank(province) === 0), scope: "styx-bank-0" },
+      { nodes: dry.filter((province) => bank(province) === 1), scope: "styx-bank-1" },
+    ]) {
+      const nodes = group.nodes;
+      if (nodes.length < 2) continue;
+      const { pairs } = spatialPairs(nodes, plane);
+      const position = new Map(nodes.map((province, index) => [province.id, index]));
+      const parent = nodes.map((_, index) => index);
+      const find = (value: number): number => parent[value] === value ? value : (parent[value] = find(parent[value]!));
+      const union = (a: string, b: string) => {
+        const left = find(position.get(a)!);
+        const right = find(position.get(b)!);
+        if (left === right) return false;
+        parent[right] = left;
+        return true;
+      };
+      for (const edge of plane.edges) {
+        if (position.has(edge.a) && position.has(edge.b)) union(edge.a, edge.b);
+      }
+      for (const pair of pairs) {
+        if (find(position.get(pair.a.id)!) === find(position.get(pair.b.id)!)) continue;
+        if (guard && !pairDrawable(guard, pair, plane.edges)) continue;
+        union(pair.a.id, pair.b.id);
+        plane.edges.push({
+          id: nextEdgeId(plane, seed, group.scope),
+          a: pair.a.id,
+          b: pair.b.id,
+          kind: "standard",
+        });
+      }
     }
-    for (const pair of pairs) {
-      if (!union(pair.a.id, pair.b.id)) continue;
-      plane.edges.push({
-        id: idFor(seed, group.scope, plane.edges.length),
-        a: pair.a.id,
-        b: pair.b.id,
-        kind: "standard",
-      });
-      existing.add(pair.key);
+  };
+  joinGroups();
+  if (guard) {
+    for (let attempt = 0; attempt < 4 && settleStyxStragglers(plane, styx, banks, guard); attempt += 1) {
+      refreshStyxStubs(plane, styx, reserved, guard);
+      joinGroups();
     }
   }
 
+  const dry = dryProvinces();
   const crossingLimit = dry.length >= 70 ? 2 : 1;
-  if (!crossBank.length) {
-    const { pairs } = spatialPairs(dry, plane);
-    const fallback = pairs.find((pair) => bank(pair.a) !== bank(pair.b));
-    if (fallback) crossBank.push({
-      id: idFor(seed, "styx-ford", 0),
-      a: fallback.a.id,
-      b: fallback.b.id,
-      kind: "bridge",
+  // The water set is final from here on, so passages use their exact widths.
+  if (guard) guard.planner = createSparsePassagePlanner(plane, (id) => styx.has(id));
+  const placed = guard ? placeDrawableStyxCrossings(plane, styx, bank, crossBank, crossingLimit, guard, seed) : 0;
+  if (!placed) {
+    const stillCrossing = crossBank.filter((edge) => {
+      const a = byId.get(edge.a), b = byId.get(edge.b);
+      return !!a && !!b && !styx.has(a.id) && !styx.has(b.id) && bank(a) !== bank(b);
     });
-  }
-  const candidates = crossBank.sort((left, right) => {
-    const aLeft = byId.get(left.a)!;
-    const bLeft = byId.get(left.b)!;
-    const aRight = byId.get(right.a)!;
-    const bRight = byId.get(right.b)!;
-    return periodicProvinceDistance(aLeft, bLeft, plane, plane.width / Math.max(1, plane.height))
-      - periodicProvinceDistance(aRight, bRight, plane, plane.width / Math.max(1, plane.height))
-      || aLeft.index - aRight.index || bLeft.index - bRight.index;
-  });
-  for (const edge of candidates.slice(0, crossingLimit)) {
-    plane.edges.push({ ...edge, kind: "bridge", special: undefined });
+    if (!stillCrossing.length) {
+      const { pairs } = spatialPairs(dry, plane);
+      const fallback = pairs.find((pair) => bank(pair.a) !== bank(pair.b));
+      if (fallback) stillCrossing.push({
+        id: idFor(seed, "styx-ford", 0),
+        a: fallback.a.id,
+        b: fallback.b.id,
+        kind: "bridge",
+      });
+    }
+    const candidates = stillCrossing.sort((left, right) => {
+      const aLeft = byId.get(left.a)!;
+      const bLeft = byId.get(left.b)!;
+      const aRight = byId.get(right.a)!;
+      const bRight = byId.get(right.b)!;
+      return periodicProvinceDistance(aLeft, bLeft, plane, plane.width / Math.max(1, plane.height))
+        - periodicProvinceDistance(aRight, bRight, plane, plane.width / Math.max(1, plane.height))
+        || aLeft.index - aRight.index || bLeft.index - bRight.index;
+    });
+    for (const edge of candidates.slice(0, crossingLimit)) {
+      plane.edges.push({ ...edge, kind: "bridge", special: undefined });
+    }
   }
   const active = plane.provinces.filter((province) => !isBlockedProvince(province));
   const allAdjacency = adjacencyFor(plane, { traversableOnly: true });
@@ -2222,13 +2504,14 @@ function enforceStyxBanks(plane: Plane, styx: ReadonlySet<string>, horizontal: b
     for (const pair of pairs) {
       if (plane.edges.some((edge) => connectionKey(edge.a, edge.b) === pair.key)) continue;
       if (!styx.has(pair.a.id) && !styx.has(pair.b.id)) continue;
-      plane.edges.push({ id: idFor(seed, "styx-bank-link", plane.edges.length), a: pair.a.id, b: pair.b.id, kind: "standard" });
+      if (guard && !pairDrawable(guard, pair, plane.edges)) continue;
+      plane.edges.push({ id: nextEdgeId(plane, seed, "styx-bank-link"), a: pair.a.id, b: pair.b.id, kind: "standard" });
       const repaired = adjacencyFor(plane, { traversableOnly: true });
       if (shortestDistances(repaired, active[0]!.id).size === active.length) break;
     }
   }
-  pruneStyxCycles(plane, styx, horizontal, seed, 0.28);
-  repairStyxLeaves(plane, styx, horizontal, seed);
+  pruneStyxCycles(plane, styx, horizontal, seed, 0.28, bank, guard?.protectedKeys);
+  repairStyxLeaves(plane, styx, horizontal, seed, bank, guard);
   plane.edges.sort((left, right) => {
     const aLeft = byId.get(left.a)?.index ?? Infinity;
     const aRight = byId.get(right.a)?.index ?? Infinity;
@@ -2238,12 +2521,253 @@ function enforceStyxBanks(plane: Plane, styx: ReadonlySet<string>, horizontal: b
   });
 }
 
-function repairStyxLeaves(plane: Plane, styx: ReadonlySet<string>, horizontal: boolean, seed: string) {
+/**
+ * Connects the planned Styx with drawable water links. A water link takes
+ * precedence over provisional dry links it would touch; the banks are joined
+ * around it afterwards. Water that cannot be reached without passing an
+ * unrelated chamber floods the cheapest drawable path near the course.
+ */
+function connectDrawableStyx(
+  plane: Plane,
+  styx: Set<string>,
+  reserved: ReadonlySet<string>,
+  guard: PassageGuard,
+  horizontal: boolean,
+  seed: string,
+) {
+  const active = plane.provinces.filter((province) => !isBlockedProvince(province));
+  const { pairs: activePairs, spacing } = spatialPairs(active, plane);
+  const nearPairs = activePairs.filter((pair) => pair.distance <= spacing * 2.4 + 1e-9);
+  const isWaterLink = (edge: Edge) => styx.has(edge.a) && styx.has(edge.b);
+  for (let round = 0; round < active.length; round += 1) {
+    refreshStyxStubs(plane, styx, reserved, guard);
+    const water = active.filter((province) => styx.has(province.id));
+    if (water.length < 2) return;
+    const position = new Map(water.map((province, index) => [province.id, index]));
+    const parent = water.map((_, index) => index);
+    const find = (value: number): number => parent[value] === value ? value : (parent[value] = find(parent[value]!));
+    for (const edge of plane.edges) {
+      if (position.has(edge.a) && position.has(edge.b)) parent[find(position.get(edge.b)!)] = find(position.get(edge.a)!);
+    }
+    for (const pair of spatialPairs(water, plane).pairs) {
+      const left = find(position.get(pair.a.id)!), right = find(position.get(pair.b.id)!);
+      if (left === right || !passageDrawable(guard, pair.a.id, pair.b.id, plane.edges.filter(isWaterLink))) continue;
+      const passage = { a: pair.a.id, b: pair.b.id };
+      plane.edges = plane.edges.filter((edge) => isWaterLink(edge) || guard.planner.compatible(passage, edge));
+      plane.edges.push({ id: nextEdgeId(plane, seed, "styx-water"), a: pair.a.id, b: pair.b.id, kind: "standard" });
+      parent[right] = left;
+    }
+    const components = new Map<number, string[]>();
+    for (const province of water) {
+      const root = find(position.get(province.id)!);
+      components.set(root, [...(components.get(root) ?? []), province.id]);
+    }
+    if (components.size <= 1) return;
+    const source = new Set([...components.values()].sort((a, b) => b.length - a.length
+      || Math.min(...a.map((id) => position.get(id)!)) - Math.min(...b.map((id) => position.get(id)!)))[0]);
+    const preferred = styxFloodPath(plane, styx, reserved, guard, nearPairs, source, spacing, horizontal, seed);
+    // Reserved bank provinces are a last resort; the layout check still keeps each bank large enough.
+    const path = preferred.length ? preferred
+      : styxFloodPath(plane, styx, new Set(), guard, nearPairs, source, spacing, horizontal, seed);
+    if (!path.length) return;
+    for (const id of path) styx.add(id);
+  }
+}
+
+/** Dry provinces on the cheapest drawable route from one water body to another, preferring the course. */
+function styxFloodPath(
+  plane: Plane,
+  styx: ReadonlySet<string>,
+  reserved: ReadonlySet<string>,
+  guard: PassageGuard,
+  nearPairs: readonly SpatialPair[],
+  source: ReadonlySet<string>,
+  spacing: number,
+  horizontal: boolean,
+  seed: string,
+): string[] {
+  const waterLinks = plane.edges.filter((edge) => styx.has(edge.a) && styx.has(edge.b));
+  const neighbours = new Map<string, Array<{ id: string; distance: number }>>();
+  for (const pair of nearPairs) {
+    for (const [from, to] of [[pair.a, pair.b], [pair.b, pair.a]] as const) {
+      const list = neighbours.get(from.id) ?? [];
+      list.push({ id: to.id, distance: pair.distance });
+      neighbours.set(from.id, list);
+    }
+  }
+  const byId = new Map(plane.provinces.map((province) => [province.id, province]));
+  const distance = new Map<string, number>([...source].map((id) => [id, 0]));
+  const previous = new Map<string, string>();
+  const settled = new Set<string>();
+  while (true) {
+    let current: string | undefined;
+    for (const [id, value] of distance) {
+      if (settled.has(id)) continue;
+      if (current === undefined || value < distance.get(current)! - 1e-12
+        || (Math.abs(value - distance.get(current)!) <= 1e-12 && byId.get(id)!.index < byId.get(current)!.index)) current = id;
+    }
+    if (current === undefined) return [];
+    settled.add(current);
+    // Other water is a destination, never a stepping stone.
+    if (styx.has(current) && !source.has(current)) {
+      const path: string[] = [];
+      for (let step = previous.get(current); step !== undefined && !source.has(step); step = previous.get(step)) path.push(step);
+      return path;
+    }
+    for (const next of neighbours.get(current) ?? []) {
+      if (settled.has(next.id) || source.has(next.id) || reserved.has(next.id)) continue;
+      const province = byId.get(next.id)!;
+      if (isBlockedProvince(province) || !passageDrawable(guard, current, next.id, waterLinks)) continue;
+      const floodCost = styx.has(next.id) ? 0 : spacing * (1 + 6 * Math.abs(styxSignedDistance(province, horizontal, seed)));
+      const value = distance.get(current)! + next.distance + floodCost;
+      if (value < (distance.get(next.id) ?? Infinity) - 1e-12) {
+        distance.set(next.id, value);
+        previous.set(next.id, current);
+      }
+    }
+  }
+}
+
+/**
+ * Stubs carry the Styx from its outermost water to the map edges. A dry
+ * chamber in a stub's way joins the river; dry links across a stub yield.
+ */
+function refreshStyxStubs(plane: Plane, styx: Set<string>, reserved: ReadonlySet<string>, guard: PassageGuard) {
+  for (let round = 0; round < plane.provinces.length; round += 1) {
+    guard.stubs = styxStubPassages(plane, styx);
+    const blocked = guard.stubs.flatMap((stub) => guard.planner.blockers(stub))
+      .filter((id) => !styx.has(id) && !reserved.has(id));
+    if (!blocked.length) break;
+    for (const id of blocked) styx.add(id);
+  }
+  plane.edges = plane.edges.filter((edge) => (styx.has(edge.a) && styx.has(edge.b))
+    || guard.stubs.every((stub) => guard.planner.compatible(edge, stub)));
+}
+
+/**
+ * A dry group that cannot reach the rest of its bank without crossing the
+ * drawn river lies on the other side of it: it joins that bank, or, when
+ * enclosed by water, becomes part of the river. The final layout check
+ * still enforces the minimum bank sizes.
+ */
+function settleStyxStragglers(
+  plane: Plane,
+  styx: Set<string>,
+  banks: Map<string, number>,
+  guard: PassageGuard,
+): boolean {
+  const byId = new Map(plane.provinces.map((province) => [province.id, province]));
+  const dry = plane.provinces.filter((province) => !styx.has(province.id) && !isBlockedProvince(province));
+  // Decide from one snapshot, so a group moved this round is joined before it is reconsidered.
+  const initial = new Map(banks);
+  let changed = false;
+  for (const side of [0, 1]) {
+    const nodes = dry.filter((province) => initial.get(province.id) === side);
+    const ids = new Set(nodes.map((province) => province.id));
+    const adjacency = new Map(nodes.map((province) => [province.id, [] as string[]]));
+    for (const edge of plane.edges) {
+      if (edge.kind === "bridge" || !ids.has(edge.a) || !ids.has(edge.b)) continue;
+      adjacency.get(edge.a)!.push(edge.b);
+      adjacency.get(edge.b)!.push(edge.a);
+    }
+    const components = graphComponents(adjacency, ids);
+    for (const component of components.slice(1)) {
+      const members = new Set(component);
+      const reaches = (targets: readonly Province[]) => spatialPairs([...component.map((id) => byId.get(id)!), ...targets], plane).pairs
+        .some((pair) => members.has(pair.a.id) !== members.has(pair.b.id) && pairDrawable(guard, pair, plane.edges));
+      const opposite = dry.filter((province) => initial.get(province.id) === 1 - side);
+      if (reaches(opposite)) {
+        for (const id of component) banks.set(id, 1 - side);
+        changed = true;
+      } else if (reaches(plane.provinces.filter((province) => styx.has(province.id)))) {
+        for (const id of component) styx.add(id);
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
+
+/**
+ * Explicit Styx crossings are drawn over the river, so each one touches the
+ * water it crosses. A crossing is accepted only when it touches nothing but
+ * Styx water, and each touched water province is linked to the bank it meets
+ * (a ford link that keeps its own contact with that bank).
+ */
+function placeDrawableStyxCrossings(
+  plane: Plane,
+  styx: ReadonlySet<string>,
+  bank: (province: Province) => number,
+  crossBank: readonly Edge[],
+  limit: number,
+  guard: PassageGuard,
+  seed: string,
+): number {
+  const byId = new Map(plane.provinces.map((province) => [province.id, province]));
+  const aspect = plane.width / Math.max(1, plane.height);
+  const dry = plane.provinces.filter((province) => !styx.has(province.id) && !isBlockedProvince(province));
+  const crossing = (a: Province | undefined, b: Province | undefined): a is Province => !!a && !!b
+    && !styx.has(a.id) && !styx.has(b.id) && !isBlockedProvince(a) && !isBlockedProvince(b) && bank(a) !== bank(b);
+  const { pairs, spacing } = spatialPairs(dry, plane);
+  const candidates: Array<{ a: Province; b: Province; source?: Edge }> = [
+    ...crossBank.flatMap((edge) => {
+      const a = byId.get(edge.a), b = byId.get(edge.b);
+      return crossing(a, b) ? [{ a, b: b!, source: edge }] : [];
+    }).sort((left, right) => periodicProvinceDistance(left.a, left.b, plane, aspect) - periodicProvinceDistance(right.a, right.b, plane, aspect)
+      || left.a.index - right.a.index || left.b.index - right.b.index),
+    ...pairs.filter((pair) => crossing(pair.a, pair.b) && pair.distance <= spacing * 4 + 1e-9)
+      .map((pair) => ({ a: pair.a, b: pair.b })),
+  ];
+  let placed = 0;
+  // Very small planes may offer no crossing that clears every Styx centre.
+  // Only then may a crossing pass over one; that province's chamber is split
+  // across the crossing and meets both banks, so both get a ford link.
+  for (const coverCentres of [false, true]) {
+    if (placed) break;
+    const tried = new Set<string>();
+    for (const candidate of candidates) {
+      if (placed >= limit) break;
+      const key = connectionKey(candidate.a.id, candidate.b.id);
+      if (tried.has(key)) continue;
+      tried.add(key);
+      const contacts = guard.planner.bridgeContacts(candidate.a.id, candidate.b.id, [...plane.edges, ...guard.stubs], { coverCentres });
+      if (!contacts || contacts.some((contact) => !styx.has(contact.owner))) continue;
+      const existing = new Set(plane.edges.map((edge) => connectionKey(edge.a, edge.b)));
+      const contactKeys = contacts.map((contact) => connectionKey(contact.endpoint, contact.owner));
+      const exempt = new Set([key, ...contactKeys]);
+      const planned: LinkLike[] = [...plane.edges, { a: candidate.a.id, b: candidate.b.id }];
+      const fords = contacts.filter((contact) => !existing.has(connectionKey(contact.endpoint, contact.owner)));
+      const drawable = fords.every((ford) => {
+        if ((!ford.covered && !guard.planner.fordMeetsBank(ford.endpoint, ford.owner, [candidate.a.id, candidate.b.id]))
+          || !passageDrawable(guard, ford.endpoint, ford.owner, planned, exempt)) return false;
+        planned.push({ a: ford.endpoint, b: ford.owner });
+        return true;
+      });
+      if (!drawable) continue;
+      plane.edges.push(candidate.source
+        ? { ...candidate.source, kind: "bridge", special: undefined }
+        : { id: nextEdgeId(plane, seed, "styx-ford"), a: candidate.a.id, b: candidate.b.id, kind: "bridge" });
+      for (const ford of fords) {
+        plane.edges.push({ id: nextEdgeId(plane, seed, "styx-ford-bank"), a: ford.endpoint, b: ford.owner, kind: "standard" });
+      }
+      for (const protectedKey of exempt) guard.protectedKeys.add(protectedKey);
+      placed += 1;
+    }
+  }
+  return placed;
+}
+
+function repairStyxLeaves(
+  plane: Plane,
+  styx: ReadonlySet<string>,
+  horizontal: boolean,
+  seed: string,
+  bank: (province: Province) => number = (province) => styxSignedDistance(province, horizontal, seed) < 0 ? 0 : 1,
+  guard?: PassageGuard,
+) {
   const active = plane.provinces.filter((province) => !isBlockedProvince(province));
   const limit = active.length < 24 ? 2 : Math.floor(active.length * 0.12);
-  const group = (province: Province) => styx.has(province.id)
-    ? 2
-    : styxSignedDistance(province, horizontal, seed) < 0 ? 0 : 1;
+  const group = (province: Province) => styx.has(province.id) ? 2 : bank(province);
   const { pairs } = spatialPairs(active, plane);
   while (true) {
     const adjacency = adjacencyFor(plane, { traversableOnly: true });
@@ -2255,10 +2779,11 @@ function repairStyxLeaves(plane: Plane, styx: ReadonlySet<string>, horizontal: b
       && group(pair.a) === group(pair.b)
       && (leafIds.has(pair.a.id) || leafIds.has(pair.b.id))
       && (adjacency.get(pair.a.id)?.length ?? 0) < 5
-      && (adjacency.get(pair.b.id)?.length ?? 0) < 5);
+      && (adjacency.get(pair.b.id)?.length ?? 0) < 5
+      && (!guard || pairDrawable(guard, pair, plane.edges)));
     if (!candidate) return;
     plane.edges.push({
-      id: idFor(seed, "styx-leaf-loop", plane.edges.length),
+      id: nextEdgeId(plane, seed, "styx-leaf-loop"),
       a: candidate.a.id,
       b: candidate.b.id,
       kind: "standard",
@@ -2266,9 +2791,16 @@ function repairStyxLeaves(plane: Plane, styx: ReadonlySet<string>, horizontal: b
   }
 }
 
-function pruneStyxCycles(plane: Plane, styx: ReadonlySet<string>, horizontal: boolean, seed: string, targetRatio: number) {
+function pruneStyxCycles(
+  plane: Plane,
+  styx: ReadonlySet<string>,
+  horizontal: boolean,
+  seed: string,
+  targetRatio: number,
+  bank: (province: Province) => number = (province) => styxSignedDistance(province, horizontal, seed) < 0 ? 0 : 1,
+  protectedKeys: ReadonlySet<string> = new Set(),
+) {
   const active = plane.provinces.filter((province) => !isBlockedProvince(province));
-  const bank = (province: Province) => styxSignedDistance(province, horizontal, seed) < 0 ? 0 : 1;
   const maximumEdges = Math.max(active.length - 1, active.length - 1 + Math.floor(active.length * targetRatio));
   const connected = (ids: Set<string>, edges: readonly Edge[]) => {
     if (ids.size < 2) return true;
@@ -2287,7 +2819,9 @@ function pruneStyxCycles(plane: Plane, styx: ReadonlySet<string>, horizontal: bo
     .map((province) => province.id)));
   while (plane.edges.length > maximumEdges) {
     let removed = false;
-    const order = plane.edges.map((edge, index) => ({ edge, index })).filter(({ edge }) => edge.kind !== "bridge")
+    // Crossings and the links they rely on for their drawn contacts stay.
+    const order = plane.edges.map((edge, index) => ({ edge, index }))
+      .filter(({ edge }) => edge.kind !== "bridge" && !protectedKeys.has(connectionKey(edge.a, edge.b)))
       .sort((left, right) => {
         const leftMixed = Number(styx.has(left.edge.a) !== styx.has(left.edge.b));
         const rightMixed = Number(styx.has(right.edge.a) !== styx.has(right.edge.b));
@@ -2304,7 +2838,6 @@ function pruneStyxCycles(plane: Plane, styx: ReadonlySet<string>, horizontal: bo
     if (!removed) break;
   }
 }
-
 function graphComponents(adjacency: Map<string, string[]>, allowed: Set<string>): string[][] {
   const components: string[][] = [];
   const unseen = new Set(allowed);
@@ -2520,6 +3053,7 @@ function buildSparseEdges(
   const { pairs: allPairs, spacing } = spatialPairs(active, plane);
   const pairs = regionContacts ? allPairs.filter(pair => regionContacts.has(pair.key)) : allPairs;
   const localPairs = pairs.filter((pair) => pair.distance <= spacing * 2.4 + 1e-9);
+  const guard = regions ? undefined : createPassageGuard(plane, new Set());
   const selected = new Map<string, SpatialPair>();
   const degrees = new Map(active.map((province) => [province.id, 0]));
   const addPair = (pair: SpatialPair | undefined) => {
@@ -2551,7 +3085,7 @@ function buildSparseEdges(
     }
     for (const pair of regions.regionPairs) addPair(pairByKey.get(pair.key));
   } else {
-    buildChamberGraph(active, pairs, localPairs, selected, degrees, addPair, UNDERWORLD_GRAPH_PROFILE, spacing);
+    buildChamberGraph(active, pairs, localPairs, selected, degrees, addPair, UNDERWORLD_GRAPH_PROFILE, spacing, guard);
   }
 
   addSparseStartHubs(
@@ -2569,6 +3103,7 @@ function buildSparseEdges(
     undefined,
     undefined,
     seed,
+    guard,
   );
 
   return [...selected.values()]
@@ -2623,7 +3158,79 @@ function periodicProvinceDistance(
   return Math.hypot(dx * aspect, dy);
 }
 
-function minimumSpanningPairs(active: readonly Province[], pairs: readonly SpatialPair[]): SpatialPair[] {
+/**
+ * Generated Underworld links are drawn as straight chamber-to-chamber
+ * corridors. Accepting only drawable pairs keeps the native raster's shared
+ * borders identical to the movement graph: a passage never runs through an
+ * unrelated chamber, and two passages never meet as an unlinked pair.
+ */
+interface PassageGuard {
+  planner: SparsePassagePlanner;
+  /** Styx stubs of the current water set, each owned by one province. */
+  stubs: SparsePassage[];
+  /** Links that exempt a neighbouring pair's far ends; never pruned. */
+  readonly protectedKeys: Set<string>;
+}
+
+type LinkLike = { a: string | Province; b: string | Province };
+
+function createPassageGuard(plane: Plane, plannedWater?: ReadonlySet<string>): PassageGuard | undefined {
+  if (plane.kind !== "underworld" || resolvePlaneOwnershipMode(plane) !== "sparse") return undefined;
+  // Planned water can still grow, so every corridor keeps the widest Styx
+  // width until the river is final; a finished plane uses exact widths.
+  const water = plannedWater ?? new Set(plane.provinces.filter(isWaterProvince).map((province) => province.id));
+  return {
+    planner: createSparsePassagePlanner(plane, plannedWater ? undefined : (id) => water.has(id)),
+    stubs: styxStubPassages(plane, water),
+    protectedKeys: new Set(),
+  };
+}
+
+/** Conservative mirror of the ownership model's Styx edge stubs for a planned water set. */
+function styxStubPassages(plane: Plane, water: ReadonlySet<string>): SparsePassage[] {
+  const axis = plane.width >= plane.height ? "x" : "y";
+  if ((axis === "x" && plane.wrapX) || (axis === "y" && plane.wrapY)) return [];
+  const nodes = plane.provinces.filter((province) => water.has(province.id));
+  if (nodes.length < 2) return [];
+  const coordinate = (province: Province) => axis === "x" ? province.x : province.y;
+  const low = [...nodes].sort((a, b) => coordinate(a) - coordinate(b) || a.index - b.index)[0]!;
+  const high = [...nodes].sort((a, b) => coordinate(b) - coordinate(a) || a.index - b.index)[0]!;
+  if (low.id === high.id) return [];
+  return [{ a: low.id, boundary: { axis, side: "low" } }, { a: high.id, boundary: { axis, side: "high" } }];
+}
+
+function linkIds(link: LinkLike): [string, string] {
+  return [typeof link.a === "string" ? link.a : link.a.id, typeof link.b === "string" ? link.b : link.b.id];
+}
+
+function passageDrawable(
+  guard: PassageGuard,
+  a: string,
+  b: string,
+  links: Iterable<LinkLike>,
+  extraProtected?: ReadonlySet<string>,
+): boolean {
+  if (!guard.planner.clear({ a, b })) return false;
+  const key = connectionKey(a, b);
+  const linked = (p: string, q: string) => guard.protectedKeys.has(connectionKey(p, q))
+    || !!extraProtected?.has(connectionKey(p, q));
+  for (const link of links) {
+    const [la, lb] = linkIds(link);
+    if (connectionKey(la, lb) === key) continue;
+    if (!guard.planner.compatible({ a, b }, { a: la, b: lb }, linked)) return false;
+  }
+  return guard.stubs.every((stub) => guard.planner.compatible({ a, b }, stub));
+}
+
+function pairDrawable(guard: PassageGuard, pair: SpatialPair, links: Iterable<LinkLike>): boolean {
+  return passageDrawable(guard, pair.a.id, pair.b.id, links);
+}
+
+function minimumSpanningPairs(
+  active: readonly Province[],
+  pairs: readonly SpatialPair[],
+  drawable?: (pair: SpatialPair, tree: readonly SpatialPair[]) => boolean,
+): SpatialPair[] {
   const position = new Map(active.map((province, index) => [province.id, index]));
   const parent = active.map((_, index) => index);
   const rank = active.map(() => 0);
@@ -2648,9 +3255,20 @@ function minimumSpanningPairs(active: readonly Province[], pairs: readonly Spati
   };
   const tree: SpatialPair[] = [];
   for (const pair of pairs) {
-    if (!union(position.get(pair.a.id)!, position.get(pair.b.id)!)) continue;
+    const a = position.get(pair.a.id)!, b = position.get(pair.b.id)!;
+    if (find(a) === find(b) || (drawable && !drawable(pair, tree))) continue;
+    union(a, b);
     tree.push(pair);
     if (tree.length === active.length - 1) break;
+  }
+  // A drawable forest that cannot span falls back to the nearest remaining
+  // joins; generation reports connectivity rather than isolating provinces.
+  if (drawable && tree.length < active.length - 1) {
+    for (const pair of pairs) {
+      if (!union(position.get(pair.a.id)!, position.get(pair.b.id)!)) continue;
+      tree.push(pair);
+      if (tree.length === active.length - 1) break;
+    }
   }
   return tree;
 }
@@ -2664,8 +3282,12 @@ function buildChamberGraph(
   addPair: (pair: SpatialPair | undefined) => boolean,
   profile: typeof UNDERWORLD_GRAPH_PROFILE,
   spacing: number,
+  guard?: PassageGuard,
 ) {
-  const tree = minimumSpanningPairs(active, pairs);
+  const drawable = guard ? (pair: SpatialPair) => pairDrawable(guard, pair, selected.values()) : undefined;
+  const tree = minimumSpanningPairs(active, pairs, guard
+    ? (pair, partial) => pairDrawable(guard, pair, [...selected.values(), ...partial])
+    : undefined);
   for (const pair of tree) addPair(pair);
   const desiredClusters = active.length < 12
     ? 1
@@ -2687,7 +3309,7 @@ function buildChamberGraph(
     }, (pair) => {
       const leafEnds = Number((degrees.get(pair.a.id) ?? 0) <= 1) + Number((degrees.get(pair.b.id) ?? 0) <= 1);
       return leafEnds * 1000 - pair.distance / spacing;
-    });
+    }, drawable);
     const pair = chooseLeafRepair(localPairs) ?? chooseLeafRepair(pairs);
     if (!addPair(pair)) break;
   }
@@ -2705,7 +3327,7 @@ function buildChamberGraph(
       return degreeTwoShare > targetShare
         ? converts * 120 + existingHubs * 8 - pair.distance / spacing
         : existingHubs * 90 - converts * 50 - pair.distance / spacing;
-    });
+    }, drawable);
     const pair = chooseLoop(localPairs) ?? chooseLoop(pairs);
     if (!addPair(pair)) break;
   }
@@ -2795,13 +3417,15 @@ function chooseSparseChord(
   selected: ReadonlyMap<string, SpatialPair>,
   eligible: (pair: SpatialPair) => boolean,
   score: (pair: SpatialPair) => number,
+  drawable?: (pair: SpatialPair) => boolean,
 ): SpatialPair | undefined {
   let best: SpatialPair | undefined;
   let bestScore = -Infinity;
   for (const pair of pool) {
     if (selected.has(pair.key) || !eligible(pair)) continue;
     const value = score(pair);
-    if (value > bestScore) {
+    // Geometry is only consulted for a pair that would otherwise win.
+    if (value > bestScore && (!drawable || drawable(pair))) {
       best = pair;
       bestScore = value;
     }
@@ -2824,9 +3448,11 @@ function addSparseStartHubs(
   desiredTwoRingCapacity: number | undefined,
   eligibleHub: ((province: Province) => boolean) | undefined,
   seed: string,
+  guard?: PassageGuard,
 ) {
   const desired = Math.min(requestedCount, active.length);
   if (!desired) return [];
+  const drawable = guard ? (pair: SpatialPair) => pairDrawable(guard, pair, selected.values()) : undefined;
   const preferredHubSeparation = scaledStartSeparationTarget(active.length, desired);
   const hubs = new Set<string>();
   const regional = usesConnectedRegions(plane);
@@ -2916,8 +3542,8 @@ function addSparseStartHubs(
       const pair = chooseSparseChord(localPairs, selected, (candidate) => {
         return (degrees.get(candidate.a.id) ?? 0) < Math.max(targetDegree, ordinaryMaxDegree)
           && (degrees.get(candidate.b.id) ?? 0) < Math.max(targetDegree, ordinaryMaxDegree);
-      }, (candidate) => -candidate.distance / spacing)
-        ?? chooseSparseChord(pairs, selected, () => true, (candidate) => -candidate.distance / spacing);
+      }, (candidate) => -candidate.distance / spacing, drawable)
+        ?? chooseSparseChord(pairs, selected, () => true, (candidate) => -candidate.distance / spacing, drawable);
       if (!addPair(pair)) break;
       continue;
     }
@@ -2966,7 +3592,7 @@ function addSparseStartHubs(
         const gained = [other.id, ...(currentAdjacency.get(other.id) ?? [])]
           .filter((id) => !currentTwoRing.has(id)).length;
         return gained * 120 + (degrees.get(other.id) ?? 0) * 12 - pair.distance / spacing;
-      });
+      }, drawable);
       const pair = raiseHub(localPairs) ?? raiseHub(pairs);
       if (!addPair(pair)) break;
     }
@@ -3000,7 +3626,7 @@ function addSparseStartHubs(
       }, (pair) => {
         const far = oneRing.has(pair.a.id) ? pair.b : pair.a;
         return (degrees.get(far.id) ?? 0) * 10 - pair.distance / spacing;
-      });
+      }, drawable);
       const basinPair = chooseBasinPair(localPairs) ?? chooseBasinPair(pairs);
       if (!addPair(basinPair)) break;
     }
@@ -3037,7 +3663,7 @@ function addSparseStartHubs(
       const far = oneRing.has(pair.a.id) ? pair.b : pair.a;
       const gained = [far.id, ...(adjacency.get(far.id) ?? [])].filter((id) => !twoRing.has(id)).length;
       return gained * 120 - pair.distance / spacing;
-    });
+    }, drawable);
     const branch = chooseBalancedBranch(localPairs) ?? chooseBalancedBranch(pairs);
     if (!addPair(branch)) exhaustedHubs.add(hub.id);
   }
@@ -3098,16 +3724,33 @@ export function synchronizePlaneEdges(plane: Plane, seed: string, preserveExisti
   }
   const provinceById = new Map(plane.provinces.map((province) => [province.id, province]));
   const rng = new SeededRandom(`${seed}:borders`);
+  // Editors find borders by ID, so IDs must stay unique. Kept borders reserve
+  // theirs first (a repeated one is suffixed); new borders avoid all of them,
+  // since a reused seed can reproduce an ID already on the plane.
+  const usedIds = new Set<string>();
+  const uniqueId = (candidate: string) => {
+    let id = candidate;
+    for (let suffix = 2; usedIds.has(id); suffix += 1) id = `${candidate}-${suffix}`;
+    usedIds.add(id);
+    return id;
+  };
+  const kept = topology.pairs.map((pair) => existing.get(pair.key));
+  const keptIds = kept.map((edge) => edge && uniqueId(edge.id));
   const edges = topology.pairs.map((pair, index) => {
-    const current = existing.get(pair.key);
-    if (current) return { ...current, a: pair.a, b: pair.b };
+    const current = kept[index];
+    if (current) return { ...current, id: keptIds[index]!, a: pair.a, b: pair.b };
     const a = provinceById.get(pair.a)!;
     const b = provinceById.get(pair.b)!;
+    // Roll first so the random sequence for later borders is unchanged, then
+    // keep new start borders open as generation does; a random river, pass or
+    // mountain border there would make the capital fail export validation.
+    const rolled = borderKind(a, b, rng);
+    const startBorder = [a, b].some((province) => province.start || province.teamStart !== undefined);
     return {
-      id: idFor(seed, "edge", index),
+      id: uniqueId(idFor(seed, "edge", index)),
       a: pair.a,
       b: pair.b,
-      kind: borderKind(a, b, rng),
+      kind: startBorder && (rolled === "river" || rolled === "mountain_pass" || rolled === "mountain_border") ? "standard" : rolled,
     } satisfies Edge;
   });
   return { ...plane, edges };
@@ -3125,14 +3768,17 @@ function borderKind(a: Province, b: Province, rng: SeededRandom): EdgeKind {
   return "standard";
 }
 
-function finalizeGeneratedRivers(plane: Plane, settings: GenerationSettings, seed: string, protectedStartIds: readonly string[] = [], warnings?: string[]) {
+/** Final generated edge-kind pass: connected rivers, including strategic river chokepoints. */
+export function finalizeGeneratedRivers(plane: Plane, settings: GenerationSettings, seed: string, protectedStartIds: readonly string[] = [], warnings?: string[]) {
   const controls = plane.generationOverrides;
   const hasRouteMix = controls && [controls.roadPercent, controls.riverPercent, controls.passPercent].some(value => value !== undefined);
   const result = generateBorderRivers(plane, seed, {
     riverPercent: hasRouteMix ? controls.riverPercent ?? 0 : undefined,
     bridgeAll: normalizeOverlandTopologyMode(settings.overlandTopology) === "open" && !hasRouteMix,
     protectedStartIds,
+    requiredBorders: takeStrategicRiverChokepoints(plane),
   });
+  restoreUnroutedStrategicChokepoints(plane, result.unroutedRequired, protectedStartIds, warnings);
   if (result.limited && hasRouteMix && (controls.riverPercent ?? 0) > 0) {
     warnings?.push(`${plane.name}: connected river routes used ${result.riverBorders} of approximately ${result.requestedBorders} requested borders. Complete outlet paths and existing barriers take priority over an exact river share.`);
   }
@@ -3220,6 +3866,167 @@ function separationForPlane(plan: number | ReadonlyMap<string, number>, planeId:
   return typeof plan === "number" ? plan : plan.get(planeId) ?? 3;
 }
 
+interface AuthoredStartObstacle {
+  provinceId: string;
+  /**
+   * Movement distance from this start once start-border repair has opened
+   * both this capital's borders and a generated capital's own borders.
+   */
+  distances: Map<string, number>;
+}
+
+type AuthoredStartsByPlane = ReadonlyMap<string, readonly AuthoredStartObstacle[]>;
+
+const NO_AUTHORED_STARTS: AuthoredStartsByPlane = new Map();
+
+/**
+ * Nation-specific starts the author placed (and any team starts) survive
+ * generation and are validated as distinct multiplayer starts. Generated
+ * cave assignments are rebuilt after placement, and a manual assignment for
+ * a configured cave nation is required to share a generated cave start, so
+ * neither is something generated capitals must avoid.
+ */
+function protectedAuthoredStarts(project: MapProject): { nation?: number; plane: Plane; province: Province }[] {
+  const caveNations = new Set(normalizeCaveStartNations(project.settings.caveStartNations));
+  const seen = new Set<string>();
+  const result: { nation?: number; plane: Plane; province: Province }[] = [];
+  for (const start of project.specificStarts) {
+    if (start.source === "generated-cave" || caveNations.has(start.nation)) continue;
+    const plane = project.planes.find((item) => item.id === start.planeId);
+    const province = plane?.provinces.find((item) => item.id === start.provinceId);
+    const key = globalProvinceKey(start.planeId, start.provinceId);
+    if (!plane || !province || seen.has(key)) continue;
+    seen.add(key);
+    result.push({ nation: start.nation, plane, province });
+  }
+  for (const plane of project.planes) for (const province of plane.provinces) {
+    const key = globalProvinceKey(plane.id, province.id);
+    if (province.teamStart === undefined || seen.has(key)) continue;
+    seen.add(key);
+    result.push({ plane, province });
+  }
+  return result;
+}
+
+function authoredStartObstacles(
+  project: MapProject,
+  traversableByPlane: ReadonlyMap<string, Map<string, string[]>>,
+): AuthoredStartsByPlane {
+  const authored = protectedAuthoredStarts(project);
+  if (!authored.length) return NO_AUTHORED_STARTS;
+  const result = new Map<string, AuthoredStartObstacle[]>();
+  const fullByPlane = new Map<string, Map<string, string[]>>();
+  for (const { plane, province } of authored) {
+    const traversable = traversableByPlane.get(plane.id) ?? adjacencyFor(plane, { traversableOnly: true });
+    let full = fullByPlane.get(plane.id);
+    if (!full) {
+      full = adjacencyFor(plane);
+      fullByPlane.set(plane.id, full);
+    }
+    // repairStartBorders opens every border of a protected capital, so its
+    // first step may cross any authored border.
+    const reached = new Map([[province.id, 0]]);
+    const queue = [province.id];
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      const id = queue[cursor]!;
+      for (const neighbour of (cursor === 0 ? full : traversable).get(id) ?? []) {
+        if (reached.has(neighbour)) continue;
+        reached.set(neighbour, reached.get(id)! + 1);
+        queue.push(neighbour);
+      }
+    }
+    // A generated capital's own borders are opened as well.
+    const distances = new Map<string, number>();
+    for (const candidate of plane.provinces) {
+      let distance = reached.get(candidate.id) ?? Infinity;
+      for (const neighbour of full.get(candidate.id) ?? []) distance = Math.min(distance, (reached.get(neighbour) ?? Infinity) + 1);
+      if (Number.isFinite(distance)) distances.set(candidate.id, distance);
+    }
+    const list = result.get(plane.id) ?? [];
+    list.push({ provinceId: province.id, distances });
+    result.set(plane.id, list);
+  }
+  return result;
+}
+
+function authoredStartDistance(authoredStarts: AuthoredStartsByPlane, planeId: string, provinceId: string): number {
+  let distance = Infinity;
+  for (const start of authoredStarts.get(planeId) ?? []) distance = Math.min(distance, start.distances.get(provinceId) ?? Infinity);
+  return distance;
+}
+
+/**
+ * Explain, after generation, any authored nation start that generated
+ * capitals could not keep distinct. Validation still blocks export; this
+ * names the start and the spacing achieved so the author can decide.
+ */
+function appendAuthoredStartSpacingWarnings(project: MapProject): void {
+  const authored = protectedAuthoredStarts(project).filter((item) => item.nation !== undefined);
+  if (!authored.length) return;
+  const conflicts = authoredStartSpacingConflicts(project, authored);
+  if (!conflicts.length) return;
+  project.generationWarnings ??= [];
+  for (const conflict of conflicts) {
+    const { nation, plane, province, nearest, nearestPlane, distance } = conflict;
+    project.generationWarnings.push(`${plane.name}: generated starts could not keep 3 movement connections from the authored start for nation ${nation} at ${province.name}; generated start ${nearest.name}${nearestPlane.id === plane.id ? "" : ` (${nearestPlane.name})`} is only ${distance} connection${distance === 1 ? "" : "s"} away. Export stays blocked until you move or remove that nation start, or change players, provinces per player or plane sizes and Generate again.`);
+  }
+}
+
+interface AuthoredStartSpacingConflict {
+  nation: number;
+  plane: Plane;
+  province: Province;
+  nearest: Province;
+  nearestPlane: Plane;
+  distance: number;
+}
+
+function authoredStartSpacingConflicts(
+  project: MapProject,
+  authored: readonly { nation?: number; plane: Plane; province: Province }[],
+): AuthoredStartSpacingConflict[] {
+  const generated = new Map(project.planes.flatMap((plane) => plane.provinces
+    .filter((province) => province.start)
+    .map((province) => [globalProvinceKey(plane.id, province.id), { plane, province }] as const)));
+  if (!generated.size) return [];
+  const movement = globalMovementAdjacency(project);
+  const conflicts: AuthoredStartSpacingConflict[] = [];
+  for (const { nation, plane, province } of authored) {
+    if (nation === undefined) continue;
+    for (const [key, distance] of shortestDistances(movement, globalProvinceKey(plane.id, province.id), 2)) {
+      const hit = distance > 0 ? generated.get(key) : undefined;
+      if (!hit) continue;
+      conflicts.push({ nation, plane, province, nearest: hit.province, nearestPlane: hit.plane, distance });
+      break;
+    }
+  }
+  return conflicts;
+}
+
+export interface AuthoredStartNotice {
+  nation: number;
+  planeId: string;
+  provinceId: string;
+  message: string;
+}
+
+/**
+ * Non-blocking pre-generation notice for authored nation starts that the
+ * current map already crowds. Generate keeps generated capitals at least 3
+ * movement connections away whenever the new geometry allows; the author can
+ * proceed, or move/remove the nation start first.
+ */
+export function preflightAuthoredStartNotices(project: MapProject): AuthoredStartNotice[] {
+  const authored = protectedAuthoredStarts(project).filter((item) => item.nation !== undefined);
+  if (!authored.length) return [];
+  return authoredStartSpacingConflicts(project, authored).map(({ nation, plane, province, nearest, nearestPlane, distance }) => ({
+    nation,
+    planeId: plane.id,
+    provinceId: province.id,
+    message: `Nation ${nation}'s authored start at ${province.name} (${plane.name}) is only ${distance} movement connection${distance === 1 ? "" : "s"} from generated start ${nearest.name}${nearestPlane.id === plane.id ? "" : ` (${nearestPlane.name})`}. Generate places generated starts at least 3 connections from it when the new geometry allows; if it cannot, it records a warning and export stays blocked until the nation start is moved or removed.`,
+  }));
+}
+
 function placeDistributedStarts(project: MapProject, preparedStartAnchors: readonly PreparedStartAnchor[] = []) {
   const requested = normalizeStartDistribution(project.settings.startDistribution, project.settings.players);
   project.settings.startDistribution = requested;
@@ -3232,7 +4039,17 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
   }
 
   const adjacency = new Map(project.planes.map((plane) => [plane.id, adjacencyFor(plane, { traversableOnly: true })]));
+  // Every start search below measures on these fixed graphs and terrain;
+  // share their BFS maps and start-type checks for the whole pass instead of
+  // rebuilding them per candidate.
+  const searchMemo = createStartSearchMemo();
+  const distancesFrom = searchMemo.distancesFrom;
   const planeTargets = generatedStartPlaneTargets(project, requested);
+  // Authored nation starts are fixed capitals: never reuse their province and
+  // keep every generated capital at least three moves away (the export floor).
+  const authoredStarts = authoredStartObstacles(project, adjacency);
+  const authoredKeys = new Set([...authoredStarts].flatMap(([planeId, starts]) =>
+    starts.map((start) => globalProvinceKey(planeId, start.provinceId))));
   const bridgeEndpoints = new Map(project.planes.map((plane) => {
     const bridgeKeys = graphBridgeKeys(plane);
     const endpoints = new Set<string>();
@@ -3288,6 +4105,8 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
           separationPlan,
           planeTargets,
           adjacency,
+          authoredStarts,
+          searchMemo,
         );
         if (!candidate) return [];
         attempt.push(candidate);
@@ -3318,6 +4137,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
       const eligiblePlaneIds = new Set(eligibleGeneratedStartPlaneIndexes(project, type).map((index) => project.planes[index]!.id));
       let candidates = refs.filter((ref) => eligiblePlaneIds.has(ref.plane.id)
         && isEligibleStartProvince(ref.province)
+        && !authoredKeys.has(globalProvinceKey(ref.plane.id, ref.province.id))
         && matchesStartType(ref, type, adjacency.get(ref.plane.id)!)
         && (degree === undefined
           ? (adjacency.get(ref.plane.id)?.get(ref.province.id)?.length ?? 0) >= minimumUsefulDegree
@@ -3336,22 +4156,14 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
     }
     const attempt: ProvinceRef[] = [];
     const used = new Set<string>();
-    const distanceCache = new Map<string, Map<string, number>>();
-    const distancesFrom = (ref: ProvinceRef) => {
-      const key = globalProvinceKey(ref.plane.id, ref.province.id);
-      let distances = distanceCache.get(key);
-      if (!distances) {
-        distances = shortestDistances(adjacency.get(ref.plane.id)!, ref.province.id);
-        distanceCache.set(key, distances);
-      }
-      return distances;
-    };
     const separationFromAttempt = (candidate: ProvinceRef) => {
       const samePlane = attempt.filter((item) => item.plane.id === candidate.plane.id);
       if (!samePlane.length) return 8;
-      const distances = distancesFrom(candidate);
+      const distances = distancesFrom(adjacency.get(candidate.plane.id)!, candidate.province.id);
       return Math.min(...samePlane.map((item) => distances.get(item.province.id) ?? 0));
     };
+    const authoredSeparation = (candidate: ProvinceRef) =>
+      authoredStartDistance(authoredStarts, candidate.plane.id, candidate.province.id);
     let visitedNodes = 0;
     const nodeBudget = 12_000;
     const search = (slotIndex: number): ProvinceRef[] | undefined => {
@@ -3368,7 +4180,8 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
           && matchesStartType(item, type, adjacency.get(item.plane.id)!)).length;
         return planeLoad < planeQuota
           && !used.has(key)
-          && separationFromAttempt(candidate) >= separationForPlane(separationPlan, candidate.plane.id);
+          && separationFromAttempt(candidate) >= separationForPlane(separationPlan, candidate.plane.id)
+          && authoredSeparation(candidate) >= 3;
       });
       if (preferredCapacity !== undefined) {
         const comparable = candidates.filter((candidate) => Math.abs(
@@ -3381,8 +4194,8 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
         ? adjacency.get(attempt[0]!.plane.id)?.get(attempt[0]!.province.id)?.length ?? preferredGeneratedDegree
         : preferredGeneratedDegree;
       candidates.sort((a, b) => {
-        const separationA = separationFromAttempt(a);
-        const separationB = separationFromAttempt(b);
+        const separationA = Math.min(separationFromAttempt(a), authoredSeparation(a));
+        const separationB = Math.min(separationFromAttempt(b), authoredSeparation(b));
         const degreeA = adjacency.get(a.plane.id)?.get(a.province.id)?.length ?? 0;
         const degreeB = adjacency.get(b.plane.id)?.get(b.province.id)?.length ?? 0;
         const capacityA = twoRingCapacity.get(a.plane.id)?.get(a.province.id) ?? 0;
@@ -3447,7 +4260,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
   const preparedCounts = new Map<StartType, number>();
   for (const item of preparedPlacement) preparedCounts.set(item.type, (preparedCounts.get(item.type) ?? 0) + 1);
   const preparedKeys = new Set(preparedPlacement.map((item) => globalProvinceKey(item.plane.id, item.province.id)));
-  const preparedSafe = project.settings.players > 16
+  const preparedPlanSafe = project.settings.players > 16
     && preparedPlacement.length === project.settings.players
     && preparedKeys.size === preparedPlacement.length
     && (Object.keys(requested) as StartType[]).every((type) => (preparedCounts.get(type) ?? 0) === requested[type])
@@ -3457,12 +4270,41 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
       && (!usesConnectedRegions(item.plane) || !bridgeEndpoints.get(item.plane.id)?.has(item.province.id)))
     && preparedPlacement.every((item, index) => preparedPlacement.slice(index + 1).every((other) => {
       if (item.plane.id !== other.plane.id) return true;
-      return (shortestDistances(adjacency.get(item.plane.id)!, item.province.id).get(other.province.id) ?? 0)
+      return (distancesFrom(adjacency.get(item.plane.id)!, item.province.id).get(other.province.id) ?? 0)
         >= (preferredSeparation.get(item.plane.id) ?? 3);
     }));
-  let selected: ProvinceRef[] = preparedSafe
+  // Category anchors are planned before authored starts are considered.
+  const clearOfAuthoredStarts = (item: ProvinceRef) => !authoredKeys.has(globalProvinceKey(item.plane.id, item.province.id))
+    && authoredStartDistance(authoredStarts, item.plane.id, item.province.id) >= 3;
+  let selected: ProvinceRef[] = preparedPlanSafe && preparedPlacement.every(clearOfAuthoredStarts)
     ? preparedPlacement.map(({ plane, planeIndex, province }) => ({ plane, planeIndex, province }))
     : [];
+  let preparedSubstituted = false;
+  if (!selected.length && preparedPlanSafe) {
+    // Only authored starts crowd the large prepared plan: keep its other
+    // anchors and re-choose just the crowded ones, preferring the kept degree.
+    const kept = preparedPlacement.filter(clearOfAuthoredStarts);
+    const crowded = preparedPlacement.filter((item) => !clearOfAuthoredStarts(item));
+    const keptDegrees = new Set(kept.map((item) => adjacency.get(item.plane.id)?.get(item.province.id)?.length ?? 0));
+    const degreeChoices = keptDegrees.size === 1 ? [[...keptDegrees][0]!, undefined] : [undefined];
+    substitution:
+    for (const separationPlan of separationPlans) {
+      for (const forcedDegree of degreeChoices) {
+        const attempt: ProvinceRef[] = kept.map(({ plane, planeIndex, province }) => ({ plane, planeIndex, province }));
+        for (const [slot, item] of crowded.entries()) {
+          const candidate = chooseDistributedStart(project, item.type, attempt, adjacency, twoRingCapacity, bridgeEndpoints,
+            `${project.seed}:distributed:prepared-substitute:${slot}`, forcedDegree, separationPlan, planeTargets, adjacency, authoredStarts,
+            searchMemo);
+          if (!candidate) break;
+          attempt.push(candidate);
+        }
+        if (attempt.length !== project.settings.players) continue;
+        selected = attempt;
+        preparedSubstituted = true;
+        break substitution;
+      }
+    }
+  }
   const separationVariantCount = project.settings.players <= 12 ? 12 : 3;
   for (const separationPlan of selected.length ? [] : separationPlans) {
     for (const degree of candidateDegrees) {
@@ -3481,7 +4323,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
           const nearestDistances = attempt.flatMap((item) => {
             const peers = attempt.filter((other) => other.plane.id === item.plane.id && other.province.id !== item.province.id);
             if (!peers.length) return [];
-            const distances = shortestDistances(adjacency.get(item.plane.id)!, item.province.id);
+            const distances = distancesFrom(adjacency.get(item.plane.id)!, item.province.id);
             return [Math.min(...peers.map((other) => distances.get(other.province.id) ?? 99))];
           });
           const nearestSpread = nearestDistances.length ? max(nearestDistances) - min(nearestDistances) : 0;
@@ -3538,7 +4380,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
   if (!selected.length) {
     for (const type of placementOrder) {
       for (let slot = 0; slot < requested[type]; slot += 1) {
-        const candidate = chooseDistributedStart(project, type, selected, adjacency, twoRingCapacity, bridgeEndpoints, `${project.seed}:distributed:${type}:${slot}`, undefined, 0, planeTargets, adjacency);
+        const candidate = chooseDistributedStart(project, type, selected, adjacency, twoRingCapacity, bridgeEndpoints, `${project.seed}:distributed:${type}:${slot}`, undefined, 0, planeTargets, adjacency, authoredStarts, searchMemo);
         if (!candidate) break;
         selected.push(candidate);
       }
@@ -3549,7 +4391,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
   // total number of capitals. Fill remaining slots from safe provinces and
   // record their real category so startAllocation exposes the shortfall.
   while (selected.length < project.settings.players) {
-    const candidate = chooseDistributedStart(project, undefined, selected, adjacency, twoRingCapacity, bridgeEndpoints, `${project.seed}:distributed:fallback:${selected.length}`, undefined, 0, planeTargets, adjacency);
+    const candidate = chooseDistributedStart(project, undefined, selected, adjacency, twoRingCapacity, bridgeEndpoints, `${project.seed}:distributed:fallback:${selected.length}`, undefined, 0, planeTargets, adjacency, authoredStarts, searchMemo);
     if (!candidate) break;
     selected.push(candidate);
   }
@@ -3559,27 +4401,38 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
   // distance-two independent set, retaining a common degree when one is
   // feasible and relaxing degree parity only before relaxing start safety.
   const repairPlaneSelection = (plane: Plane, planeIndex: number, current: ProvinceRef[]): ProvinceRef[] | undefined => {
-    if (current.length < 2) return current;
+    // A lone generated capital still needs repair when it crowds an authored start.
+    if (current.length < ((authoredStarts.get(plane.id)?.length ?? 0) ? 1 : 2)) return current;
     const local = adjacency.get(plane.id)!;
-    const distances = new Map<string, Map<string, number>>();
-    const distancesFrom = (id: string) => {
-      let result = distances.get(id);
-      if (!result) {
-        result = shortestDistances(adjacency.get(plane.id)!, id);
-        distances.set(id, result);
-      }
-      return result;
-    };
+    const planeDistancesFrom = (id: string) => distancesFrom(local, id);
     const preferredPlaneSeparation = preferredSeparation.get(plane.id) ?? 3;
+    const authoredDistance = (id: string) => authoredStartDistance(authoredStarts, plane.id, id);
+    const isAuthored = (id: string) => authoredKeys.has(globalProvinceKey(plane.id, id));
+    const clearOfAuthored = (items: readonly ProvinceRef[]) => items.every((item) => authoredDistance(item.province.id) >= 3);
     const minimumPairDistance = (items: readonly ProvinceRef[]) => items.reduce((minimum, item, left) =>
       Math.min(minimum, ...items.slice(left + 1).map((other) =>
-        distancesFrom(item.province.id).get(other.province.id) ?? Infinity)), Infinity);
-    const degreeAfterBorderRepair = (province: Province) => plane.edges.filter((edge) =>
-      edge.a === province.id || edge.b === province.id).length;
+        planeDistancesFrom(item.province.id).get(other.province.id) ?? Infinity)), Infinity);
+    // Incident-edge counts are fixed during repair: count them once rather
+    // than scanning every edge per ranking comparison.
+    const incidentEdgeCounts = new Map<string, number>();
+    for (const edge of plane.edges) {
+      incidentEdgeCounts.set(edge.a, (incidentEdgeCounts.get(edge.a) ?? 0) + 1);
+      if (edge.b !== edge.a) incidentEdgeCounts.set(edge.b, (incidentEdgeCounts.get(edge.b) ?? 0) + 1);
+    }
+    const degreeAfterBorderRepair = (province: Province) => incidentEdgeCounts.get(province.id) ?? 0;
     const regional = usesConnectedRegions(plane);
-    if (minimumPairDistance(current) >= preferredPlaneSeparation
-      && new Set(current.map((item) => degreeAfterBorderRepair(item.province))).size === 1
-      && (!regional || current.every(item => !bridgeEndpoints.get(plane.id)?.has(item.province.id)))) return current;
+    const currentMeets = (separation: number) => minimumPairDistance(current) >= separation
+      && clearOfAuthored(current)
+      && (!regional || current.every(item => !bridgeEndpoints.get(plane.id)?.has(item.province.id)));
+    // Like the >20-capital prepared plan below, a substituted prepared plan
+    // that already meets spacing keeps degree parity as a best-effort warning
+    // rather than re-running the exponential exact-degree search.
+    if (currentMeets(preferredPlaneSeparation)
+      && (preparedSubstituted || new Set(current.map((item) => degreeAfterBorderRepair(item.province))).size === 1)) return current;
+    // Every separation plan was already searched with the authored floor, so
+    // an authored start's plane re-searches with a bounded budget and keeps a
+    // current common-degree selection at the best spacing it already meets.
+    const authoredOnPlane = (authoredStarts.get(plane.id)?.length ?? 0) > 0;
 
     const counts = new Map<StartType, number>();
     for (const item of current) {
@@ -3594,7 +4447,9 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
     for (const item of prepared) preparedCounts.set(item.type, (preparedCounts.get(item.type) ?? 0) + 1);
     const preparedMatches = prepared.length === current.length
       && [...counts].every(([type, count]) => preparedCounts.get(type) === count)
+      && clearOfAuthored(prepared)
       && prepared.every((item) => matchesStartType(item, item.type, local)
+        && !isAuthored(item.province.id)
         && (local.get(item.province.id)?.length ?? 0) >= minimumUsefulDegree
         && (!regional || !bridgeEndpoints.get(plane.id)?.has(item.province.id)));
     const preparedRefs = prepared.map((item) => ({
@@ -3619,7 +4474,8 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
       const pools = new Map<StartType, ProvinceRef[]>();
       for (const [type, count] of counts) {
         let pool = plane.provinces.filter((province) => isEligibleStartProvince(province)
-          && matchesStartType({ plane, planeIndex, province }, type, local)
+          && !isAuthored(province.id)
+          && matchesStartType({ plane, province }, type, local)
           && (local.get(province.id)?.length ?? 0) >= minimumUsefulDegree
           && (forcedDegree === undefined || degreeAfterBorderRepair(province) === forcedDegree))
           .map((province) => ({ plane, planeIndex, province }));
@@ -3630,49 +4486,113 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
       const remaining = new Map(counts);
       const working: ProvinceRef[] = [];
       let visitedNodes = 0;
-      const nodeBudget = 250_000;
-      const compatible = (candidate: ProvinceRef) => working.every((other) =>
-        (distancesFrom(candidate.province.id).get(other.province.id) ?? Infinity) >= requiredSeparation);
+      const nodeBudget = authoredOnPlane ? 12_000 : 250_000;
+      // Index every pooled province once. conflictsFrom[from] lists each `to`
+      // closer than the required separation measured from `from` (unreachable
+      // never conflicts) and blockers[to] lists every such `from`. blockedBy
+      // counts each candidate's conflicts with the working set, so a node
+      // filters its pools with typed lookups instead of distance queries.
+      const slotById = new Map<string, number>();
+      for (const pool of pools.values()) for (const item of pool) if (!slotById.has(item.province.id)) slotById.set(item.province.id, slotById.size);
+      const slotCount = slotById.size;
+      const slotIds = [...slotById.keys()];
+      const poolSlots = new Map([...pools].map(([type, pool]) => [type, pool.map((item) => slotById.get(item.province.id)!)]));
+      const conflictsFrom: number[][] = [];
+      const blockers: number[][] = Array.from({ length: slotCount }, () => []);
+      for (let from = 0; from < slotCount; from += 1) {
+        const distances = planeDistancesFrom(slotIds[from]!);
+        const row: number[] = [];
+        for (let to = 0; to < slotCount; to += 1) {
+          if ((distances.get(slotIds[to]!) ?? Infinity) >= requiredSeparation) continue;
+          row.push(to);
+          blockers[to]!.push(from);
+        }
+        conflictsFrom.push(row);
+      }
+      // Marks the current node's candidate slots while their conflicts are counted.
+      const nextMark = new Int32Array(slotCount);
+      let nextGeneration = 0;
+      const authoredClear = new Uint8Array(slotCount);
+      const degreeDelta = new Int32Array(slotCount);
+      for (let slot = 0; slot < slotCount; slot += 1) {
+        authoredClear[slot] = authoredDistance(slotIds[slot]!) >= 3 ? 1 : 0;
+        degreeDelta[slot] = Math.abs((incidentEdgeCounts.get(slotIds[slot]!) ?? 0) - preferredGeneratedDegree);
+      }
+      // Deterministic per-type tie-break jitter, hashed on first use (-1 = unset).
+      const jitterByType = new Map<StartType, Int32Array>();
+      const blockedBy = new Int32Array(slotCount);
+      const inWorking = new Uint8Array(slotCount);
       const search = (): ProvinceRef[] | undefined => {
         if (working.length === current.length) return [...working];
         if (visitedNodes >= nodeBudget) return undefined;
         let nextType: StartType | undefined;
         let nextCandidates: ProvinceRef[] = [];
+        let nextSlots: number[] = [];
         let tightness = Infinity;
         for (const [type, needed] of remaining) {
           if (needed <= 0) continue;
-          const available = (pools.get(type) ?? []).filter((candidate) => compatible(candidate)
-            && !working.some((item) => item.province.id === candidate.province.id));
+          const pool = pools.get(type) ?? [];
+          const slots = poolSlots.get(type) ?? [];
+          const available: ProvinceRef[] = [];
+          const availableSlots: number[] = [];
+          for (let index = 0; index < pool.length; index += 1) {
+            const slot = slots[index]!;
+            if (authoredClear[slot] !== 1 || blockedBy[slot] !== 0 || inWorking[slot] !== 0) continue;
+            available.push(pool[index]!);
+            availableSlots.push(slot);
+          }
           if (available.length < needed) return undefined;
           const candidateTightness = available.length / needed;
           if (candidateTightness < tightness) {
             nextType = type;
             nextCandidates = available;
+            nextSlots = availableSlots;
             tightness = candidateTightness;
           }
         }
         if (!nextType) return undefined;
-        const conflictCounts = new Map(nextCandidates.map((candidate) => [candidate.province.id, nextCandidates.reduce((count, other) =>
-          count + (other.province.id !== candidate.province.id
-            && (distancesFrom(candidate.province.id).get(other.province.id) ?? Infinity) < requiredSeparation ? 1 : 0), 0)]));
-        nextCandidates.sort((a, b) => {
-          const degreeA = degreeAfterBorderRepair(a.province);
-          const degreeB = degreeAfterBorderRepair(b.province);
-          const jitterA = hashString(`${project.seed}:plane-start-repair:${plane.id}:${nextType}:${a.province.id}`) % 100000;
-          const jitterB = hashString(`${project.seed}:plane-start-repair:${plane.id}:${nextType}:${b.province.id}`) % 100000;
-          return (conflictCounts.get(a.province.id) ?? 0) - (conflictCounts.get(b.province.id) ?? 0)
-            || Math.abs(degreeA - preferredGeneratedDegree) - Math.abs(degreeB - preferredGeneratedDegree)
-            || jitterA - jitterB || a.province.index - b.province.index;
-        });
-        for (const candidate of nextCandidates) {
+        let jitter = jitterByType.get(nextType);
+        if (!jitter) {
+          jitter = new Int32Array(slotCount).fill(-1);
+          jitterByType.set(nextType, jitter);
+        }
+        // Each candidate's conflicts with the other candidates of this node.
+        // Slots map one-to-one onto province ids, so skipping the candidate's
+        // own slot excludes it exactly as comparing ids would.
+        nextGeneration += 1;
+        for (const slot of nextSlots) nextMark[slot] = nextGeneration;
+        const conflictCounts = new Int32Array(nextCandidates.length);
+        for (let index = 0; index < nextCandidates.length; index += 1) {
+          const slot = nextSlots[index]!;
+          let count = 0;
+          for (const other of conflictsFrom[slot]!) if (other !== slot && nextMark[other] === nextGeneration) count += 1;
+          conflictCounts[index] = count;
+          if (jitter[slot]! < 0) {
+            jitter[slot] = hashString(`${project.seed}:plane-start-repair:${plane.id}:${nextType}:${slotIds[slot]!}`) % 100000;
+          }
+        }
+        // Rank by position with precomputed keys; the stable sort yields the
+        // same order as ranking the candidates with the equivalent comparator.
+        const typeJitter = jitter;
+        const order = nextCandidates.map((_, index) => index).sort((a, b) =>
+          conflictCounts[a]! - conflictCounts[b]!
+          || degreeDelta[nextSlots[a]!]! - degreeDelta[nextSlots[b]!]!
+          || typeJitter[nextSlots[a]!]! - typeJitter[nextSlots[b]!]!
+          || nextCandidates[a]!.province.index - nextCandidates[b]!.province.index);
+        for (const index of order) {
           if (visitedNodes >= nodeBudget) break;
           visitedNodes += 1;
-          working.push(candidate);
+          const slot = nextSlots[index]!;
+          working.push(nextCandidates[index]!);
+          inWorking[slot] += 1;
+          for (const candidate of blockers[slot]!) blockedBy[candidate] += 1;
           remaining.set(nextType, remaining.get(nextType)! - 1);
           const result = search();
           if (result) return result;
           remaining.set(nextType, remaining.get(nextType)! + 1);
           working.pop();
+          inWorking[slot] -= 1;
+          for (const candidate of blockers[slot]!) blockedBy[candidate] -= 1;
         }
         return undefined;
       };
@@ -3685,6 +4605,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
     }
     if (commonDegree !== undefined) {
       for (let separation = preferredPlaneSeparation; separation >= 3; separation -= 1) {
+        if (authoredOnPlane && currentMeets(separation)) return current;
         const common = solve(commonDegree, separation);
         if (common) return common;
         if (preparedMatches && preparedDegrees.size === 1 && preparedDegrees.has(commonDegree)
@@ -3856,6 +4777,150 @@ function appendGuardianCapacityWarnings(project: MapProject) {
   }
 }
 
+/** Unbounded movement distances from one start province on one adjacency graph. */
+type StartDistanceLookup = (adjacency: Map<string, string[]>, start: string) => ReadonlyMap<string, number>;
+
+/**
+ * Memoize `shortestDistances(adjacency, start)` per adjacency graph object for
+ * one start-placement pass. Start searches ask for the same capitals'
+ * distance maps on every candidate evaluation; callers must not mutate the
+ * adjacency graphs while the cache is in use.
+ */
+function createStartDistanceCache(): StartDistanceLookup {
+  const byGraph = new WeakMap<Map<string, string[]>, Map<string, ReadonlyMap<string, number>>>();
+  return (adjacency, start) => {
+    let graphCache = byGraph.get(adjacency);
+    if (!graphCache) {
+      graphCache = new Map();
+      byGraph.set(adjacency, graphCache);
+    }
+    let distances = graphCache.get(start);
+    if (!distances) {
+      distances = shortestDistances(adjacency, start);
+      graphCache.set(start, distances);
+    }
+    return distances;
+  };
+}
+
+/**
+ * Memo shared by the start searches of one placement pass. Terrain, edges,
+ * province order and adjacency graphs must stay fixed while it is in use.
+ */
+interface StartSearchMemo {
+  distancesFrom: StartDistanceLookup;
+  /**
+   * `distancesFrom(adjacency, start)` laid out by position in
+   * `plane.provinces`, with -1 where the map has no entry.
+   */
+  distancesByPosition(plane: Plane, adjacency: Map<string, string[]>, start: string): Int32Array;
+  /** `matchesStartType` for `plane.provinces[position]` measured on `adjacency`. */
+  matchesTypeAt(plane: Plane, position: number, type: StartType, adjacency: Map<string, string[]>): boolean;
+}
+
+interface PositionalGraph {
+  positionById: Map<string, number>;
+  neighbours: Int32Array[];
+}
+
+/**
+ * `adjacency` re-indexed by position in `plane.provinces`, or undefined when
+ * that is not a faithful copy: duplicate province ids, or graph nodes that
+ * are not provinces. Neighbour ids that are not provinces are dropped; a BFS
+ * reaches them but they have no neighbours of their own to continue from.
+ */
+function positionalGraph(plane: Plane, adjacency: Map<string, string[]>): PositionalGraph | undefined {
+  const positionById = new Map<string, number>();
+  for (let position = 0; position < plane.provinces.length; position += 1) {
+    const id = plane.provinces[position]!.id;
+    if (positionById.has(id)) return undefined;
+    positionById.set(id, position);
+  }
+  if (adjacency.size !== positionById.size) return undefined;
+  for (const id of adjacency.keys()) if (!positionById.has(id)) return undefined;
+  const neighbours = plane.provinces.map((province) => {
+    const positions: number[] = [];
+    for (const id of adjacency.get(province.id) ?? []) {
+      const position = positionById.get(id);
+      if (position !== undefined) positions.push(position);
+    }
+    return Int32Array.from(positions);
+  });
+  return { positionById, neighbours };
+}
+
+function createStartSearchMemo(): StartSearchMemo {
+  const distancesFrom = createStartDistanceCache();
+  const layouts = new Map<Map<string, string[]>, {
+    plane: Plane;
+    graph: PositionalGraph | undefined;
+    byStart: Map<string, Int32Array>;
+  }>();
+  const typeMatches = new Map<Plane, { adjacency: Map<string, string[]>; byType: Map<StartType, Uint8Array> }>();
+  const layOut = (plane: Plane, distances: ReadonlyMap<string, number>) => {
+    const layout = new Int32Array(plane.provinces.length);
+    for (let position = 0; position < layout.length; position += 1) layout[position] = distances.get(plane.provinces[position]!.id) ?? -1;
+    return layout;
+  };
+  // The same unbounded BFS as shortestDistances, over positions: every
+  // province's distance is identical, and it never builds a string-keyed map.
+  const positionalDistances = (graph: PositionalGraph, start: number) => {
+    const layout = new Int32Array(graph.neighbours.length).fill(-1);
+    const queue = new Int32Array(graph.neighbours.length);
+    layout[start] = 0;
+    queue[0] = start;
+    let tail = 1;
+    for (let head = 0; head < tail; head += 1) {
+      const current = queue[head]!;
+      const distance = layout[current]! + 1;
+      for (const next of graph.neighbours[current]!) {
+        if (layout[next]! >= 0) continue;
+        layout[next] = distance;
+        queue[tail] = next;
+        tail += 1;
+      }
+    }
+    return layout;
+  };
+  return {
+    distancesFrom,
+    distancesByPosition(plane, adjacency, start) {
+      let entry = layouts.get(adjacency);
+      if (!entry) {
+        entry = { plane, graph: positionalGraph(plane, adjacency), byStart: new Map() };
+        layouts.set(adjacency, entry);
+      }
+      if (entry.plane !== plane) return layOut(plane, distancesFrom(adjacency, start));
+      let layout = entry.byStart.get(start);
+      if (!layout) {
+        const startPosition = entry.graph?.positionById.get(start);
+        layout = entry.graph && startPosition !== undefined
+          ? positionalDistances(entry.graph, startPosition)
+          : layOut(plane, distancesFrom(adjacency, start));
+        entry.byStart.set(start, layout);
+      }
+      return layout;
+    },
+    matchesTypeAt(plane, position, type, adjacency) {
+      const province = plane.provinces[position]!;
+      let entry = typeMatches.get(plane);
+      if (!entry) {
+        entry = { adjacency, byType: new Map() };
+        typeMatches.set(plane, entry);
+      }
+      if (entry.adjacency !== adjacency) return matchesStartType({ plane, province }, type, adjacency);
+      let states = entry.byType.get(type);
+      if (!states) {
+        states = new Uint8Array(plane.provinces.length);
+        entry.byType.set(type, states);
+      }
+      // 0 = not yet evaluated, 1 = no, 2 = yes.
+      if (states[position] === 0) states[position] = matchesStartType({ plane, province }, type, adjacency) ? 2 : 1;
+      return states[position] === 2;
+    },
+  };
+}
+
 function chooseDistributedStart(
   project: MapProject,
   requestedType: StartType | undefined,
@@ -3871,6 +4936,8 @@ function chooseDistributedStart(
     normalizeStartDistribution(project.settings.startDistribution, project.settings.players),
   ),
   separationAdjacencyByPlane: Map<string, Map<string, string[]>> = adjacencyByPlane,
+  authoredStarts: AuthoredStartsByPlane = NO_AUTHORED_STARTS,
+  memo: StartSearchMemo = createStartSearchMemo(),
 ): ProvinceRef | undefined {
   const target = project.settings.startDegreeTarget ?? 4;
   const selectedDegrees = selected.map((item) => adjacencyByPlane.get(item.plane.id)?.get(item.province.id)?.length ?? 0);
@@ -3882,38 +4949,62 @@ function chooseDistributedStart(
     ? new Set(project.planes.filter((plane) => !plane.noGeneratedStarts).map((plane) => plane.id))
     : new Set(eligibleGeneratedStartPlaneIndexes(project, requestedType).map((index) => project.planes[index]!.id));
   const selectedKeys = new Set(selected.map((item) => globalProvinceKey(item.plane.id, item.province.id)));
+  for (const [planeId, starts] of authoredStarts) for (const start of starts) selectedKeys.add(globalProvinceKey(planeId, start.provinceId));
+  const authoredRequired = minimumSeparation === 0 ? 0 : 3;
   const startsByPlane = new Map(project.planes.map((plane) => [plane.id, selected.filter((item) => item.plane.id === plane.id).map((item) => item.province)]));
-  const distanceMaps = new Map(project.planes.map((plane) => {
+  // Each selected capital's distances on its plane, by province position.
+  const distanceLayouts = project.planes.map((plane) => {
     const adjacency = separationAdjacencyByPlane.get(plane.id)!;
-    return [plane.id, (startsByPlane.get(plane.id) ?? []).map((start) => shortestDistances(adjacency, start.id))];
-  }));
-  const rawCandidateFacts = (plane: Plane, planeIndex: number, province: Province) => {
+    return (startsByPlane.get(plane.id) ?? []).map((start) => memo.distancesByPosition(plane, adjacency, start.id));
+  });
+  // The selected set is fixed for this call, so each plane's typed load is too.
+  const planeTypeLoads = new Map(project.planes.map((plane) => [plane.id, requestedType === undefined ? 0 : selected.filter((item) => item.plane.id === plane.id
+    && matchesStartType(item, requestedType, adjacencyByPlane.get(item.plane.id)!)).length]));
+  const computeCandidateFacts = (plane: Plane, planeIndex: number, position: number) => {
+    const province = plane.provinces[position]!;
     const adjacency = adjacencyByPlane.get(plane.id)!;
     const ref = { plane, planeIndex, province };
     const planeQuota = requestedType === undefined ? Infinity : planeTargets.get(requestedType)?.get(plane.id) ?? 0;
-    const planeTypeLoad = requestedType === undefined ? 0 : selected.filter((item) => item.plane.id === plane.id
-      && matchesStartType(item, requestedType, adjacencyByPlane.get(item.plane.id)!)).length;
+    const planeTypeLoad = planeTypeLoads.get(plane.id) ?? 0;
     if (!eligiblePlaneIds.has(plane.id)
       || planeTypeLoad >= planeQuota
       || !isEligibleStartProvince(province)
       || selectedKeys.has(globalProvinceKey(plane.id, province.id))
-      || (requestedType && !matchesStartType(ref, requestedType, adjacency))) return undefined;
+      || (requestedType && !memo.matchesTypeAt(plane, position, requestedType, adjacency))) return undefined;
     const planeStarts = startsByPlane.get(plane.id) ?? [];
-    const maps = distanceMaps.get(plane.id) ?? [];
+    const layouts = distanceLayouts[planeIndex]!;
     const requiredSeparation = separationForPlane(minimumSeparation, plane.id);
-    const distance = maps.length
-      ? Math.min(...maps.map((distances) => distances.get(province.id) ?? 0))
-      : 6;
+    // The nearest selected capital; one that cannot reach this province counts as 0.
+    let generatedDistance = layouts.length ? Infinity : 6;
+    for (const layout of layouts) generatedDistance = Math.min(generatedDistance, Math.max(0, layout[position]!));
+    // Authored starts hold the hard three-move floor in every spaced search,
+    // so they never cost generated capitals their scaled mutual spacing.
+    const authoredDistance = authoredStartDistance(authoredStarts, plane.id, province.id);
     return {
       ref,
       adjacency,
       planeStarts,
-      distance,
+      distance: Math.min(generatedDistance, authoredDistance),
+      spaced: (!selected.length || generatedDistance >= requiredSeparation) && authoredDistance >= authoredRequired,
+      safe: generatedDistance >= Math.max(3, requiredSeparation) && authoredDistance >= 3,
       degree: adjacency.get(province.id)?.length ?? 0,
       capacity: twoRingCapacityByPlane.get(plane.id)?.get(province.id) ?? 0,
       incidentBridge: bridgeEndpointsByPlane.get(plane.id)?.has(province.id) ?? false,
       requiredSeparation,
     };
+  };
+  // Every input above is fixed for this call, so each province's facts are
+  // computed once (by plane and position) rather than once per ranking pass.
+  const factsByPlane = project.planes.map((plane) =>
+    new Array<ReturnType<typeof computeCandidateFacts> | null | undefined>(plane.provinces.length));
+  const rawCandidateFacts = (plane: Plane, planeIndex: number, position: number) => {
+    const row = factsByPlane[planeIndex]!;
+    let facts = row[position];
+    if (facts === undefined) {
+      facts = computeCandidateFacts(plane, planeIndex, position) ?? null;
+      row[position] = facts;
+    }
+    return facts ?? undefined;
   };
   // A regional passage endpoint can have the closest two-ring capacity while
   // still sitting on a graph bridge. Prefer genuinely safe regional capital
@@ -3921,38 +5012,54 @@ function chooseDistributedStart(
   // ranking and physically constrained fallback behavior unchanged.
   const regionalBridgeSafePlanes = new Set(project.planes.flatMap((plane, planeIndex) => {
     if (!usesConnectedRegions(plane)) return [];
-    const safe = plane.provinces.some(province => {
-      const facts = rawCandidateFacts(plane, planeIndex, province);
-      if (!facts || facts.incidentBridge || facts.distance < Math.max(3, facts.requiredSeparation)) return false;
+    const safe = plane.provinces.some((_, position) => {
+      const facts = rawCandidateFacts(plane, planeIndex, position);
+      if (!facts || facts.incidentBridge || !facts.safe) return false;
       if (forcedDegree !== undefined) return facts.degree === forcedDegree;
       if (preferredDegree !== undefined) return facts.degree === preferredDegree;
       return facts.degree >= Math.min(target, 4);
     });
     return safe ? [plane.id] : [];
   }));
-  const candidateFacts = (plane: Plane, planeIndex: number, province: Province) => {
-    const facts = rawCandidateFacts(plane, planeIndex, province);
+  const candidateFacts = (plane: Plane, planeIndex: number, position: number) => {
+    const facts = rawCandidateFacts(plane, planeIndex, position);
     return facts?.incidentBridge && regionalBridgeSafePlanes.has(plane.id) ? undefined : facts;
   };
-  const hasSafePreferredDegree = preferredDegree !== undefined && project.planes.some((plane, planeIndex) => plane.provinces.some((province) => {
-    const facts = candidateFacts(plane, planeIndex, province);
-    return facts?.degree === preferredDegree && facts.distance >= Math.max(3, facts.requiredSeparation);
+  // Blocking start-edge counts per province, built once per plane on demand
+  // (an edge counts once for each distinct endpoint, as an incident filter would).
+  const blockingEdgeCounts = new Map<Plane, Map<string, number>>();
+  const blockingEdgesAt = (plane: Plane, provinceId: string) => {
+    let counts = blockingEdgeCounts.get(plane);
+    if (!counts) {
+      counts = new Map();
+      for (const edge of plane.edges) {
+        if (!blocksReliableStartEdge(edge)) continue;
+        counts.set(edge.a, (counts.get(edge.a) ?? 0) + 1);
+        if (edge.b !== edge.a) counts.set(edge.b, (counts.get(edge.b) ?? 0) + 1);
+      }
+      blockingEdgeCounts.set(plane, counts);
+    }
+    return counts.get(provinceId) ?? 0;
+  };
+  const hasSafePreferredDegree = preferredDegree !== undefined && project.planes.some((plane, planeIndex) => plane.provinces.some((_, position) => {
+    const facts = candidateFacts(plane, planeIndex, position);
+    return facts?.degree === preferredDegree && facts.safe;
   }));
   let closestCapacityDifference = Infinity;
   if (preferredCapacity !== undefined) {
     for (let planeIndex = 0; planeIndex < project.planes.length; planeIndex += 1) {
-      for (const province of project.planes[planeIndex]!.provinces) {
-        const facts = candidateFacts(project.planes[planeIndex]!, planeIndex, province);
-        if (!facts || facts.distance < Math.max(3, facts.requiredSeparation) || (forcedDegree !== undefined && facts.degree !== forcedDegree)) continue;
+      for (let position = 0; position < project.planes[planeIndex]!.provinces.length; position += 1) {
+        const facts = candidateFacts(project.planes[planeIndex]!, planeIndex, position);
+        if (!facts || !facts.safe || (forcedDegree !== undefined && facts.degree !== forcedDegree)) continue;
         if (hasSafePreferredDegree && facts.degree !== preferredDegree) continue;
         closestCapacityDifference = Math.min(closestCapacityDifference, Math.abs(facts.capacity - preferredCapacity));
       }
     }
   }
   const hasComparableCapacity = closestCapacityDifference <= capacityTolerance;
-  const hasBridgeSafeCandidate = project.planes.some((plane, planeIndex) => plane.provinces.some((province) => {
-    const facts = candidateFacts(plane, planeIndex, province);
-    if (!facts || facts.incidentBridge || facts.distance < Math.max(3, facts.requiredSeparation)) return false;
+  const hasBridgeSafeCandidate = project.planes.some((plane, planeIndex) => plane.provinces.some((_, position) => {
+    const facts = candidateFacts(plane, planeIndex, position);
+    if (!facts || facts.incidentBridge || !facts.safe) return false;
     if (forcedDegree !== undefined && facts.degree !== forcedDegree) return false;
     if (hasSafePreferredDegree && facts.degree !== preferredDegree) return false;
     if (hasComparableCapacity && preferredCapacity !== undefined
@@ -3963,18 +5070,19 @@ function chooseDistributedStart(
   let bestScore = -Infinity;
   for (let planeIndex = 0; planeIndex < project.planes.length; planeIndex += 1) {
     const plane = project.planes[planeIndex]!;
-    for (const province of plane.provinces) {
-      const facts = candidateFacts(plane, planeIndex, province);
+    for (let position = 0; position < plane.provinces.length; position += 1) {
+      const facts = candidateFacts(plane, planeIndex, position);
       if (!facts) continue;
-      const { ref, planeStarts, distance, degree, capacity, incidentBridge, requiredSeparation } = facts;
+      const province = plane.provinces[position]!;
+      const { ref, planeStarts, distance, spaced, safe, degree, capacity, incidentBridge, requiredSeparation } = facts;
       if (forcedDegree !== undefined && degree !== forcedDegree) continue;
-      if (selected.length && distance < requiredSeparation) continue;
-      if (hasSafePreferredDegree && (degree !== preferredDegree || distance < Math.max(3, requiredSeparation))) continue;
+      if (!spaced) continue;
+      if (hasSafePreferredDegree && (degree !== preferredDegree || !safe)) continue;
       if (hasComparableCapacity && preferredCapacity !== undefined
         && Math.abs(capacity - preferredCapacity) > closestCapacityDifference) continue;
       if (hasBridgeSafeCandidate && incidentBridge) continue;
       const load = planeStarts.length / Math.max(1, plane.provinces.length);
-      const blockingEdges = plane.edges.filter((edge) => (edge.a === province.id || edge.b === province.id) && blocksReliableStartEdge(edge)).length;
+      const blockingEdges = blockingEdgesAt(plane, province.id);
       const targetScore = degree >= target ? 36 - Math.abs(degree - target) * 4 : -80 - (target - degree) * 25;
       const parityScore = preferredDegree === undefined ? 0 : degree === preferredDegree ? 64 : -Math.abs(degree - preferredDegree) * 24;
       const capacityScore = preferredCapacity === undefined ? 0 : -Math.abs(capacity - preferredCapacity) * 14;
@@ -4035,13 +5143,26 @@ function chooseStartCandidate(
   return best;
 }
 
-function matchesStartType(ref: ProvinceRef, type: StartType, adjacency: Map<string, string[]>): boolean {
+// Start scoring asks this for every candidate many times per pass; rebuilding
+// the lookup on each call dominated generation time on large atlases.
+const provinceLookupCache = new WeakMap<readonly Province[], Map<string, Province>>();
+
+function provinceLookup(plane: Pick<Plane, "provinces">): Map<string, Province> {
+  let lookup = provinceLookupCache.get(plane.provinces);
+  if (!lookup || lookup.size !== plane.provinces.length) {
+    lookup = new Map(plane.provinces.map((item) => [item.id, item]));
+    provinceLookupCache.set(plane.provinces, lookup);
+  }
+  return lookup;
+}
+
+function matchesStartType(ref: Pick<ProvinceRef, "plane" | "province">, type: StartType, adjacency: Map<string, string[]>): boolean {
   const { plane, province } = ref;
   const overland = isSurfaceCorePlaneForSizing(plane);
   if (type === "water") return overland && isWaterProvince(province);
   if (type === "coastal") {
     if (!overland || isWaterProvince(province)) return false;
-    const byId = new Map(plane.provinces.map((item) => [item.id, item]));
+    const byId = provinceLookup(plane);
     return (adjacency.get(province.id) ?? []).some((id) => {
       const neighbour = byId.get(id);
       return neighbour ? isWaterProvince(neighbour) : false;
@@ -4051,7 +5172,7 @@ function matchesStartType(ref: ProvinceRef, type: StartType, adjacency: Map<stri
     && (ARCHETYPE_PROFILES[plane.kind].caveFamily || (overland && isCaveProvince(province)));
   if (type === "other") return !overland && !ARCHETYPE_PROFILES[plane.kind].caveFamily && !isWaterProvince(province);
   if (!overland || isWaterProvince(province) || isCaveProvince(province)) return false;
-  const byId = new Map(plane.provinces.map((item) => [item.id, item]));
+  const byId = provinceLookup(plane);
   return !(adjacency.get(province.id) ?? []).some((id) => {
     const neighbour = byId.get(id);
     return neighbour ? isWaterProvince(neighbour) : false;
@@ -4106,7 +5227,8 @@ function repairStartBorders(plane: Plane, extraStartIds: readonly string[] = [])
   }
 }
 
-function applyGeneratedOverlandTopology(
+/** Generation stage; strategic river chokepoints take effect in finalizeGeneratedRivers. */
+export function applyGeneratedOverlandTopology(
   plane: Plane,
   requestedMode: OverlandTopologyMode | undefined,
   seed: string,
@@ -4148,6 +5270,8 @@ function applyGeneratedOverlandTopology(
   const target = Math.min(candidates.length, Math.max(1, Math.round(plane.provinces.length / 10)));
   const selected = new Set<string>();
   const regionLoads = new Map<string, number>();
+  const riverChokepoints = new Set<string>();
+  strategicRiverChokepoints.set(plane, riverChokepoints);
 
   while (selected.size < target) {
     const graphBridges = graphBridgeKeysExcluding(plane, selected);
@@ -4171,8 +5295,50 @@ function applyGeneratedOverlandTopology(
     const region = overlandEdgeRegion(edge, byId);
     edge.kind = strategicBorderKind(edge, byId, selected.size);
     edge.special = undefined;
+    if (edge.kind === "river") riverChokepoints.add(key);
     selected.add(key);
     regionLoads.set(region, (regionLoads.get(region) ?? 0) + 1);
+  }
+}
+
+/**
+ * Wet strategic chokepoints are provisional "river" kinds until the final
+ * connected-river pass, which resets every provisional river. This transient
+ * handoff (never serialized) lets that pass route a continuous watercourse
+ * through each chokepoint instead of erasing it.
+ */
+const strategicRiverChokepoints = new WeakMap<Plane, ReadonlySet<string>>();
+const STRATEGIC_DRY_CHOKEPOINT: EdgeKind = "mountain_pass";
+
+/** Chokepoints still marked as rivers; an explicit route mix may have replaced others, as it does passes. */
+function takeStrategicRiverChokepoints(plane: Plane): string[] {
+  const keys = strategicRiverChokepoints.get(plane);
+  strategicRiverChokepoints.delete(plane);
+  if (!keys?.size) return [];
+  const kinds = new Map(plane.edges.map((edge) => [connectionKey(edge.a, edge.b), edge.kind]));
+  return [...keys].filter((key) => kinds.get(key) === "river");
+}
+
+/** A chokepoint no continuous river can pass through keeps the strategic dry barrier instead of vanishing. */
+function restoreUnroutedStrategicChokepoints(
+  plane: Plane,
+  keys: readonly string[],
+  protectedStartIds: readonly string[],
+  warnings?: string[],
+) {
+  if (!keys.length) return;
+  const starts = new Set(protectedStartIds);
+  for (const province of plane.provinces) if (province.start || province.teamStart !== undefined) starts.add(province.id);
+  const edges = new Map(plane.edges.map((edge) => [connectionKey(edge.a, edge.b), edge]));
+  for (const key of keys) {
+    const edge = edges.get(key);
+    if (!edge || edge.kind !== "standard") continue;
+    if (starts.has(edge.a) || starts.has(edge.b)) {
+      warnings?.push(`${plane.name}: a strategic river chokepoint beside a start could not join a connected river and was left open to keep the capital exit reliable.`);
+      continue;
+    }
+    edge.kind = STRATEGIC_DRY_CHOKEPOINT;
+    edge.special = undefined;
   }
 }
 
@@ -4199,6 +5365,7 @@ function overlandEdgeRegion(edge: Pick<Edge, "a" | "b">, byId: ReadonlyMap<strin
   return `${x}:${y}`;
 }
 
+/** Wet "river" picks are routed later as part of connected watercourses. */
 function strategicBorderKind(
   edge: Pick<Edge, "a" | "b">,
   byId: ReadonlyMap<string, Province>,
@@ -4210,7 +5377,7 @@ function strategicBorderKind(
   const flagsA = effectiveProvinceTerrainFlags(a);
   const flagsB = effectiveProvinceTerrainFlags(b);
   const wet = flagsA.has("freshwater") || flagsB.has("freshwater") || flagsA.has("swamp") || flagsB.has("swamp");
-  return wet ? "river" : "mountain_pass";
+  return wet ? "river" : STRATEGIC_DRY_CHOKEPOINT;
 }
 
 function blocksReliableStartEdge(edge: Edge): boolean {
@@ -4678,17 +5845,25 @@ export function generateGates(project: MapProject): GateLink[] {
         // aquatic. Never repair a scarce endpoint by silently crossing types;
         // omitting that pair is safer than exporting a misleading entrance.
         const candidates = safeTyped.length ? safeTyped : fallbackTyped;
-        const adjacency = adjacencyFor(plane, { traversableOnly: true });
-        const startIds = [...(protectedStarts.get(plane.id) ?? [])];
-        const distanceFromStarts = (province: Province) => startIds.length
-          ? Math.min(...startIds.map((startId) => shortestDistances(adjacency, startId).get(province.id) ?? 0))
-          : 99;
+        // Compute each candidate's sort key once. Start distances matter only
+        // for the fallback pool, and one BFS per start replaces a BFS per
+        // comparison.
+        let distanceFromStarts: ((province: Province) => number) | undefined;
+        if (usedFallback) {
+          const adjacency = adjacencyFor(plane, { traversableOnly: true });
+          const startDistances = [...(protectedStarts.get(plane.id) ?? [])].map((startId) => shortestDistances(adjacency, startId));
+          distanceFromStarts = (province) => startDistances.length
+            ? Math.min(...startDistances.map((distances) => distances.get(province.id) ?? 0))
+            : 99;
+        }
+        const sortKeys = new Map(candidates.map((province) => [province, {
+          distance: distanceFromStarts?.(province) ?? 0,
+          score: gateEndpointThemeScore(province, plane, otherPlane, desiredWater) * 3 + field(province.x, province.y, salt),
+        }]));
         candidates.sort((a, b) => {
-          const distanceA = distanceFromStarts(a);
-          const distanceB = distanceFromStarts(b);
-          const scoreA = gateEndpointThemeScore(a, plane, otherPlane, desiredWater) * 3 + field(a.x, a.y, salt);
-          const scoreB = gateEndpointThemeScore(b, plane, otherPlane, desiredWater) * 3 + field(b.x, b.y, salt);
-          return (usedFallback ? distanceB - distanceA : 0) || scoreB - scoreA || a.index - b.index;
+          const keyA = sortKeys.get(a)!;
+          const keyB = sortKeys.get(b)!;
+          return keyB.distance - keyA.distance || keyB.score - keyA.score || a.index - b.index;
         });
         return { candidates, usedFallback };
       };
@@ -4897,9 +6072,10 @@ export function nearestSourceDistances(adjacency: Map<string, string[]>, sources
 }
 
 function reachableWithin(adjacency: Map<string, string[]>, start: string, radius: number): number {
-  let count = 0;
-  for (const distance of shortestDistances(adjacency, start).values()) if (distance <= radius) count += 1;
-  return count;
+  // A radius-bounded BFS discovers exactly the provinces within `radius`
+  // (at their true distances) without walking the rest of the plane.
+  if (!(radius >= 0)) return 0;
+  return shortestDistances(adjacency, start, Math.floor(radius)).size;
 }
 
 export function calculateFairness(project: MapProject): FairnessMetrics {
@@ -4907,7 +6083,7 @@ export function calculateFairness(project: MapProject): FairnessMetrics {
   if (!refs.length) {
     return { overall: 0, startSeparation: 0, expansionParity: 0, throneAccess: 0, terrainVariety: 0, connectivity: 0, startDegree: 0, startAllocation: 0, notes: ["Generate a map to score it."] };
   }
-  const adjacency = globalMovementAdjacency(project);
+  const adjacency = sharedGlobalMovementAdjacency(project);
   const provinceKeys = new Set(refs.map((ref) => globalProvinceKey(ref.plane.id, ref.province.id)));
   const startKeys = new Set<string>();
   for (const ref of refs) {
@@ -5047,10 +6223,17 @@ export function calculateFairness(project: MapProject): FairnessMetrics {
   let connectivityWeight = 0;
   let connectivityTotal = 0;
   let disconnectedPlane = false;
+  // Each plane's traversable graph is built once and shared by the checks below.
+  const traversableByPlane = new Map<Plane, Map<string, string[]>>();
+  const traversableAdjacency = (plane: Plane) => {
+    let local = traversableByPlane.get(plane);
+    if (!local) traversableByPlane.set(plane, local = adjacencyFor(plane, { traversableOnly: true }));
+    return local;
+  };
   for (const plane of project.planes) {
     const active = plane.provinces.filter((province) => !isBlockedProvince(province));
     if (!active.length) continue;
-    const local = adjacencyFor(plane, { traversableOnly: true });
+    const local = traversableAdjacency(plane);
     const reachable = shortestDistances(local, active[0]!.id).size;
     const degrees = active.map((province) => local.get(province.id)?.length ?? 0);
     const coverage = reachable / active.length;
@@ -5076,7 +6259,7 @@ export function calculateFairness(project: MapProject): FairnessMetrics {
   if (disconnectedPlane) notes.push("At least one plane has a disconnected traversable province pocket.");
 
   const targetDegree = project.settings.startDegreeTarget ?? 4;
-  const localAdjacency = new Map(project.planes.map((plane) => [plane.id, adjacencyFor(plane, { traversableOnly: true })]));
+  const localAdjacency = new Map(project.planes.map((plane) => [plane.id, traversableAdjacency(plane)]));
   const startDegrees = starts.map((start) => localAdjacency.get(start.plane.id)?.get(start.province.id)?.length ?? 0);
   const degreeDeficit = startDegrees.length ? mean(startDegrees.map((degree) => Math.max(0, targetDegree - degree))) : targetDegree;
   const degreeSpread = startDegrees.length ? max(startDegrees) - min(startDegrees) : targetDegree;
@@ -5106,34 +6289,73 @@ function globalProvinceKey(planeId: string, provinceId: string): string {
 }
 
 export function globalMovementAdjacency(project: MapProject): Map<string, string[]> {
-  const result = new Map<string, string[]>();
-  const addNode = (key: string) => { if (!result.has(key)) result.set(key, []); };
+  // Set-backed de-duplication; every list is sorted at the end, so the
+  // result is identical to the former Array.includes construction.
+  const neighbourSets = new Map<string, Set<string>>();
+  const addNode = (key: string) => {
+    let neighbours = neighbourSets.get(key);
+    if (!neighbours) neighbourSets.set(key, neighbours = new Set());
+    return neighbours;
+  };
   const link = (a: string, b: string) => {
-    addNode(a);
-    addNode(b);
-    if (!result.get(a)!.includes(b)) result.get(a)!.push(b);
-    if (!result.get(b)!.includes(a)) result.get(b)!.push(a);
+    const fromA = addNode(a);
+    const fromB = addNode(b);
+    fromA.add(b);
+    fromB.add(a);
   };
   for (const plane of project.planes) {
-    for (const province of plane.provinces) if (!isBlockedProvince(province)) addNode(globalProvinceKey(plane.id, province.id));
+    const blocked = new Set<Province>();
+    for (const province of plane.provinces) {
+      if (isBlockedProvince(province)) blocked.add(province);
+      else addNode(globalProvinceKey(plane.id, province.id));
+    }
     const byId = new Map(plane.provinces.map((province) => [province.id, province]));
     for (const edge of plane.edges) {
       const a = byId.get(edge.a);
       const b = byId.get(edge.b);
-      if (isImpassableEdge(edge) || !a || !b || isBlockedProvince(a) || isBlockedProvince(b)) continue;
+      if (isImpassableEdge(edge) || !a || !b || blocked.has(a) || blocked.has(b)) continue;
       link(globalProvinceKey(plane.id, edge.a), globalProvinceKey(plane.id, edge.b));
     }
   }
   for (const gate of project.gates) {
-    const endpoints = gate.endpoints.filter((endpoint) => result.has(globalProvinceKey(endpoint.planeId, endpoint.provinceId)));
+    const endpoints = gate.endpoints.filter((endpoint) => neighbourSets.has(globalProvinceKey(endpoint.planeId, endpoint.provinceId)));
     for (let a = 0; a < endpoints.length; a += 1) {
       for (let b = a + 1; b < endpoints.length; b += 1) {
         link(globalProvinceKey(endpoints[a]!.planeId, endpoints[a]!.provinceId), globalProvinceKey(endpoints[b]!.planeId, endpoints[b]!.provinceId));
       }
     }
   }
-  for (const neighbours of result.values()) neighbours.sort();
+  const result = new Map<string, string[]>();
+  for (const [key, neighbours] of neighbourSets) result.set(key, [...neighbours].sort());
   return result;
+}
+
+const immutableAnalysisProjects = new WeakSet<MapProject>();
+let sharedMovementGraph: { project: MapProject; adjacency: Map<string, string[]> } | undefined;
+
+/**
+ * Declares that `project` will never be mutated again (the editor replaces
+ * committed projects instead of editing them). Read-only analyses of such a
+ * project may then share derived results instead of rebuilding them.
+ */
+export function markProjectImmutable<T extends MapProject>(project: T): T {
+  immutableAnalysisProjects.add(project);
+  return project;
+}
+
+export function isProjectMarkedImmutable(project: MapProject): boolean {
+  return immutableAnalysisProjects.has(project);
+}
+
+/**
+ * `globalMovementAdjacency` for read-only callers. The most recent project
+ * marked immutable shares one graph between validation, fairness and start
+ * analysis; any other project gets a fresh graph. Never mutate the result.
+ */
+export function sharedGlobalMovementAdjacency(project: MapProject): Map<string, string[]> {
+  if (!immutableAnalysisProjects.has(project)) return globalMovementAdjacency(project);
+  if (sharedMovementGraph?.project !== project) sharedMovementGraph = { project, adjacency: globalMovementAdjacency(project) };
+  return sharedMovementGraph.adjacency;
 }
 
 export function provinceGlobalNumber(project: MapProject, planeId: string, provinceId: string): number | undefined {
@@ -5205,10 +6427,11 @@ function eligibleGeneratedStartPlaneIndexes(project: Pick<MapProject, "planes">,
  * share. Overland categories share one load counter, preventing independent
  * land/coast/water allocations from stacking onto the same plane.
  */
-function generatedStartPlaneTargets(
+function allocateGeneratedStartsBySize(
   project: Pick<MapProject, "planes">,
+  sizes: readonly number[],
   requested: StartDistribution,
-): Map<StartType, Map<string, number>> {
+): StartPlaneTargets {
   const targets = new Map(START_TYPES.map((type) => [type, new Map<string, number>()]));
   const assignedByPlane = new Map(project.planes.map((plane) => [plane.id, 0]));
   for (const type of ["water", "coastal", "land", "cave", "other"] as StartType[]) {
@@ -5217,10 +6440,8 @@ function generatedStartPlaneTargets(
       const planeIndex = [...indexes].sort((a, b) => {
         const planeA = project.planes[a]!;
         const planeB = project.planes[b]!;
-        const sizeA = planeA.provinces.length || planeA.provinceTarget;
-        const sizeB = planeB.provinces.length || planeB.provinceTarget;
-        const capacityA = sizeA / ((assignedByPlane.get(planeA.id) ?? 0) + 1);
-        const capacityB = sizeB / ((assignedByPlane.get(planeB.id) ?? 0) + 1);
+        const capacityA = sizes[a]! / ((assignedByPlane.get(planeA.id) ?? 0) + 1);
+        const capacityB = sizes[b]! / ((assignedByPlane.get(planeB.id) ?? 0) + 1);
         return capacityB - capacityA || a - b;
       })[0]!;
       const plane = project.planes[planeIndex]!;
@@ -5232,8 +6453,20 @@ function generatedStartPlaneTargets(
   return targets;
 }
 
+/**
+ * Per-plane generated-start quotas frozen by the province budget. Placement
+ * never re-derives a split from the generated sizes: the budget sized the
+ * auto planes for exactly this split, and its preview promises it.
+ */
+function generatedStartPlaneTargets(
+  project: Pick<MapProject, "planes" | "settings">,
+  requested: StartDistribution,
+): StartPlaneTargets {
+  return planGeneratedStarts(project, requested).targets;
+}
+
 function plannedGeneratedStartsOnPlane(
-  project: Pick<MapProject, "planes">,
+  project: Pick<MapProject, "planes" | "settings">,
   requested: StartDistribution,
   type: StartType,
   planeIndex: number,

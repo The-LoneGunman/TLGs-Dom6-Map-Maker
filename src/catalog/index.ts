@@ -1,4 +1,5 @@
 import { BUILTIN_DOM6_CATALOG } from "./builtin";
+import { normalizeSearch } from "./lookup";
 import {
   DOM6_CATALOG_SCHEMA,
   DOM6_CATALOG_SCHEMA_VERSION,
@@ -9,6 +10,7 @@ import {
 } from "./types";
 
 export { BUILTIN_DOM6_CATALOG } from "./builtin";
+export { findCatalogEntry } from "./lookup";
 export { provinceSiteLocationMask, siteCompatibility, type SiteCompatibility } from "./compatibility";
 export {
   NATION_RECRUITABLE_COMMANDER_TAG,
@@ -138,15 +140,6 @@ export function searchCatalog(entries: CatalogEntry[], query: string, limit = 10
     .map((result) => result.entry);
 }
 
-export function findCatalogEntry(entries: CatalogEntry[], value: string | number | undefined): CatalogEntry | undefined {
-  if (value === undefined || value === "") return undefined;
-  const text = String(value).trim();
-  const numeric = /^#?-?\d+$/.test(text) ? Number.parseInt(text.replace(/^#/, ""), 10) : undefined;
-  if (numeric !== undefined) return entries.find((entry) => entry.id === numeric);
-  const normalized = normalizeSearch(text);
-  return entries.find((entry) => normalizeSearch(entry.name) === normalized || entry.aliases?.some((alias) => normalizeSearch(alias) === normalized));
-}
-
 export function formatCatalogEntry(entry: CatalogEntry): string {
   return `${entry.name} (#${entry.id})`;
 }
@@ -243,10 +236,6 @@ function scoreEntry(entry: CatalogEntry, needle: string, numeric: number | undef
 
 function compareCatalogEntries(left: CatalogEntry, right: CatalogEntry): number {
   return left.id - right.id || left.name.localeCompare(right.name);
-}
-
-function normalizeSearch(value: string): string {
-  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase();
 }
 
 function dedupeBy<T>(entries: T[], key: (entry: T) => string | number): T[] {
