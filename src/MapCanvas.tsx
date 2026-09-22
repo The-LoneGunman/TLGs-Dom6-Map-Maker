@@ -9,7 +9,8 @@ import {
   type Province,
   type TerrainKey,
 } from "./domain";
-import { provinceTerrainVisuals, winterPreviewStrength, type TerrainMarkKind } from "./terrainVisuals";
+import { previewProvinceTerrain, provinceTerrainVisuals, winterPreviewStrength, type TerrainMarkKind } from "./terrainVisuals";
+import { renderSkyRgb, skyVariantForPreview } from "./skyArt";
 import { borderStyles } from "./edgeVisuals";
 import { fitMapFrame, placeMapLabel, provinceBadgeRadius, screenToMapPoint, type LabelBox } from "./mapView";
 import { planTerrainMarks } from "./terrainArtwork";
@@ -128,10 +129,10 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
   const topology = useMemo(() => computeProvinceTopology(plane), [plane]);
   const ownership = useMemo(() => createProvinceOwnershipModel(plane), [plane]);
   const cells = useMemo(() => ownership.mode === "solid" ? topology.cells : [], [ownership.mode, topology]);
-  const backgroundAsset = useMemo(() => planeBackgroundAsset(plane, ownership), [ownership, plane]);
+  const backgroundAsset = useMemo(() => usesSkyArtwork(plane) ? undefined : planeBackgroundAsset(plane, ownership), [ownership, plane]);
   const [loadedBackground, setLoadedBackground] = useState<{ source: string; image: HTMLImageElement }>();
   const backgroundImage = loadedBackground && loadedBackground.source === backgroundAsset ? loadedBackground.image : undefined;
-  const materialSources = useMemo(() => planeMaterialAssets(plane, previewCondition), [plane, previewCondition]);
+  const materialSources = useMemo(() => usesSkyArtwork(plane) ? [] : planeMaterialAssets(plane, previewCondition), [plane, previewCondition]);
   const materialSignature = materialSources.join("|");
   const [loadedMaterials, setLoadedMaterials] = useState<{ signature: string; images: Map<string, HTMLImageElement> }>();
   const materialImages = loadedMaterials?.signature === materialSignature ? loadedMaterials.images : undefined;
@@ -343,9 +344,12 @@ export async function renderPlanePng(plane: Plane, condition: PreviewCondition, 
   const ownership = createProvinceOwnershipModel(plane);
   context.fillStyle = mapBackgroundColor(plane, ownership);
   context.fillRect(0, 0, canvas.width, canvas.height);
-  const backgroundImage = await loadPlaneBackground(planeBackgroundAsset(plane, ownership));
+  // Procedural sky painting is opaque and self-contained; loading raster assets
+  // underneath it only delays export and adds redundant network requests.
+  const proceduralSky = usesSkyArtwork(plane);
+  const backgroundImage = await loadPlaneBackground(proceduralSky ? undefined : planeBackgroundAsset(plane, ownership));
   if (backgroundImage) paintRealmBackground(context, backgroundImage, canvas.width, canvas.height, plane);
-  const materialImages = await loadArtworkImages(planeMaterialAssets(plane, condition));
+  const materialImages = await loadArtworkImages(proceduralSky ? [] : planeMaterialAssets(plane, condition));
   const topology = computeProvinceTopology(plane);
   const cells = ownership.mode === "solid" ? topology.cells : [];
   paintPlane(context, plane, cells, topology, ownership, condition, canvas.width, canvas.height, { labels: true, detail: true, materialImages, markerAnnotations });
@@ -518,6 +522,8 @@ function paintPlane(
   height: number,
   options: { selectedId?: string; labels?: boolean; detail?: boolean; materialImages?: Map<string, HTMLImageElement>; markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations>; analysisProvinceIds?: ReadonlySet<string>; screenScale?: number },
 ) {
+  if ((plane.kind === "cloud" || plane.kind === "air")
+    && paintSkyPlane(context, plane, topology, ownership, condition, width, height, options)) return;
   if (ownership.mode === "sparse") {
     paintSparsePlane(context, plane, topology, ownership, condition, width, height, options);
     return;
@@ -574,6 +580,81 @@ function paintPlane(
 interface SparsePaintMask {
   ownerPaths: Path2D[];
   combinedPath: Path2D;
+}
+
+// Keep only the current sky preview: zooming and selection must not repeatedly
+// allocate native-size rasters or retain an atlas worth of large canvases.
+let skyPreviewCache: { key: string; ownership: ProvinceOwnershipModel; width: number; height: number; canvas: HTMLCanvasElement } | undefined;
+
+/** Invalid/unfinished drafts retain the existing canvas renderer instead of throwing. */
+export function skyPreviewSize(plane: Pick<Plane, "width" | "height">, width: number, height: number): { width: number; height: number } | undefined {
+  if (!canRenderPlanePreview(plane) || plane.width < 256 || plane.height < 256 || plane.width > 3840 || plane.height > 3840
+    || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return undefined;
+  const scale = Math.min(1, Math.max(256 / Math.min(plane.width, plane.height), width / plane.width, height / plane.height));
+  return { width: Math.max(256, Math.round(plane.width * scale)), height: Math.max(256, Math.round(plane.height * scale)) };
+}
+
+function usesSkyArtwork(plane: Plane): boolean {
+  return (plane.kind === "cloud" || plane.kind === "air") && !!skyPreviewSize(plane, plane.width, plane.height);
+}
+
+function skyPreviewKey(plane: Plane, condition: PreviewCondition): string {
+  // Do not rely on object identity: imported drafts and library callers may edit
+  // in place. Names and markers are drawn separately and need no raster rebuild.
+  return JSON.stringify([plane.id, plane.kind, plane.wrapX, plane.wrapY, condition,
+    plane.provinces.map(province => [province.id, [...effectiveProvinceTerrainFlags(province)].sort(), province.warmer, province.colder])]);
+}
+
+function paintSkyPlane(
+  context: CanvasRenderingContext2D, plane: Plane, topology: ProvinceTopology,
+  ownership: ProvinceOwnershipModel, condition: PreviewCondition, width: number, height: number,
+  options: { selectedId?: string; labels?: boolean; markerAnnotations?: ReadonlyMap<string, ProvinceMarkerAnnotations>; analysisProvinceIds?: ReadonlySet<string>; screenScale?: number },
+): boolean {
+  // Raster at display density for interactive use and full density for PNGs.
+  const size = skyPreviewSize(plane, width, height);
+  if (!size) return false;
+  const { width: rasterWidth, height: rasterHeight } = size;
+  const key = skyPreviewKey(plane, condition);
+  if (!skyPreviewCache || skyPreviewCache.key !== key || skyPreviewCache.ownership !== ownership
+    || skyPreviewCache.width !== rasterWidth || skyPreviewCache.height !== rasterHeight) {
+    const canvas = document.createElement("canvas");
+    canvas.width = rasterWidth; canvas.height = rasterHeight;
+    const rasterContext = canvas.getContext("2d");
+    if (!rasterContext) return false;
+    const displayed: Plane = { ...plane, width: rasterWidth, height: rasterHeight,
+      provinces: plane.provinces.map(province => ({ ...province, ...previewProvinceTerrain(province, condition) })) };
+    const owners = samplePlaneOwnership(plane, rasterWidth, rasterHeight, ownership);
+    const rgb = renderSkyRgb(displayed, owners, skyVariantForPreview(condition), `${plane.id}:sky-art`);
+    const pixels = rasterContext.createImageData(rasterWidth, rasterHeight);
+    for (let i = 0; i < owners.length; i += 1) {
+      pixels.data[i * 4] = rgb[i * 3]!;
+      pixels.data[i * 4 + 1] = rgb[i * 3 + 1]!;
+      pixels.data[i * 4 + 2] = rgb[i * 3 + 2]!;
+      pixels.data[i * 4 + 3] = 255;
+    }
+    rasterContext.putImageData(pixels, 0, 0);
+    skyPreviewCache = { key, ownership, width: rasterWidth, height: rasterHeight, canvas };
+  }
+  context.drawImage(skyPreviewCache.canvas, 0, 0, width, height);
+  const maskWidth = Math.max(1, Math.round(width));
+  const maskHeight = Math.max(1, Math.round(height));
+  const mask = sparsePaintMask(plane, ownership, maskWidth, maskHeight);
+  context.save();
+  context.scale(width / maskWidth, height / maskHeight);
+  plane.provinces.forEach((province, index) => {
+    const path = mask.ownerPaths[index];
+    if (!path) return;
+    if (options.analysisProvinceIds?.has(province.id)) { context.fillStyle = "rgba(80, 205, 189, .28)"; context.fill(path); }
+    if (options.selectedId === province.id) { context.fillStyle = "rgba(245, 214, 124, .22)"; context.fill(path); }
+  });
+  // The clip and overlays must share the same integer-raster-to-display scale.
+  // Restore display coordinates only after establishing the transformed clip.
+  context.clip(mask.combinedPath);
+  context.scale(maskWidth / width, maskHeight / height);
+  drawSparseTopologyBorders(context, plane, topology, width, height);
+  context.restore();
+  drawProvinceMarkers(context, plane, width, height, options);
+  return true;
 }
 
 const sparsePaintMaskCache = new WeakMap<ProvinceOwnershipModel, Map<string, SparsePaintMask>>();

@@ -4,6 +4,7 @@ import test from "node:test";
 import type { Plane } from "../src/domain";
 import { createDefaultProject } from "../src/generator";
 import { computeProvinceTopology, connectionKey, createProvinceOwnershipModel, type ProvinceChamberPrimitive, type ProvinceCorridorPrimitive } from "../src/geometry";
+import { connectedRegionLayoutNotice } from "../src/connectedRegions";
 
 const undergroundKinds = ["cave", "cavern", "underworld", "hell", "abyss"] as const;
 const source = createDefaultProject("organic-underground-regression").planes[0]!;
@@ -40,9 +41,15 @@ for (const kind of undergroundKinds) test(`${kind}: organic geometry is determin
   const corridors = model.primitives.filter((p): p is ProvinceCorridorPrimitive => p.kind === "corridor");
   assert.equal(chambers.length, plane.provinces.length);
   assert.equal(corridors.length, plane.edges.length);
-  assert.ok(chambers.every(p => p.organicPower !== undefined && p.outlineWaves));
-  assert.ok(new Set(chambers.map(p => p.organicPower!.toFixed(5))).size > chambers.length * .8);
-  assert.ok(corridors.filter(p => p.path).length >= corridors.length * .8, "spacious passages should visibly meander");
+  if (kind === "underworld") {
+    assert.ok(chambers.every(p => p.organicPower !== undefined && p.outlineWaves));
+    assert.ok(new Set(chambers.map(p => p.organicPower!.toFixed(5))).size > chambers.length * .8);
+  } else {
+    assert.equal(connectedRegionLayoutNotice(plane), undefined);
+    assert.equal(model.regionBorders?.size, plane.edges.length, "every compatible authored edge has a broad regional frontier");
+    assert.ok(new Set(chambers.map(p => p.radius.toFixed(5))).size > chambers.length * .8, "regional floors vary in size");
+  }
+  assert.ok(corridors.filter(p => p.path).length >= corridors.length * .8, "passages retain explicit routes between their floors");
   const copy = structuredClone(plane);
   copy.edges.reverse();
   assert.deepEqual(createProvinceOwnershipModel(copy).primitives, model.primitives);
@@ -52,7 +59,7 @@ for (const kind of undergroundKinds) test(`${kind}: organic geometry is determin
   assert.equal(model.ownerAt(.01, .01), -1);
 });
 
-test("organic passages keep exact endpoints/midpoints and a continuous, flared ownership tube", () => {
+test("regional passages keep exact endpoints and a continuous route through a broad shared frontier", () => {
   const plane = fixture("hell");
   const model = createProvinceOwnershipModel(plane);
   const topology = computeProvinceTopology(plane);
@@ -60,8 +67,8 @@ test("organic passages keep exact endpoints/midpoints and a continuous, flared o
     if (corridor.kind !== "corridor" || !corridor.path) continue;
     assert.deepEqual(corridor.path[0], corridor.from);
     assert.deepEqual(corridor.path.at(-1), corridor.to);
-    assert.deepEqual(corridor.path[4], { x: (corridor.from.x + corridor.to.x) / 2, y: (corridor.from.y + corridor.to.y) / 2 });
-    assert.ok(corridor.halfWidths![0]! > corridor.halfWidths![4]! * 1.15, "passages widen smoothly into chamber mouths");
+    assert.ok(corridor.path.length >= 3, "the route includes an interior shared-frontier point");
+    assert.ok(corridor.halfWidth > 4 / plane.height, "a passage must have a substantial traversable width");
     assert.ok(corridor.halfWidths!.every(width => Number.isFinite(width) && width > 0));
     for (let segment = 0; segment < corridor.path.length - 1; segment++) {
       const a = corridor.path[segment]!, b = corridor.path[segment + 1]!;
@@ -171,12 +178,15 @@ const unaffectedDigests: Partial<Record<Plane["kind"], string>> = {
   dream: "caa5a4a2db57f9ee796a820807040a7abe9b3894251b11c2d6a393232cbac2bd",
   elemental: "2865e2bcde4180aa3c291eb0bbbf8ceb5b7c6e8f08b00f9508795fc75191a326",
 };
-test("non-underground ownership and primitive digests remain byte-for-byte unchanged", () => {
+test("solid and incompatible authored-map compatibility geometry retain their frozen digests", () => {
   for (const [kind, expected] of Object.entries(unaffectedDigests)) {
     const plane = createDefaultProject("underground-isolation-baseline").planes[0]!;
     plane.kind = kind as Plane["kind"];
     plane.id = `unaffected-${kind}`;
-    if (kind !== "surface" && kind !== "custom") plane.ownershipMode = "sparse";
+    if (kind !== "surface" && kind !== "custom") {
+      plane.ownershipMode = "sparse";
+      assert.match(connectedRegionLayoutNotice(plane) ?? "", /nonlocal authored links/, "old overland graph intentionally exercises the warned compatibility path");
+    }
     const model = createProvinceOwnershipModel(plane), owners: number[] = [];
     for (let y = 0; y < 47; y++) for (let x = 0; x < 83; x++) owners.push(model.ownerAt((x + .5) / 83, (y + .5) / 47));
     assert.equal(createHash("sha256").update(JSON.stringify([model.primitives, owners])).digest("hex"), expected, kind);

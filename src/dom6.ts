@@ -28,12 +28,13 @@ import {
   scaledStartSeparationTarget,
   shortestDistances,
 } from "./generator";
-import { auditPlaneTopology, createProvinceOwnerResolver, resolvePlaneOwnershipMode } from "./geometry";
+import { auditPlaneTopology, createProvinceOwnerResolver, resolvePlaneOwnershipMode, usesConnectedRegions } from "./geometry";
 import { BUILTIN_DOM6_CATALOG, findCatalogEntry, siteCompatibility, type Dom6CatalogBundle } from "./catalog";
 import { previewProvinceTerrain, terrainElevation, terrainVisualKey } from "./terrainVisuals";
 import { buildInitialDefensePlan, type VerifiedPopulationDefenseProfile } from "./populationDefenders";
 import { VERIFIED_POPULATION_DEFENSE_PROFILES } from "./populationDefenseProfiles";
 import { protectedStartProvinceKeys } from "./authoringLocks";
+import { connectedRegionLayoutNotice } from "./connectedRegions";
 
 export const D6M_MAGIC = 898933;
 export const D6M_VERSION = 3;
@@ -688,6 +689,9 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
     if (plane.ownershipMode !== undefined && plane.ownershipMode !== "solid" && plane.ownershipMode !== "sparse") {
       add("error", `${plane.name} ownership mode must be solid or sparse.`, plane.id);
     }
+    if (plane.sparseLayout !== undefined && plane.sparseLayout !== "chambers" && plane.sparseLayout !== "regions") {
+      add("error", `${plane.name} province layout must be chambers or regions.`, plane.id);
+    }
     if (plane.kind === "underworld" && plane.wrapX && plane.wrapY) {
       add("warning", `${plane.name} wraps in both directions, so one River Styx band cannot form a true two-bank barrier across the torus. Disable at least one wrap axis and Generate again.`, plane.id);
     }
@@ -746,6 +750,10 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
       add("error", `${plane.name} is disconnected for normal movement (${reachableTraversable}/${traversableProvinces.length} traversable provinces reachable).`, plane.id);
     }
     const topologyAudit = auditPlaneTopology(plane);
+    if (usesConnectedRegions(plane)) {
+      const layoutNotice = connectedRegionLayoutNotice(plane);
+      if (layoutNotice) add("warning", `${plane.name}: ${layoutNotice}`, plane.id);
+    }
     if (topologyAudit.missing.length) {
       add(
         "error",

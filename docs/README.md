@@ -1,6 +1,8 @@
 # Documentation index
 
-Documentation for the **0.1.5 source**, reviewed September 21, 2026. See the root [versions and documentation table](../README.md#versions-and-documentation) before assuming a hosted build or installer contains these controls. Merging, deploying the hosted GUI, and publishing a Windows release are separate actions; release preparation is not publication.
+Documentation for source whose package version remains **0.1.5**, reviewed September 21, 2026. Post-release work is explicitly marked **unreleased development**. See the root [versions and documentation table](../README.md#versions-and-documentation) before assuming a hosted build or installer contains these controls. Merging, deploying the hosted GUI, and publishing a Windows release are separate actions.
+
+This development checkout additionally documents automatic **Connected regions & passages** for sparse realms, with no classic selector, plus procedural Cloud/Air artwork in the editor and PNG preview. Native packages remain `.map`/`.d6m`; the preview artwork is not embedded. The published 0.1.5 build still uses the earlier layouts and previews.
 
 ## Current references
 
@@ -19,6 +21,10 @@ These records preserve the conditions and evidence at the stated revision/date. 
 
 | Record | Role |
 | --- | --- |
+| [September 21 connected-region verification](CONNECTED_REGIONS_2026-09-21.md) | Unreleased adjacent-region layout, compatibility safeguards, automated checks and browser/native visual acceptance. |
+| [September 21 cave and sky-layout references](research/NATURAL_CAVERN_REFERENCES_2026-09-21.md) | Creator-map and official references; layout motifs only, no copied artwork. |
+| [Sky-realm rendering options](research/SKY_RENDERING_OPTIONS_2026-09-21.md) | Editor/PNG sky art, native protocol results, and the boundary between a successful loading diagnostic and a supported exporter. |
+| [Custom-map artwork parity](research/ILLUSTRATED_MAP_PARITY_2026-09-21.md) | Creator/source comparisons, current native payload gaps, feasible export directions, and in-game acceptance criteria. |
 | [September 21 underground and population work](UNDERGROUND_POLISH_2026-09-21.md) | Shape/relief changes, the initial v2 checkpoint, and later v3 verification; historical observations are labelled. |
 | [September 21 native guardian capture](research/NATIVE_GUARDIAN_CAPTURE_2026-09-21.md) | One generated Inferno encounter tested through battle, capture, completed recruitment and PD inspection; not universal balance/PD proof. |
 | [September 20 implementation round](IMPLEMENTATION_ROUND_2026-09-20.md) | Implementation-stage tests, seed evaluation and browser observations before later native checks. |

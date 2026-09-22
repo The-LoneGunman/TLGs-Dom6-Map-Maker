@@ -14,6 +14,7 @@ import {
 } from "../src/generator";
 import { computeProvinceTopology, connectionKey, createProvinceOwnershipModel } from "../src/geometry";
 import { validateProject } from "../src/dom6";
+import { buildConnectedRegionPlan, connectedRegionLayoutNotice } from "../src/connectedRegions";
 
 interface TopologyMetrics {
   connected: boolean;
@@ -100,7 +101,29 @@ function generatedSpecialPlane(kind: PlaneKind, seed: string, provinceTarget = 6
   return generatePlane(source, project.settings, `${project.seed}:${kind}:profile`, 1);
 }
 
-test("fixed-seed sparse plane graphs match their chamber and route profiles", () => {
+function assertRegionalStructure(plane: Plane) {
+  const plan = buildConnectedRegionPlan(plane);
+  const adjacency = adjacencyFor(plane, { traversableOnly: true });
+  assert.ok(plan.groups.length >= 2, `${plane.kind}: multiple substantial adjoining-province groups`);
+  assert.ok(plan.passageOwners.size > 0, `${plane.kind}: connecting passages must be actual provinces`);
+  const assigned = [...plan.groups.flat(), ...plan.passageOwners];
+  assert.equal(new Set(assigned).size, plane.provinces.length, "regional roles partition the requested provinces");
+  assert.equal(assigned.length, plane.provinces.length);
+  for (const group of plan.groups) {
+    assert.ok(group.length >= 3, "a regional mass contains neighboring floor provinces rather than isolated dots");
+    const ids = new Set(group.map(owner => plane.provinces[owner]!.id));
+    const induced = new Map([...ids].map(id => [id, (adjacency.get(id) ?? []).filter(neighbor => ids.has(neighbor))]));
+    assert.equal(shortestDistances(induced, plane.provinces[group[0]!]!.id).size, group.length);
+  }
+  for (const owner of plan.passageOwners) assert.equal(adjacency.get(plane.provinces[owner]!.id)?.length, 2);
+  const expected = new Set([...plan.regionPairs.map(pair => pair.key), ...plan.treePairs.map(pair =>
+    connectionKey(plane.provinces[pair.a]!.id, plane.provinces[pair.b]!.id))]);
+  assert.deepEqual(plane.edges.map(edge => connectionKey(edge.a, edge.b)).sort(), [...expected].sort());
+  assert.equal(connectedRegionLayoutNotice(plane), undefined, "new layouts must not need saved-map compatibility rendering");
+  assert.ok(createProvinceOwnershipModel(plane).regionBorders?.size);
+}
+
+test("fixed-seed sparse planes generate adjoining regional groups while retaining the dedicated Styx topology", () => {
   const kinds: PlaneKind[] = ["cave", "cavern", "underworld", "cloud", "air", "hell", "abyss", "dream", "elemental"];
   const metrics = new Map<PlaneKind, TopologyMetrics>();
   for (const kind of kinds) {
@@ -117,53 +140,38 @@ test("fixed-seed sparse plane graphs match their chamber and route profiles", ()
     const topology = computeProvinceTopology(first);
     assert.deepEqual([...topology.pairKeys].sort(), first.edges.map((edge) => connectionKey(edge.a, edge.b)).sort());
     assert.ok(createProvinceOwnershipModel(first).primitives.filter((primitive) => primitive.kind === "corridor").length === first.edges.length);
+    if (kind !== "underworld") assertRegionalStructure(first);
   }
 
-  const cave = metrics.get("cave")!;
-  assert.ok(cave.meanDegree >= 2.5 && cave.meanDegree <= 3.2);
-  assert.ok(cave.cycleRatio >= 0.2 && cave.cycleRatio <= 0.36);
-  assert.ok(cave.degreeTwoShare >= 0.2 && cave.degreeTwoShare <= 0.5);
-  assert.ok(cave.leafShare <= 0.1);
-  const cavern = metrics.get("cavern")!;
-  assert.ok(cavern.meanDegree >= 2.8 && cavern.meanDegree <= 3.5);
-  assert.ok(cavern.cycleRatio >= 0.3 && cavern.cycleRatio <= 0.47);
-  assert.ok(cavern.degreeTwoShare >= 0.15 && cavern.degreeTwoShare <= 0.4);
-  assert.ok(cavern.leafShare <= 0.08);
   const underworld = metrics.get("underworld")!;
   assert.ok(underworld.meanDegree >= 2.4 && underworld.meanDegree <= 3.1);
   assert.ok(underworld.cycleRatio >= 0.15 && underworld.cycleRatio <= 0.32);
   assert.ok(underworld.degreeTwoShare >= 0.25 && underworld.degreeTwoShare <= 0.55);
   assert.ok(underworld.leafShare <= 0.12);
 
-  const routeBands: Partial<Record<PlaneKind, [number, number, number, number, number]>> = {
-    cloud: [0.82, 0.92, 3, 0.03, 0.08], air: [0.8, 0.9, 3, 0.04, 0.1],
-    hell: [0.78, 0.88, 3, 0.04, 0.1], abyss: [0.84, 0.9, 4, 0.08, 0.11],
-    dream: [0.7, 0.82, 4, 0.1, 0.18], elemental: [0.7, 0.82, 4, 0.1, 0.2],
-  };
-  for (const [kind, [minimum, maximum, maxDegree, minimumCycles, maximumCycles]]
-    of Object.entries(routeBands) as Array<[PlaneKind, [number, number, number, number, number]]>) {
+  for (const kind of kinds.filter(kind => kind !== "underworld")) {
     const value = metrics.get(kind)!;
-    assert.ok(value.degreeOneTwoShare >= minimum && value.degreeOneTwoShare <= maximum,
-      `${kind} degree-one/two share ${value.degreeOneTwoShare} must be in ${minimum}-${maximum}`);
-    assert.ok(value.maxDegree <= maxDegree, `${kind} ordinary nodes must cap at degree ${maxDegree}`);
-    assert.ok(value.cycleRatio >= minimumCycles && value.cycleRatio <= maximumCycles,
-      `${kind} cycle ratio ${value.cycleRatio} must be in ${minimumCycles}-${maximumCycles}`);
+    assert.ok(value.meanDegree >= 2.4 && value.meanDegree <= 4.2, `${kind}: connected groups retain multiple expansion choices`);
+    assert.ok(value.degreeOneTwoShare < 0.7, `${kind}: the map must not collapse into a mostly single-file route`);
+    assert.ok(value.maxDegree <= 8, `${kind}: adjoining regions retain locally bounded junctions`);
+    assert.ok(value.cycleRatio >= 0.2 && value.cycleRatio <= 0.9, `${kind}: regional groups contain alternate local routes`);
+    assert.ok(value.leafShare <= 0.18, `${kind}: dead ends remain a minority`);
   }
   for (const kind of ["cave", "cavern", "underworld"] as PlaneKind[]) {
     assert.ok(graphBridgeKeys(generatedSpecialPlane(kind, "profile")).size > 0, `${kind} should retain deliberate chamber bottlenecks`);
   }
 });
 
-test("abyss routes contain restrained junctions and short loops without losing long owner-zero corridors", () => {
+test("abyss and custom void realms have multi-province groups, actual passages and substantial negative space", () => {
   const canonical = generatedSpecialPlane("abyss", "profile");
   const repeat = generatedSpecialPlane("abyss", "profile");
   assert.deepEqual(canonical.edges, repeat.edges);
   const canonicalEvidence = routeStructureEvidence(canonical);
-  assert.deepEqual(canonicalEvidence.histogram, { 1: 2, 2: 54, 3: 4, 4: 4 });
-  assert.equal(canonicalEvidence.cycleRank, 6);
+  assertRegionalStructure(canonical);
+  assert.ok(canonicalEvidence.cycleRank >= 12);
   assert.ok(canonicalEvidence.shortCycleEdges >= 8, `${canonicalEvidence.shortCycleEdges} edges participate in short alternate loops`);
-  assert.ok(canonicalEvidence.diameter >= 24, `diameter ${canonicalEvidence.diameter} no longer reads as a long sparse corridor`);
-  assert.ok(canonicalEvidence.degreeOneTwoShare >= 0.84, "junctions must remain restrained rather than turning the Abyss into a mesh");
+  assert.ok(canonicalEvidence.diameter >= 8 && canonicalEvidence.diameter < 32, "groups and passages should not become one long single-file tunnel");
+  assert.ok(canonicalEvidence.degreeOneTwoShare < 0.7, "most of the Abyss must no longer be narrow single-file channels");
 
   const base = createDefaultProject("abyss-junction-variants");
   const abyssSource = addPlane(base, "abyss", { generate: false, autoSize: false, provinceTarget: 64 }).planes[1]!;
@@ -182,12 +190,13 @@ test("abyss routes contain restrained junctions and short loops without losing l
   ];
   for (const plane of variants) {
     const evidence = routeStructureEvidence(plane);
-    assert.equal(evidence.cycleRank, 6);
-    assert.ok((evidence.histogram[3] ?? 0) + (evidence.histogram[4] ?? 0) >= 8);
-    assert.ok((evidence.histogram[4] ?? 0) >= 2, "Abyss-like planes need visible four-way junctions");
+    assertRegionalStructure(plane);
+    assert.ok(evidence.cycleRank >= 12);
+    assert.ok(Object.entries(evidence.histogram).filter(([degree]) => Number(degree) >= 3).reduce((sum, [, count]) => sum + count, 0) >= 20);
+    assert.ok((evidence.histogram[4] ?? 0) >= 2, "Abyss-like planes need visible multi-link junctions");
     assert.ok(evidence.shortCycleEdges >= 8);
-    assert.ok(evidence.diameter >= 24);
-    assert.ok(evidence.degreeOneTwoShare >= 0.84);
+    assert.ok(evidence.diameter >= 8 && evidence.diameter < 32);
+    assert.ok(evidence.degreeOneTwoShare < 0.7);
     const topology = computeProvinceTopology(plane);
     assert.deepEqual([...topology.pairKeys].sort(), plane.edges.map((edge) => connectionKey(edge.a, edge.b)).sort());
     const ownership = createProvinceOwnershipModel(plane);
@@ -199,7 +208,8 @@ test("abyss routes contain restrained junctions and short loops without losing l
         if (ownership.ownerAt((x + 0.5) / 48, (y + 0.5) / 30) < 0) blankSamples += 1;
       }
     }
-    assert.ok(blankSamples / sampleCount >= 0.5, "Abyss junctions must preserve true owner-zero void");
+    assert.ok(blankSamples / sampleCount >= 0.12 && blankSamples / sampleCount <= 0.45,
+      "Abyss groups preserve true owner-zero void while broad adjoining provinces cover most of the plane");
   }
 });
 

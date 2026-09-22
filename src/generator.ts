@@ -35,7 +35,8 @@ import {
   type StartType,
   type TerrainKey,
 } from "./domain";
-import { computeProvinceTopology, connectionKey, resolvePlaneOwnershipMode } from "./geometry";
+import { computeProvinceTopology, connectionKey, resolvePlaneOwnershipMode, usesConnectedRegions } from "./geometry";
+import { buildConnectedRegionPlan } from "./connectedRegions";
 import { regenerateGeneratedProvinceNames } from "./naming";
 import { assertCanRebuildLayout, pruneAuthoringRegions, restoreGenerationLocks } from "./authoringLocks";
 import { applyPlaneContentPreferences, applyPlaneRoutePreferences, assertPlaneGenerationOverrides, preferredDryTerrain } from "./generationControls";
@@ -211,42 +212,31 @@ interface GeneratePlaneOptions {
 }
 
 interface SparseGraphProfile {
-  shape: "chambers" | "routes";
-  cycleRatio: number;
   ordinaryMaxDegree: number;
-  /** Chamber graphs only. */
-  clusterSize?: number;
-  degreeTwoTarget?: number;
-  leafMaximum?: number;
-  /** Route graphs only. */
-  degreeOneTwoTarget?: number;
-  /** Prefer alternate route loops no longer than this many backbone steps. */
-  routeLoopSpanTarget?: number;
 }
 
 const SPARSE_GRAPH_PROFILES: Partial<Record<PlaneKind, SparseGraphProfile>> = {
-  cave: { shape: "chambers", cycleRatio: 0.33, ordinaryMaxDegree: 5, clusterSize: 17, degreeTwoTarget: 0.35, leafMaximum: 0.08 },
-  cavern: { shape: "chambers", cycleRatio: 0.45, ordinaryMaxDegree: 5, clusterSize: 22, degreeTwoTarget: 0.27, leafMaximum: 0.05 },
-  underworld: { shape: "chambers", cycleRatio: 0.28, ordinaryMaxDegree: 5, clusterSize: 15, degreeTwoTarget: 0.4, leafMaximum: 0.1 },
-  cloud: { shape: "routes", cycleRatio: 0.055, ordinaryMaxDegree: 3, degreeOneTwoTarget: 0.87 },
-  air: { shape: "routes", cycleRatio: 0.07, ordinaryMaxDegree: 3, degreeOneTwoTarget: 0.85 },
-  hell: { shape: "routes", cycleRatio: 0.07, ordinaryMaxDegree: 3, degreeOneTwoTarget: 0.84 },
-  abyss: { shape: "routes", cycleRatio: 0.095, ordinaryMaxDegree: 4, degreeOneTwoTarget: 0.88, routeLoopSpanTarget: 7 },
-  dream: { shape: "routes", cycleRatio: 0.14, ordinaryMaxDegree: 4, degreeOneTwoTarget: 0.76 },
-  elemental: { shape: "routes", cycleRatio: 0.145, ordinaryMaxDegree: 4, degreeOneTwoTarget: 0.74 },
+  cave: { ordinaryMaxDegree: 5 },
+  cavern: { ordinaryMaxDegree: 5 },
+  underworld: { ordinaryMaxDegree: 5 },
+  cloud: { ordinaryMaxDegree: 3 },
+  air: { ordinaryMaxDegree: 3 },
+  hell: { ordinaryMaxDegree: 3 },
+  abyss: { ordinaryMaxDegree: 4 },
+  dream: { ordinaryMaxDegree: 4 },
+  elemental: { ordinaryMaxDegree: 4 },
 };
 
-const DEFAULT_SPARSE_GRAPH_PROFILE: SparseGraphProfile = {
-  shape: "routes",
-  cycleRatio: 0.08,
-  ordinaryMaxDegree: 3,
-  degreeOneTwoTarget: 0.84,
+const DEFAULT_SPARSE_GRAPH_PROFILE: SparseGraphProfile = { ordinaryMaxDegree: 3 };
+
+/** The Styx plane keeps its dedicated topology and water-barrier construction. */
+const UNDERWORLD_GRAPH_PROFILE = {
+  cycleRatio: 0.28, ordinaryMaxDegree: 5, clusterSize: 15, degreeTwoTarget: 0.4, leafMaximum: 0.1,
 };
 
 function sparseGraphProfileFor(plane: Pick<Plane, "kind" | "variant">): SparseGraphProfile {
   // A custom sparse Void plane is the exact user-authored analogue of the
-  // Abyss: retain its long route backbone, but use the same restrained set of
-  // junctions and short alternate loops instead of falling back to a line.
+  // Abyss and uses its same start-hub repair degree bound.
   if (plane.kind === "custom" && plane.variant === "void") return SPARSE_GRAPH_PROFILES.abyss!;
   return SPARSE_GRAPH_PROFILES[plane.kind] ?? DEFAULT_SPARSE_GRAPH_PROFILE;
 }
@@ -983,6 +973,8 @@ function repairSparseStartBasins(
   const active = plane.provinces.filter((province) => !isBlockedProvince(province)).sort((a, b) => a.index - b.index);
   if (active.length < 2) return [];
   const { pairs: allPairs, spacing } = spatialPairs(active, plane);
+  const regionContacts = usesConnectedRegions(plane)
+    ? new Set(buildConnectedRegionPlan(plane).voronoiPairs.map(pair => pair.key)) : undefined;
   // The Styx remains a water barrier even when a start needs more exits.
   // Constrain new corridors only; existing designated bridges are preserved.
   const dryBanks = new Map<string, string>();
@@ -999,8 +991,9 @@ function repairSparseStartBasins(
       for (const member of shortestDistances(dryAdjacency, id).keys()) dryBanks.set(member, id);
     }
   }
-  const pairs = allPairs.filter((pair) => !dryBanks.has(pair.a.id) || !dryBanks.has(pair.b.id)
-    || dryBanks.get(pair.a.id) === dryBanks.get(pair.b.id));
+  const pairs = allPairs.filter((pair) => (!regionContacts || regionContacts.has(pair.key))
+    && (!dryBanks.has(pair.a.id) || !dryBanks.has(pair.b.id)
+      || dryBanks.get(pair.a.id) === dryBanks.get(pair.b.id)));
   const localPairs = pairs.filter((pair) => pair.distance <= spacing * 2.4 + 1e-9);
   const pairByKey = new Map(allPairs.map((pair) => [pair.key, pair]));
   const selected = new Map<string, SpatialPair>();
@@ -2304,7 +2297,11 @@ function buildSparseEdges(
 ): Edge[] {
   const active = provinces.filter((province) => !isBlockedProvince(province)).sort((a, b) => a.index - b.index);
   if (active.length < 2) return [];
-  const { pairs, spacing } = spatialPairs(active, plane);
+  const regions = usesConnectedRegions(plane)
+    ? buildConnectedRegionPlan({ ...plane, provinces }) : undefined;
+  const regionContacts = regions ? new Set(regions.voronoiPairs.map(pair => pair.key)) : undefined;
+  const { pairs: allPairs, spacing } = spatialPairs(active, plane);
+  const pairs = regionContacts ? allPairs.filter(pair => regionContacts.has(pair.key)) : allPairs;
   const localPairs = pairs.filter((pair) => pair.distance <= spacing * 2.4 + 1e-9);
   const selected = new Map<string, SpatialPair>();
   const degrees = new Map(active.map((province) => [province.id, 0]));
@@ -2316,12 +2313,28 @@ function buildSparseEdges(
     return true;
   };
   const profile = sparseGraphProfileFor(plane);
-  const commonStartDegree = clamp(Math.round(settings.startDegreeTarget ?? 4), 1, Math.max(1, active.length - 1));
+  const requestedDegree = Math.round(settings.startDegreeTarget ?? 4);
+  // Regional provinces can only join genuine local contacts. Do not consume
+  // a tightly packed start field trying to create eight-way hubs that the
+  // later distance-three basin pass must immediately undo.
+  const packedDegree = regions && startCapacity > 0
+    ? Math.max(Math.min(requestedDegree, 4), Math.floor(active.length / (startCapacity * 2)))
+    : requestedDegree;
+  const commonStartDegree = clamp(Math.min(requestedDegree, packedDegree), 1, Math.max(1, active.length - 1));
 
-  if (profile.shape === "chambers") {
-    buildChamberGraph(active, pairs, localPairs, selected, degrees, addPair, profile, spacing);
+  if (regions) {
+    // The region silhouette tiles neighboring members into a shared
+    // mass. Declare those actual local contacts in the generated movement
+    // graph; preview/export must never invent connections for saved maps.
+    // Use this generation's province array, not any previous source layout.
+    const pairByKey = new Map(pairs.map(pair => [pair.key, pair]));
+    for (const pair of regions.treePairs) {
+      const a = provinces[pair.a], b = provinces[pair.b];
+      if (a && b) addPair(pairByKey.get(connectionKey(a.id, b.id)));
+    }
+    for (const pair of regions.regionPairs) addPair(pairByKey.get(pair.key));
   } else {
-    buildRouteGraph(active, pairs, localPairs, selected, degrees, addPair, profile, plane, spacing);
+    buildChamberGraph(active, pairs, localPairs, selected, degrees, addPair, UNDERWORLD_GRAPH_PROFILE, spacing);
   }
 
   addSparseStartHubs(
@@ -2432,7 +2445,7 @@ function buildChamberGraph(
   selected: Map<string, SpatialPair>,
   degrees: Map<string, number>,
   addPair: (pair: SpatialPair | undefined) => boolean,
-  profile: SparseGraphProfile,
+  profile: typeof UNDERWORLD_GRAPH_PROFILE,
   spacing: number,
 ) {
   const tree = minimumSpanningPairs(active, pairs);
@@ -2560,75 +2573,6 @@ function treeSideSize(
   return seen.size;
 }
 
-function buildRouteGraph(
-  active: readonly Province[],
-  pairs: readonly SpatialPair[],
-  localPairs: readonly SpatialPair[],
-  selected: Map<string, SpatialPair>,
-  degrees: Map<string, number>,
-  addPair: (pair: SpatialPair | undefined) => boolean,
-  profile: SparseGraphProfile,
-  plane: Plane,
-  spacing: number,
-) {
-  const pairByKey = new Map(pairs.map((pair) => [pair.key, pair]));
-  const route = spatialRouteOrder(active, plane);
-  const routePosition = new Map(route.map((province, index) => [province.id, index]));
-  for (let index = 1; index < route.length; index += 1) {
-    addPair(pairByKey.get(connectionKey(route[index - 1]!.id, route[index]!.id)));
-  }
-  const targetRank = Math.max(0, Math.round(active.length * profile.cycleRatio));
-  while (selected.size - active.length + 1 < targetRank) {
-    const share = active.filter((province) => (degrees.get(province.id) ?? 0) <= 2).length / active.length;
-    const targetShare = profile.degreeOneTwoTarget ?? 0.84;
-    const chooseLoop = (pool: readonly SpatialPair[]) => chooseSparseChord(pool, selected, (pair) => {
-      return (degrees.get(pair.a.id) ?? 0) < profile.ordinaryMaxDegree
-        && (degrees.get(pair.b.id) ?? 0) < profile.ordinaryMaxDegree;
-    }, (pair) => {
-      const converts = Number(degrees.get(pair.a.id) === 2) + Number(degrees.get(pair.b.id) === 2);
-      const leaves = Number(degrees.get(pair.a.id) === 1) + Number(degrees.get(pair.b.id) === 1);
-      const existingHubs = Number((degrees.get(pair.a.id) ?? 0) >= 3) + Number((degrees.get(pair.b.id) ?? 0) >= 3);
-      const routeSpan = Math.abs(routePosition.get(pair.a.id)! - routePosition.get(pair.b.id)!);
-      const spanTarget = profile.routeLoopSpanTarget;
-      const shortLoopScore = spanTarget === undefined
-        ? 0
-        : routeSpan <= spanTarget
-          ? 44 - Math.abs(routeSpan - 4) * 5
-          : -Math.min(80, (routeSpan - spanTarget) * 4);
-      const topologyScore = share > targetShare
-        ? converts * 120 + existingHubs * 8 - leaves * 80 - pair.distance / spacing
-        : existingHubs * 100 - converts * 45 - leaves * 80 - pair.distance / spacing;
-      return topologyScore + shortLoopScore;
-    });
-    const pair = chooseLoop(localPairs) ?? chooseLoop(pairs);
-    if (!addPair(pair)) break;
-  }
-}
-
-function spatialRouteOrder(active: readonly Province[], plane: Plane): Province[] {
-  const rows = new Map<number, Province[]>();
-  for (const province of active) {
-    const row = province.gridY ?? Math.round(province.y * Math.max(2, Math.sqrt(active.length)));
-    if (!rows.has(row)) rows.set(row, []);
-    rows.get(row)!.push(province);
-  }
-  const ordered: Province[] = [];
-  const aspect = plane.height > 0 ? clamp(plane.width / plane.height, 0.08, 12) : 1;
-  for (const [, row] of [...rows].sort((left, right) => left[0] - right[0])) {
-    const ascending = [...row].sort((a, b) => (a.gridX ?? a.x) - (b.gridX ?? b.x) || a.index - b.index);
-    const descending = [...ascending].reverse();
-    if (!ordered.length) {
-      ordered.push(...ascending);
-      continue;
-    }
-    const previous = ordered[ordered.length - 1]!;
-    const firstDistance = periodicProvinceDistance(previous, ascending[0]!, plane, aspect);
-    const lastDistance = periodicProvinceDistance(previous, descending[0]!, plane, aspect);
-    ordered.push(...(firstDistance <= lastDistance ? ascending : descending));
-  }
-  return ordered;
-}
-
 function chooseSparseChord(
   pool: readonly SpatialPair[],
   selected: ReadonlyMap<string, SpatialPair>,
@@ -2668,6 +2612,14 @@ function addSparseStartHubs(
   if (!desired) return [];
   const preferredHubSeparation = scaledStartSeparationTarget(active.length, desired);
   const hubs = new Set<string>();
+  const regional = usesConnectedRegions(plane);
+  const potentialDegrees = new Map(active.map(province => [province.id, 0]));
+  for (const pair of pairs) {
+    potentialDegrees.set(pair.a.id, (potentialDegrees.get(pair.a.id) ?? 0) + 1);
+    potentialDegrees.set(pair.b.id, (potentialDegrees.get(pair.b.id) ?? 0) + 1);
+  }
+  const canReachTarget = (province: Province) => !regional || (potentialDegrees.get(province.id) ?? 0) >= targetDegree;
+  const exhaustedRegionalHubs = new Set<string>();
   const aspect = plane.height > 0 ? clamp(plane.width / plane.height, 0.08, 12) : 1;
   const initialAdjacency = adjacencyFromPairs(active, selected.values());
   const initialBridges = bridgeKeysFromPairs(active, selected.values());
@@ -2679,6 +2631,7 @@ function addSparseStartHubs(
     initialBridgeEnds.add(pair.b.id);
   }
   const initialCandidates = active.filter((province) => isEligibleStartProvince(province)
+    && canReachTarget(province)
     && (!eligibleHub || eligibleHub(province))
     && (degrees.get(province.id) ?? 0) <= targetDegree);
   const distanceCache = new Map<string, Map<string, number>>();
@@ -2736,6 +2689,8 @@ function addSparseStartHubs(
     }
     const adjacency = adjacencyFromPairs(active, selected.values());
     const candidates = active.filter((province) => !hubs.has(province.id)
+      && !exhaustedRegionalHubs.has(province.id)
+      && canReachTarget(province)
       && isEligibleStartProvince(province)
       && (!eligibleHub || eligibleHub(province))
       && !bridgeEnds.has(province.id)
@@ -2753,7 +2708,7 @@ function addSparseStartHubs(
       ? candidates.filter((province) => [...hubs].every((id) =>
         (shortestDistances(adjacency, id).get(province.id) ?? 0) >= preferredHubSeparation))
       : candidates;
-    const plannedHub = plannedHubs[hubs.size];
+    const plannedHub = plannedHubs.find(province => !hubs.has(province.id) && !exhaustedRegionalHubs.has(province.id));
     // Adding movement edges can only shorten graph distance. If the current
     // topology has no safe next hub, accepting an adjacent fallback would
     // bake an invalid capital layout into the sparse graph.
@@ -2798,7 +2753,12 @@ function addSparseStartHubs(
       const pair = raiseHub(localPairs) ?? raiseHub(pairs);
       if (!addPair(pair)) break;
     }
-    if ((degrees.get(hub.id) ?? 0) < targetDegree) break;
+    if ((degrees.get(hub.id) ?? 0) < targetDegree) {
+      if (!regional) break;
+      exhaustedRegionalHubs.add(hub.id);
+      plannedHubIds.delete(hub.id);
+      continue;
+    }
 
     const desiredTwoRing = Math.min(active.length, Math.max(desiredTwoRingCapacity ?? 0, targetDegree * 3 + 1));
     while (reachableWithin(adjacencyFromPairs(active, selected.values()), hub.id, 2) < desiredTwoRing) {
@@ -3103,7 +3063,14 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
         attempt.push(candidate);
       }
     }
-    return attempt.length === project.settings.players ? attempt : [];
+    if (attempt.length !== project.settings.players) return [];
+    // A locally exhausted regional choice must not end the full placement
+    // search while another order, degree or smaller safe separation can avoid
+    // a passage bottleneck. Only the existing final relaxed fallback may
+    // accept such a constrained start instead of silently dropping a player.
+    if (separationPlan !== 0 && attempt.some(ref => usesConnectedRegions(ref.plane)
+      && bridgeEndpoints.get(ref.plane.id)?.has(ref.province.id))) return [];
+    return attempt;
   };
 
   const backtrackingPlacementAttempt = (
@@ -3131,6 +3098,10 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
       }
       const bridgeSafe = candidates.filter((ref) => !bridgeEndpoints.get(ref.plane.id)?.has(ref.province.id));
       if (bridgeSafe.length >= requested[type]) candidates = bridgeSafe;
+      // Regional exact/backtracking attempts must try another degree before
+      // accepting a bridge endpoint merely to preserve the current degree.
+      candidates = candidates.filter(ref => !usesConnectedRegions(ref.plane)
+        || !bridgeEndpoints.get(ref.plane.id)?.has(ref.province.id));
       pools.set(type, candidates.sort((a, b) => a.planeIndex - b.planeIndex || a.province.index - b.province.index));
     }
     const attempt: ProvinceRef[] = [];
@@ -3252,7 +3223,8 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
     && (Object.keys(requested) as StartType[]).every((type) => (preparedCounts.get(type) ?? 0) === requested[type])
     && preparedPlacement.every((item) => isEligibleStartProvince(item.province)
       && matchesStartType(item, item.type, adjacency.get(item.plane.id)!)
-      && (adjacency.get(item.plane.id)?.get(item.province.id)?.length ?? 0) >= minimumUsefulDegree)
+      && (adjacency.get(item.plane.id)?.get(item.province.id)?.length ?? 0) >= minimumUsefulDegree
+      && (!usesConnectedRegions(item.plane) || !bridgeEndpoints.get(item.plane.id)?.has(item.province.id)))
     && preparedPlacement.every((item, index) => preparedPlacement.slice(index + 1).every((other) => {
       if (item.plane.id !== other.plane.id) return true;
       return (shortestDistances(adjacency.get(item.plane.id)!, item.province.id).get(other.province.id) ?? 0)
@@ -3374,8 +3346,10 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
         distancesFrom(item.province.id).get(other.province.id) ?? Infinity)), Infinity);
     const degreeAfterBorderRepair = (province: Province) => plane.edges.filter((edge) =>
       edge.a === province.id || edge.b === province.id).length;
+    const regional = usesConnectedRegions(plane);
     if (minimumPairDistance(current) >= preferredPlaneSeparation
-      && new Set(current.map((item) => degreeAfterBorderRepair(item.province))).size === 1) return current;
+      && new Set(current.map((item) => degreeAfterBorderRepair(item.province))).size === 1
+      && (!regional || current.every(item => !bridgeEndpoints.get(plane.id)?.has(item.province.id)))) return current;
 
     const counts = new Map<StartType, number>();
     for (const item of current) {
@@ -3391,7 +3365,8 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
     const preparedMatches = prepared.length === current.length
       && [...counts].every(([type, count]) => preparedCounts.get(type) === count)
       && prepared.every((item) => matchesStartType(item, item.type, local)
-        && (local.get(item.province.id)?.length ?? 0) >= minimumUsefulDegree);
+        && (local.get(item.province.id)?.length ?? 0) >= minimumUsefulDegree
+        && (!regional || !bridgeEndpoints.get(plane.id)?.has(item.province.id)));
     const preparedRefs = prepared.map((item) => ({
       plane: item.plane,
       planeIndex: item.planeIndex,
@@ -3419,7 +3394,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
           && (forcedDegree === undefined || degreeAfterBorderRepair(province) === forcedDegree))
           .map((province) => ({ plane, planeIndex, province }));
         const bridgeSafe = pool.filter((item) => !bridgeEndpoints.get(plane.id)?.has(item.province.id));
-        if (bridgeSafe.length >= count) pool = bridgeSafe;
+        if (regional || bridgeSafe.length >= count) pool = bridgeSafe;
         pools.set(type, pool);
       }
       const remaining = new Map(counts);
@@ -3682,7 +3657,7 @@ function chooseDistributedStart(
     const adjacency = separationAdjacencyByPlane.get(plane.id)!;
     return [plane.id, (startsByPlane.get(plane.id) ?? []).map((start) => shortestDistances(adjacency, start.id))];
   }));
-  const candidateFacts = (plane: Plane, planeIndex: number, province: Province) => {
+  const rawCandidateFacts = (plane: Plane, planeIndex: number, province: Province) => {
     const adjacency = adjacencyByPlane.get(plane.id)!;
     const ref = { plane, planeIndex, province };
     const planeQuota = requestedType === undefined ? Infinity : planeTargets.get(requestedType)?.get(plane.id) ?? 0;
@@ -3709,6 +3684,25 @@ function chooseDistributedStart(
       incidentBridge: bridgeEndpointsByPlane.get(plane.id)?.has(province.id) ?? false,
       requiredSeparation,
     };
+  };
+  // A regional passage endpoint can have the closest two-ring capacity while
+  // still sitting on a graph bridge. Prefer genuinely safe regional capital
+  // candidates before capacity matching narrows the pool. Keep Underworld's
+  // ranking and physically constrained fallback behavior unchanged.
+  const regionalBridgeSafePlanes = new Set(project.planes.flatMap((plane, planeIndex) => {
+    if (!usesConnectedRegions(plane)) return [];
+    const safe = plane.provinces.some(province => {
+      const facts = rawCandidateFacts(plane, planeIndex, province);
+      if (!facts || facts.incidentBridge || facts.distance < Math.max(3, facts.requiredSeparation)) return false;
+      if (forcedDegree !== undefined) return facts.degree === forcedDegree;
+      if (preferredDegree !== undefined) return facts.degree === preferredDegree;
+      return facts.degree >= Math.min(target, 4);
+    });
+    return safe ? [plane.id] : [];
+  }));
+  const candidateFacts = (plane: Plane, planeIndex: number, province: Province) => {
+    const facts = rawCandidateFacts(plane, planeIndex, province);
+    return facts?.incidentBridge && regionalBridgeSafePlanes.has(plane.id) ? undefined : facts;
   };
   const hasSafePreferredDegree = preferredDegree !== undefined && project.planes.some((plane, planeIndex) => plane.provinces.some((province) => {
     const facts = candidateFacts(plane, planeIndex, province);
@@ -4832,7 +4826,7 @@ export function calculateFairness(project: MapProject): FairnessMetrics {
     const coverage = reachable / active.length;
     let score: number;
     if (resolvePlaneOwnershipMode(plane) === "sparse") {
-      // Leaves and bridges are intentional geography on route/chamber planes;
+      // Leaves and bridges are intentional geography between sparse regions;
       // only actual isolated pockets or disconnected authored corridors lower
       // their connectivity score.
       const isolatedShare = degrees.filter((degree) => degree === 0).length / active.length;

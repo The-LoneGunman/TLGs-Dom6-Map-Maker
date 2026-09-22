@@ -10,6 +10,7 @@ import {
   resolvePlaneOwnershipMode,
 } from "../src/geometry";
 import { encodeD6m, inspectD6m, validateProject } from "../src/dom6";
+import { connectedRegionLayoutNotice } from "../src/connectedRegions";
 
 function sparseFixture(): Plane {
   const plane = createDefaultProject("sparse-owner-fixture").planes[0]!;
@@ -69,10 +70,12 @@ test("surface ownership stays solid while non-overland ownership defaults to spa
 
 test("sparse D6M writes owner 0 with neutral height and preserves capital ownership", async () => {
   const plane = sparseFixture();
+  // Leave one floor boundary unlinked so the region must include a rock seam.
+  plane.edges.pop();
   const bytes = await encodeD6m(plane, "sparse-binary");
   const inspection = inspectD6m(bytes);
   assert.equal(inspection.valid, true);
-  assert.ok(inspection.noneOwnerPixels > plane.width * plane.height * 0.2);
+  assert.ok(inspection.noneOwnerPixels > 0,"adjoining regions still retain native owner-zero gaps");
 
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const pixelCount = plane.width * plane.height;
@@ -92,12 +95,25 @@ test("sparse D6M writes owner 0 with neutral height and preserves capital owners
   });
 });
 
-test("sparse chambers connect only along intentional corridors without diagonal shortcuts", () => {
+test("adjoining sparse floors connect only along authored borders without diagonal shortcuts", () => {
   const plane = sparseFixture();
   const model = createProvinceOwnershipModel(plane);
   const topology = computeProvinceTopology(plane);
   assert.ok(model.ownerAt(0.5, 0.2) >= 0, "the authored top corridor must be owned");
-  assert.equal(model.ownerAt(0.5, 0.5), -1, "the chamber interior gap must remain true negative space");
+  assert.equal(connectedRegionLayoutNotice(plane),undefined);
+  // Unlike separate chambers, adjoining floors may reach this shared vertex.
+  // A vertex must not introduce either diagonal movement frontier.
+  const contacts=new Set<string>();
+  for(let y=0;y<plane.height;y++)for(let x=0;x<plane.width;x++) {
+    const owner=model.ownerAt((x+.5)/plane.width,(y+.5)/plane.height);
+    if(owner<0)continue;
+    for(const [nx,ny] of [[x+1,y],[x,y+1]]) {
+      if(nx!>=plane.width||ny!>=plane.height)continue;
+      const other=model.ownerAt((nx!+.5)/plane.width,(ny!+.5)/plane.height);
+      if(other>=0&&other!==owner)contacts.add(connectionKey(plane.provinces[owner]!.id,plane.provinces[other]!.id));
+    }
+  }
+  assert.deepEqual([...contacts].sort(),plane.edges.map(edge=>connectionKey(edge.a,edge.b)).sort());
   assert.deepEqual(
     [...topology.pairKeys].sort(),
     plane.edges.map((edge) => connectionKey(edge.a, edge.b)).sort(),
@@ -124,13 +140,15 @@ test("a new sparse manual edge is authorable and creates its canonical corridor"
   const b = "sparse-3";
   const key = connectionKey(a, b);
   const beforeTopology = computeProvinceTopology(plane);
-  assert.equal(createProvinceOwnershipModel(plane).ownerAt(0.5, 0.5), -1);
+  assert.equal(connectedRegionLayoutNotice(plane),undefined);
   assert.equal(canAuthorPlaneEdge(plane, a, b), true);
 
   plane.edges.push({ id: "manual-diagonal", a, b, kind: "standard" });
   const afterTopology = computeProvinceTopology(plane);
   const addedPairs = [...afterTopology.pairKeys].filter((pair) => !beforeTopology.pairKeys.has(pair));
   assert.deepEqual(addedPairs, [key]);
+  assert.match(connectedRegionLayoutNotice(plane)!,/Compatibility geometry/,
+    "a new nonlocal authored link is kept explicitly, never silently lost to regional clipping");
   assert.ok(createProvinceOwnershipModel(plane).ownerAt(0.5, 0.5) >= 0, "the new edge must own its center corridor");
   assert.equal(canAuthorPlaneEdge(plane, a, b), false, "an existing edge cannot be authored twice");
 });

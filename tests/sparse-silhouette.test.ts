@@ -10,6 +10,8 @@ import {
   type ProvinceCorridorPrimitive,
 } from "../src/geometry";
 import { samplePlaneOwnership } from "../src/MapCanvas";
+import { connectedRegionLayoutNotice } from "../src/connectedRegions";
+import { provinceTerrainVisuals } from "../src/terrainVisuals";
 
 const SPARSE_KINDS = [
   "cave",
@@ -28,8 +30,8 @@ function silhouetteFixture(kind: Plane["kind"]): Plane {
   plane.id = `silhouette-${kind}`;
   plane.kind = kind;
   plane.ownershipMode = "sparse";
-  plane.width = 3840;
-  plane.height = 2160;
+  plane.width = 1024;
+  plane.height = 576;
   plane.wrapX = false;
   plane.wrapY = false;
   const positions: Array<readonly [number, number]> = [[0.5, 0.5]];
@@ -83,10 +85,6 @@ function corridors(plane: Plane): ProvinceCorridorPrimitive[] {
     .filter((primitive): primitive is ProvinceCorridorPrimitive => primitive.kind === "corridor");
 }
 
-function mean(values: readonly number[]): number {
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
 function aspect(chamber: ProvinceChamberPrimitive): number {
   return Math.max(chamber.radiusX, chamber.radiusY) / Math.min(chamber.radiusX, chamber.radiusY);
 }
@@ -113,53 +111,38 @@ test("every sparse archetype has a deterministic, internally varied silhouette g
   }));
 
   assert.equal(new Set([...byKind.values()].map((items) => items[0]!.silhouette)).size, SPARSE_KINDS.length);
-  const meanAspect = (kind: typeof SPARSE_KINDS[number]) => mean(byKind.get(kind)!.map(aspect));
-  assert.ok(
-    meanAspect("cavern") > meanAspect("cave") + 0.04,
-    `cavern aspect ${meanAspect("cavern")} should exceed cave aspect ${meanAspect("cave")}`,
-  );
-  assert.ok(meanAspect("cloud") > meanAspect("cave") + 0.35, "cloud islands should be visibly more elongated than cave rooms");
-  assert.ok(meanAspect("air") > meanAspect("cloud") + 0.35, "air streams should be the most elongated sky form");
   assert.ok(byKind.get("underworld")!.filter((item) => item.contourPower === 4).length >= 9, "Underworld rooms should skew boxy/tomb-like");
-  assert.ok(byKind.get("hell")!.filter((item) => item.contourPower === 1).length >= 9, "Hell regions should skew fractured/angular");
-  assert.ok(byKind.get("dream")!.filter((item) => item.lobeScale > 0).length >= 9, "Dream regions should usually have organic secondary lobes");
-  assert.deepEqual(new Set(byKind.get("elemental")!.map((item) => item.contourPower)), new Set([1, 2, 4]), "Elemental regions should mix angular and fluid contours");
-
-  const abyss = silhouetteFixture("abyss");
-  const abyssChambers = chambers(abyss);
-  assert.equal(abyssChambers[0]!.hub, true, "the four-link Abyss nexus should become a focal hub");
-  const abyssHubArea = abyssChambers[0]!.radiusX * abyssChambers[0]!.radiusY;
-  const abyssSatelliteArea = mean(abyssChambers.slice(1).map((item) => item.radiusX * item.radiusY));
-  assert.ok(abyssHubArea > abyssSatelliteArea * 1.5, `Abyss hub area ${abyssHubArea} should dominate satellite mean ${abyssSatelliteArea}`);
-  assert.ok(
-    mean(corridors(abyss).map((item) => item.halfWidth))
-      < mean(corridors(silhouetteFixture("cave")).map((item) => item.halfWidth)) * 0.65,
-    "Abyss links should stay substantially narrower than cave tunnels",
-  );
+  for (const kind of SPARSE_KINDS.filter(kind => kind !== "underworld")) {
+    const plane = silhouetteFixture(kind);
+    const model = createProvinceOwnershipModel(plane);
+    assert.equal(connectedRegionLayoutNotice(plane), undefined, `${kind}: compatible layouts use adjoining regions automatically`);
+    assert.ok(model.regionBorders?.size, `${kind}: region silhouettes must expose real shared floors`);
+    assert.ok(corridors(plane).every(corridor => corridor.halfWidth > 4 / plane.height), `${kind}: passages must be wider than a hairline`);
+  }
 });
 
-test("flooded cave owners stay cave-shaped but become smoother basins with broader authored links", () => {
+test("flooding connected cave regions preserves their footprint, connections and exact ownership", () => {
   const dry = silhouetteFixture("cave");
   const targetOwner = 2;
   const dryModel = createProvinceOwnershipModel(dry);
-  const dryChamber = dryModel.primitives[targetOwner] as ProvinceChamberPrimitive;
-  assert.equal(dryChamber.contourPower, 4, "fixture target exercises the cave profile's boxier branch");
-  const dryCorridor = corridors(dry).find((item) => item.owners.includes(targetOwner))!;
+  const original = structuredClone(dry);
 
   const flooded = structuredClone(dry);
   flooded.provinces[targetOwner]!.terrain = "cave";
   flooded.provinces[targetOwner]!.terrainFlags = ["cave", "sea"];
   const floodedModel = createProvinceOwnershipModel(flooded);
   const floodedChamber = floodedModel.primitives[targetOwner] as ProvinceChamberPrimitive;
-  const floodedCorridor = corridors(flooded).find((item) => item.key === dryCorridor.key)!;
 
-  assert.notStrictEqual(floodedModel, dryModel, "terrain flags must invalidate cached ownership geometry");
+  assert.notDeepEqual(provinceTerrainVisuals(flooded.provinces[targetOwner]!, "normal"), provinceTerrainVisuals(dry.provinces[targetOwner]!, "normal"), "flooding changes terrain artwork even though ownership stays fixed");
   assert.equal(floodedChamber.silhouette, "cave-chamber");
   assert.equal(floodedChamber.contourPower, 2);
-  assert.ok(aspect(floodedChamber) < aspect(dryChamber));
-  assert.ok(Math.abs(floodedChamber.warpX) < Math.abs(dryChamber.warpX));
-  assert.ok(Math.abs(floodedChamber.warpY) < Math.abs(dryChamber.warpY));
-  assert.ok(floodedCorridor.halfWidth > dryCorridor.halfWidth * 1.1);
+  assert.deepEqual(floodedModel.primitives, dryModel.primitives, "terrain artwork changes must not redraw regional movement geometry");
+  assert.deepEqual(floodedModel.regionBorders, dryModel.regionBorders);
+  assert.deepEqual(flooded.edges, dry.edges);
+  for (let y = 0; y < 83; y++) for (let x = 0; x < 137; x++) {
+    assert.equal(floodedModel.ownerAt((x + .5) / 137, (y + .5) / 83), dryModel.ownerAt((x + .5) / 137, (y + .5) / 83));
+  }
+  assert.deepEqual(dry, original);
   assert.equal(floodedModel.ownerAt(flooded.provinces[targetOwner]!.x, flooded.provinces[targetOwner]!.y), targetOwner);
 });
 
@@ -199,20 +182,10 @@ test("Sea+Cave Underworld owners form a smooth Styx band while dry banks remain 
   assert.equal(styxModel.ownerAt(0.02, 0.02), -1);
 });
 
-test("varied chambers retain owner-0 separation and topology exposes only authored borders", () => {
+test("adjoining regions retain gaps at unauthored contacts and expose only authored borders", () => {
   for (const kind of SPARSE_KINDS) {
     const plane = silhouetteFixture(kind);
     const ownership = createProvinceOwnershipModel(plane);
-    const kindChambers = chambers(plane);
-    for (let left = 0; left < kindChambers.length; left += 1) {
-      for (let right = left + 1; right < kindChambers.length; right += 1) {
-        const a = kindChambers[left]!;
-        const b = kindChambers[right]!;
-        const dx = (a.center.x - b.center.x) * ownership.metricAspect;
-        const dy = a.center.y - b.center.y;
-        assert.ok(a.radius + b.radius < Math.hypot(dx, dy), `${kind} chamber bounds must not silently touch without a corridor`);
-      }
-    }
     assert.equal(ownership.ownerAt(0.02, 0.02), -1);
     const topology = computeProvinceTopology(plane);
     assert.deepEqual(
@@ -220,6 +193,23 @@ test("varied chambers retain owner-0 separation and topology exposes only author
       plane.edges.map((edge) => connectionKey(edge.a, edge.b)).sort(),
       `${kind} visual variation must not invent movement borders`,
     );
+    const edited = structuredClone(plane);
+    edited.edges = [];
+    const isolated = createProvinceOwnershipModel(edited);
+    assert.equal(computeProvinceTopology(edited).pairKeys.size, 0);
+    for (const [owner, province] of edited.provinces.entries()) assert.equal(isolated.ownerAt(province.x, province.y), owner);
+    // A sampled owner-to-owner adjacency must have an explicit authored link;
+    // broad regional floors are allowed to touch only at those links.
+    const width = 384, height = 216;
+    const raster = samplePlaneOwnership(plane, width, height, ownership);
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const owner = raster[y * width + x]!;
+      if (owner < 0) continue;
+      for (const next of [x + 1 < width ? y * width + x + 1 : -1, y + 1 < height ? (y + 1) * width + x : -1]) {
+        if (next < 0 || raster[next]! < 0 || raster[next] === owner) continue;
+        assert.ok(topology.pairKeys.has(connectionKey(plane.provinces[owner]!.id, plane.provinces[raster[next]!]!.id)), `${kind}: no unauthored raster contact`);
+      }
+    }
   }
 });
 
@@ -240,6 +230,8 @@ test("elongated chamber ownership follows enabled wrap seams", () => {
 
 test("3840x2160 sparse sampling uses the varied canonical owner and preserves capital pixels", () => {
   const plane = silhouetteFixture("dream");
+  plane.width = 3840;
+  plane.height = 2160;
   const ownership = createProvinceOwnershipModel(plane);
   const owners = samplePlaneOwnership(plane, plane.width, plane.height, ownership);
   assert.equal(owners.length, 3840 * 2160);

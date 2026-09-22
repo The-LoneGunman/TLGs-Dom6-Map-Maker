@@ -39,17 +39,12 @@ function raster(bytes: Uint8Array) {
   };
 }
 
-test("non-underground and solid native bytes retain their pre-polish snapshots", async () => {
+test("solid native bytes retain their pre-polish snapshots for every archetype", async () => {
   const solidSnapshot = "4bcdaa19624af3d9f9780b4bda2cc2c63ece28ce47c11232e18f006abfb62bce";
   const fixtures: Array<readonly [Plane["kind"], Plane["ownershipMode"], string]> = [
     ["surface", "solid", solidSnapshot], ["custom", "solid", solidSnapshot],
     ...UNDERGROUND_KINDS.map((kind) => [kind, "solid", solidSnapshot] as const),
-    ["cloud", "sparse", "be6a10dc8999052f487aa23a4e50da1d149f92f7e5371be2a42c6c3793d640ba"],
-    ["air", "sparse", "8fa485e7ca27ae91ae4ae0c010f02a84e2a2a8d14aa97779750a5d50598afba9"],
-    ["dream", "sparse", "4c92064c3b99c047077d53df2120d177856b60119291d2f05cc90510faa76f24"],
-    ["elemental", "sparse", "d166a7255c8c554ec5d4291c3286598835c469615a68e916a5868732b42c2bef"],
-    ["custom", "sparse", "2957fb5ff24e0e20f34d4cf900107fd2193975ade3ad3839f890102fb5dc0cd5"],
-    ["surface", "sparse", "053a5d1cfbf544f3acb487cbb5776fa4d43822ae5e660e4c9dd4d0f29ebffd05"],
+    ...(["cloud", "air", "dream", "elemental"] as const).map(kind => [kind, "solid", solidSnapshot] as const),
   ];
   for (const [kind, ownershipMode, expected] of fixtures) {
     const plane = reliefFixture(kind);
@@ -57,6 +52,23 @@ test("non-underground and solid native bytes retain their pre-polish snapshots",
     const bytes = await encodeD6m(plane, "underground-relief-snapshot");
     const actual = createHash("sha256").update(bytes).digest("hex");
     assert.equal(actual, expected, `${kind}/${ownershipMode}`);
+  }
+});
+
+test("new non-underground regional native rasters are deterministic and preserve current terrain and content", async () => {
+  for (const kind of ["cloud", "air", "dream", "elemental", "custom", "surface"] as const) {
+    const plane = reliefFixture(kind);
+    const original = structuredClone(plane);
+    const bytes = await encodeD6m(plane, "regional-relief-snapshot");
+    assert.equal(inspectD6m(bytes).valid, true, kind);
+    assert.deepEqual(await encodeD6m(structuredClone(plane), "regional-relief-snapshot"), bytes, kind);
+    assert.deepEqual(plane, original, `${kind}: native encoding must not mutate content`);
+    const data = raster(bytes);
+    for (const province of plane.provinces) {
+      const x = Math.round(province.x * (plane.width - 1)), y = Math.round(province.y * (plane.height - 1));
+      assert.equal(data.owner(x, y), province.index);
+      assert.equal(data.elevation(x, y), terrainElevation(province));
+    }
   }
 });
 

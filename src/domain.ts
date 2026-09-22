@@ -39,6 +39,9 @@ export type PlaneVariant =
  */
 export type PlaneOwnershipMode = "solid" | "sparse";
 
+/** @deprecated Schema-v1 compatibility metadata; current generators ignore this choice. */
+export type PlaneSparseLayout = "chambers" | "regions";
+
 export type StartType = "land" | "coastal" | "water" | "cave" | "other";
 
 export interface StartDistribution {
@@ -253,6 +256,8 @@ export interface Plane {
   wrapY: boolean;
   /** Missing defaults to solid for surface/custom planes and sparse otherwise. */
   ownershipMode?: PlaneOwnershipMode;
+  /** @deprecated Parsed and serialized verbatim for old projects; topology is derived from kind and ownershipMode. */
+  sparseLayout?: PlaneSparseLayout;
   /** Optional per-plane overrides; missing inherits the project-level flag. */
   mapNoHide?: boolean;
   noDeepCaves?: boolean;

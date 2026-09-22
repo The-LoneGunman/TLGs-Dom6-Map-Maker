@@ -64,11 +64,12 @@ import {
 } from "./generator";
 import { ADVANCED_COMMANDS, terrainMask, validateProject } from "./dom6";
 import { setBorderKind } from "./edgeVisuals";
-import { auditPlaneTopology, canAuthorPlaneEdge, connectionKey } from "./geometry";
+import { auditPlaneTopology, canAuthorPlaneEdge, connectionKey, resolvePlaneOwnershipMode, usesConnectedRegions } from "./geometry";
 import { regenerateAllProvinceNames, regenerateGeneratedProvinceNames } from "./naming";
 import { createFreshProject, createProjectImportGuard, prepareProjectForOpening, randomSeed } from "./projectSession";
 import { createCatalogImportSession } from "./catalog/importSession";
 import { assertProjectLocks, pruneAuthoringRegions } from "./authoringLocks";
+import { connectedRegionLayoutNotice } from "./connectedRegions";
 import {
   downloadPackage,
   downloadProject,
@@ -1390,7 +1391,7 @@ export function MapMakerApp() {
               </Field>
               <div className="resolution-card">
                 <span>{activePlane.width.toLocaleString()} × {activePlane.height.toLocaleString()}</span>
-                <small>Native D6M • condition-reactive</small>
+                <small>Native D6M • editor/PNG conditions</small>
               </div>
               <Toggle scope="Current Map + next generation" label="Wrap east / west" checked={activePlane.wrapX} onChange={(value) => updateWrap("wrapX", value)} />
               <Toggle scope="Current Map + next generation" label="Wrap north / south" checked={activePlane.wrapY} onChange={(value) => updateWrap("wrapY", value)} />
@@ -1455,8 +1456,11 @@ export function MapMakerApp() {
                 updatePlaneArchetype(draft, activePlane.id, event.target.value as PlaneKind);
               })}>{PLANE_KINDS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></Field>
               <p className="field-note">{PLANE_KINDS.find((item) => item.value === activePlane.kind)?.description}</p>
-              {activePlane.kind !== "surface" && activePlane.kind !== "custom" && <p className="field-note">Themed artwork fills ownerless space in the editor and exported PNG preview. Native D6M has no separate background-raster layer, so Dominions renders that space with its own realm presentation.</p>}
+              {activePlane.kind !== "surface" && activePlane.kind !== "custom" && <p className="field-note">{activePlane.kind === "cloud" || activePlane.kind === "air"
+                ? "Procedural floating islands and cloud banks respond to terrain conditions and winter in the editor and exported PNG preview. This artwork is not embedded in the native D6M; Dominions renders the playable map with its own scenery."
+                : "Themed artwork fills ownerless space in the editor and exported PNG preview. Native D6M has no separate background-raster layer, so Dominions renders that space with its own realm presentation."}</p>}
               <Field scope="Current Map + next generation" label="Terrain variant"><select value={activePlane.variant ?? defaultVariantForKind(activePlane.kind)} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.variant = event.target.value as PlaneVariant; })}>{PLANE_VARIANTS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></Field>
+              <PlaneLayoutInfo plane={activePlane} />
               <Toggle scope="Next generation" label="Auto-size from player count" checked={activePlane.autoSize ?? project.planes[0]?.id === activePlane.id} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.autoSize = value; })} />
               {(activePlane.autoSize ?? project.planes[0]?.id === activePlane.id)
                 ? <div className="resolution-card"><span>Automatic province count</span><small>{planeAutoSizeDescription(project, activePlane)}</small></div>
@@ -1604,7 +1608,7 @@ export function MapMakerApp() {
                   {CONDITIONS.map((condition) => <option value={condition.value} key={condition.value}>{condition.label}</option>)}
                 </select>
               </label>
-              <small className="condition-preview-note">Illustrative preview, not a temperature simulation. Winter cover skips water, caves, and outer realms; Warmer/Colder affects eligible land.</small>
+              <small className="condition-preview-note">Illustrative preview, not a temperature simulation. Winter skips water and caves; Cloud/Air dry islands are included, while other special realms keep their normal palette. Warmer/Colder affect eligible dry land.</small>
             </div>
           </div>
           <div className="map-stage">
@@ -2173,7 +2177,7 @@ export function ExportDialog({ project, catalog = BUILTIN_DOM6_CATALOG, activePl
       aria-valuetext={`${progressMessage}. ${progressPercent}%. Plane ${progressPlane} of ${progressPlaneCount}.`}
     ><div><span>{progressMessage}</span><strong>{progressPercent}%</strong></div><i aria-hidden="true"><b style={{ width: `${progressPercent}%` }} /></i><small>Plane {progressPlane} of {progressPlaneCount}</small></div>}
     <div className="secondary-exports"><button type="button" onClick={onProject} disabled={busy}>Editable project JSON</button><button type="button" onClick={onPreview} disabled={busy || !canRenderPlanePreview(activePlane)} title={!canRenderPlanePreview(activePlane) ? "Fix the plane dimensions before exporting a preview." : undefined}>High-res {activePlane.width}×{activePlane.height} preview of {planeDisplayLabel(project, activePlane)}</button></div>
-    <p className="export-note"><strong>Native export.</strong> Native <code>.d6m</code> files let Dominions render condition changes. The host package also includes host settings, the editable project, and a balance report. Custom catalog content may require the host’s mods.</p>
+    <p className="export-note"><strong>Native export.</strong> Native <code>.d6m</code> files let Dominions render condition changes. Procedural Cloud/Air preview art stays in the editor and PNG; it is not embedded in the playable package. The host package also includes host settings, the editable project, and a balance report. Custom catalog content may require the host’s mods.</p>
   </section></div>;
 }
 
@@ -2224,6 +2228,27 @@ function RangeField({ label, value, suffix, min, max, onInteractionStart, onInte
   /></label>;
 }
 function Toggle({ label, checked, describedBy, onChange, scope }: { label: string; checked: boolean; describedBy?: string; onChange: (value: boolean) => void; scope?: ControlScope }) { return <label className="toggle-row"><span>{label} <ScopeBadge scope={scope} /></span><input type="checkbox" checked={checked} aria-describedby={describedBy} onChange={(event) => onChange(event.target.checked)} /><i /></label>; }
+
+export function PlaneLayoutInfo({ plane }: { plane: Plane }) {
+  if (resolvePlaneOwnershipMode(plane) !== "sparse") return null;
+  const underworld = plane.kind === "underworld";
+  const layoutNotice = usesConnectedRegions(plane) ? connectedRegionLayoutNotice(plane) : undefined;
+  const noticeDetail = layoutNotice?.replace(/^Compatibility geometry is retained(?: because)?\s*/i, "");
+  const noticeId = `${plane.id}-province-layout-notice`;
+  return <>
+    <div className="resolution-card province-layout-info" aria-describedby={layoutNotice ? noticeId : undefined}>
+      <span>Province layout</span>
+      <strong>{underworld ? "River Styx layout" : "Connected regions & passages"}</strong>
+      <small>{underworld
+        ? "The Underworld keeps its realm-bisecting Styx and controlled crossings."
+        : "Adjoining province groups are joined by broad, playable passage provinces."}</small>
+    </div>
+    {layoutNotice && <p id={noticeId} className="warning-copy province-layout-notice" role="status">
+      <strong>Current map uses compatibility geometry.</strong>{" "}
+      {noticeDetail ? noticeDetail[0]!.toLocaleUpperCase() + noticeDetail.slice(1) : layoutNotice}
+    </p>}
+  </>;
+}
 
 export function PlaneStartPolicyControl({ plane, onChange }: { plane: Pick<Plane, "noGeneratedStarts">; onChange: (value: boolean) => void }) {
   return <>
