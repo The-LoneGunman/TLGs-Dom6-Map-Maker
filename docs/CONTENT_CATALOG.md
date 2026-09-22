@@ -239,7 +239,9 @@ Population membership has its own static-executable and native-control
 provenance; it is not presented as a table supplied by Inspector or the manual.
 
 The [catalog builder](../scripts/build-dom6-catalog.mjs) verifies SHA-256 hashes
-for all thirteen input files before writing `dom6-6.37.json`; the same hashes
-are recorded in that bundle. Rebuilding from older or modified source bytes is
+for all thirteen input files before writing the two bundle files,
+`dom6-6.37.json` (every collection except units) and `dom6-6.37-units.json`
+(the unit table); the same hashes are recorded in the first, and both carry the
+same source revision. Rebuilding from older or modified source bytes is
 rejected rather than producing a misleading 6.37 provenance label. Game
 updates can still change balance while keeping every selector ID unchanged.

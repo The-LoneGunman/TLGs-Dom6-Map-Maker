@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MAX_IMPORTED_STRING_LENGTH } from "./export";
+import { MAX_IMPORTED_STRING_LENGTH } from "./projectFile";
 
 /** Keep incomplete keystrokes local until they describe a valid number. */
 export function BoundedNumberInput({ value, min, max, describedBy, id, onChange, onEditStart, onEditEnd, "aria-label": ariaLabel }: {

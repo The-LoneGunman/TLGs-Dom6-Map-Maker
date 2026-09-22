@@ -1,6 +1,6 @@
 import { cloneProject, type GenerationSettings, type MapProject, type Plane } from "./domain";
 import { addPlane, createDefaultProject, preflightStartPlan, synchronizePlaneEdges } from "./generator";
-import { parseProject, serializeProject } from "./export";
+import { parseProject, serializeProject } from "./projectFile";
 import { assertProjectLocks } from "./authoringLocks";
 
 export const MAX_RECIPE_BYTES = 256 * 1024;
