@@ -2,7 +2,7 @@
 
 ## Delivery status
 
-Implemented and tested on `codex/natural-realm-regions-sep21`, based on `aebee99`. This is an **unreleased development feature**; the published hosted app and Windows v0.1.5 remain unchanged. No third-party map artwork was copied or bundled. See the [layout references](research/NATURAL_CAVERN_REFERENCES_2026-09-21.md) for the primary sources and edition distinctions.
+Implemented and tested on `codex/natural-realm-regions-sep21`, based on `aebee99`, then merged to `main` at **`25a7586`** through [PR #7](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/pull/7). This remains an **unreleased feature**; the hosted app and Windows v0.1.5 are unchanged. The later [natural-landform pass](NATURAL_LANDFORMS_2026-09-22.md) refines contours while preserving the connected-region model. No third-party map artwork was copied or bundled. See the [layout references](research/NATURAL_CAVERN_REFERENCES_2026-09-21.md) for primary sources and edition distinctions.
 
 ## Behavior
 

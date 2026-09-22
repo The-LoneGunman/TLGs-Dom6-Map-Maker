@@ -1,6 +1,6 @@
 # Natural province and water shapes — September 22, 2026
 
-Source-stage verification from `codex/terrain-edit-safety-sep22`, following the terrain-edit and connected-river repairs. These changes are unreleased: merging the source does not deploy the hosted app or update the Windows installer.
+Source-stage verification from `codex/terrain-edit-safety-sep22`, following the terrain-edit and connected-river repairs. Merged to `main` at **`464ff03`** through [PR #9](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/pull/9). These changes remain unreleased: merging source does not deploy the hosted app or update the Windows installer.
 
 ## What changes
 
@@ -44,7 +44,7 @@ A fixed 24-seed corpus at each of 48/96/192 provinces found mean connected dry-t
 
 ## Final checks
 
-The final application source passed the production build and 14 integration tests. After the deliberately reviewed fixture updates and additional full-generation regressions, the complete TypeScript suite passed 996/996: **1,010 automated tests total**, with no failures or skips. Typecheck, ESLint, third-party license consistency and whitespace checks passed. Two synthetic import tests now discard stale shape membership when they replace the entire province collection; strict dangling-reference validation remains intact.
+The final application source passed the production build and 14 integration tests. After the deliberately reviewed fixture updates and additional full-generation regressions, the complete TypeScript suite passed 996/996: **1,010 automated tests total**, with no failures or skips. Typecheck, ESLint, third-party license consistency and whitespace checks passed. [PR #9 CI](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35736739883) confirmed the full suite, dependency audit and Linux/Windows server/launcher gates before merge. Two synthetic import tests now discard stale shape membership when they replace the entire province collection; strict dangling-reference validation remains intact.
 
 Interactive checks used the isolated `127.0.0.1:3028` build, seed `natural-coasts-qa`, 2048×1152 nonwrapped output and 58% cohesion. The repaired 96-province Single Continent retained peripheral water and six inland starts; the visible spacing/degree warnings remained honest, with no export blockers. A 120-province Island Chains map using 2 Land, 1 Coastal and 1 Water start correctly raised water from 40% to 48%, displayed separate land groups in a connected sea, and had no export blockers. The same 120-province mixed allocation with Central Inland Sea at 40% produced an enclosed basin and no export blockers. Keyboard province selection, a manual Sea-to-Forest edit and Undo, generation confirmation/progress, pending settings and reload preservation worked. No captured browser warnings or errors remained.
 

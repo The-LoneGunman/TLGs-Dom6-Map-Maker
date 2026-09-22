@@ -1,8 +1,20 @@
 # Documentation index
 
-Documentation for source whose package version remains **0.1.5**, reviewed September 22, 2026. Post-release work is explicitly marked **unreleased development**. See the root [versions and documentation table](../README.md#versions-and-documentation) before assuming a hosted build or installer contains these controls. Merging, deploying the hosted GUI, and publishing a Windows release are separate actions.
+Reviewed September 22, 2026 against application source merged to `main` at **`464ff03`**. The package version remains **0.1.5**. **Unreleased development** identifies additions already on `main` but absent from the hosted/Windows release, not unmerged work. See the root [version table](../README.md#versions-and-documentation): source merges, hosted deployments and Windows releases are separate actions.
 
-This development checkout additionally documents automatic **Connected regions & passages** for sparse realms, with no classic selector, plus procedural landscapes for sky, underground, Underworld, Infernal/Abyss, Dream, and Elemental realms. The optional **Illustrated realms** export now includes their generated artwork, terrain/winter sheets and ownership areas in playable packages; **Native scenery** remains the default. The published v0.1.5 build from `581b2b8` does not include these additions.
+## Current source checkpoint
+
+| Edition / evidence | Verified state |
+| --- | --- |
+| Merged source | [`464ff03`, PR #9](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/pull/9), including earlier connected-region and illustrated-export merges. A current clone of `main` includes these features. |
+| Latest source tests | **1,010 passing tests** (14 build/integration + 996 TypeScript); type, lint, license, dependency and Linux/Windows server/launcher checks passed in [merged-main CI](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35738115402). |
+| Hosted / Windows | Rechecked September 22: Site version 13 and Windows v0.1.5 still use `581b2b8`. Their [743-test release record](RELEASE_VERIFICATION_0.1.5.md) is separate from current source testing. |
+
+Post-release source includes automatic **Connected regions & passages** without the classic selector; procedural realm artwork and optional playable **Illustrated realms** export; distinct coastal, ocean, lake and realm contours; connected border rivers; 58% default biome cohesion with modest temperate variation; and cave-wall/mixed-terrain safety repairs. **Native scenery** remains the default. See the user guide for controls and the dated records below for evidence.
+
+Latest-generation shape changes require **Generate**; loading, exporting and content rerolls preserve saved natural-landform provenance. The earlier Cloud/Air renderer refinement can update compatible saved sky outlines without regenerating their graph. See [Province layout](USER_GUIDE.md#province-layout) for these distinct compatibility rules.
+
+Remaining acceptance includes an in-game visual pass for the latest sky/natural contours, connected rivers and mixed Sea + Cave Wall terrain, and multiplayer playtesting. Earlier illustrated artwork was loaded and visually checked in Dominions 6.37, but those observations predate these refinements. The historical 1,000-map quality corpus has not been rerun against this generator; see [implementation status](MULTIPLAYER_IMPLEMENTATION_STATUS.md#verification-and-remaining-work). Hosted deployment and a new installer also remain separate work.
 
 ## Current references
 
