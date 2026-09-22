@@ -877,6 +877,7 @@ function feasibleDenseStartPlan(
     .filter((degree) => degree >= minimumUsefulDegree && degree <= 8))];
   const preferredDegree = target === 4 ? 5 : target;
   degrees.sort((a, b) => Math.abs(a - preferredDegree) - Math.abs(b - preferredDegree) || a - b);
+  const searchMemo = createStartSearchMemo();
   for (const degree of degrees) {
     const selected: ProvinceRef[] = [];
     let feasible = true;
@@ -892,6 +893,10 @@ function feasibleDenseStartPlan(
           `${project.seed}:distributed:degree-${degree}:${type}:${slot}`,
           degree,
           minimumSeparation,
+          undefined,
+          undefined,
+          undefined,
+          searchMemo,
         );
         if (!candidate) {
           feasible = false;
@@ -955,20 +960,38 @@ function ensureOverlandStartCategoriesOnPlane(
     .filter((degree) => degree >= minimumUsefulDegree && degree <= 8))]
     .sort((a, b) => Math.abs(a - preferredDegree) - Math.abs(b - preferredDegree) || a - b);
   const byId = new Map(plane.provinces.map((province) => [province.id, province]));
-  const distanceCache = new Map<string, Map<string, number>>();
-  const distancesFrom = (id: string) => {
-    let distances = distanceCache.get(id);
-    if (!distances) {
-      distances = shortestDistances(spacingAdjacency, id);
-      distanceCache.set(id, distances);
-    }
-    return distances;
-  };
 
   const preferredAnchorSeparation = scaledStartSeparationTarget(
     plane.provinces.filter((province) => !isBlockedProvince(province)).length,
     total,
   );
+  // Anchor spacing only asks whether a pair is closer than a separation of
+  // at most preferredAnchorSeparation, so each BFS stops one move short of
+  // it. A pair missing from that bounded map is either at least that far
+  // apart or unreachable; the connected-component label tells them apart
+  // (the graph is undirected between provinces).
+  const spacingRadius = Math.max(0, preferredAnchorSeparation - 1);
+  const spacingComponent = new Map<string, number>();
+  for (const province of plane.provinces) {
+    if (spacingComponent.has(province.id)) continue;
+    const label = spacingComponent.size;
+    for (const id of shortestDistances(spacingAdjacency, province.id).keys()) spacingComponent.set(id, label);
+  }
+  const distanceCache = new Map<string, Map<string, number>>();
+  const nearbyDistancesFrom = (id: string) => {
+    let distances = distanceCache.get(id);
+    if (!distances) {
+      distances = shortestDistances(spacingAdjacency, id, spacingRadius);
+      distanceCache.set(id, distances);
+    }
+    return distances;
+  };
+  /** Exactly `(fullDistance(from, to) ?? 0) < separation` for separation <= preferredAnchorSeparation. */
+  const closerThan = (from: string, to: string, separation: number) => {
+    const distance = nearbyDistancesFrom(from).get(to);
+    if (distance !== undefined) return distance < separation;
+    return spacingComponent.get(from) === spacingComponent.get(to) ? false : 0 < separation;
+  };
   const anchorSeparations = Array.from(
     { length: preferredAnchorSeparation - 2 },
     (_, index) => preferredAnchorSeparation - index,
@@ -987,28 +1010,47 @@ function ensureOverlandStartCategoriesOnPlane(
     let coastal: Province[];
     let water: Province[];
     const dry = new Set<string>();
+    // Candidates are addressed by their position in `candidates`.
+    // close[a * candidateCount + b] marks candidate b closer than the
+    // separation measured from candidate a (unreachable counts as close);
+    // conflictCounts[a] counts the other candidates close to a.
+    const candidateCount = candidates.length;
+    const close = new Uint8Array(candidateCount * candidateCount);
+    const conflictCounts = new Int32Array(candidateCount);
+    for (let from = 0; from < candidateCount; from += 1) {
+      const fromId = candidates[from]!.id;
+      for (let to = 0; to < candidateCount; to += 1) {
+        if (!closerThan(fromId, candidates[to]!.id, minimumStartSeparation)) continue;
+        close[from * candidateCount + to] = 1;
+        if (to !== from) conflictCounts[from] += 1;
+      }
+    }
     if (total < 18) {
-      const compatible = (candidate: Province, selected: readonly Province[]) => selected.every((other) =>
-        (distancesFrom(other.id).get(candidate.id) ?? 0) >= minimumStartSeparation);
-      const conflictCount = new Map(candidates.map((candidate) => [candidate.id, candidates.reduce((count, other) =>
-        count + (other.id !== candidate.id && (distancesFrom(candidate.id).get(other.id) ?? 0) < minimumStartSeparation ? 1 : 0), 0)]));
-      const ranked = [...candidates].sort((a, b) => (conflictCount.get(a.id) ?? 0) - (conflictCount.get(b.id) ?? 0)
-        || (hashString(`${project.seed}:category-anchor:${degreeLabel}:${a.id}`) % 100000)
-          - (hashString(`${project.seed}:category-anchor:${degreeLabel}:${b.id}`) % 100000)
-        || a.index - b.index);
+      const jitter = candidates.map((candidate) =>
+        hashString(`${project.seed}:category-anchor:${degreeLabel}:${candidate.id}`) % 100000);
+      // Rank positions with precomputed keys; the stable sort yields the same
+      // order as ranking the candidates with the equivalent comparator.
+      const ranked = candidates.map((_, index) => index).sort((a, b) => conflictCounts[a]! - conflictCounts[b]!
+        || jitter[a]! - jitter[b]!
+        || candidates[a]!.index - candidates[b]!.index);
       const selected: Province[] = [];
       let visitedNodes = 0;
       const nodeBudget = Math.max(250_000, total * 20_000);
-      const findSeparatedAnchors = (available: Province[]): Province[] | undefined => {
+      const findSeparatedAnchors = (available: readonly number[]): Province[] | undefined => {
         const needed = total - selected.length;
         if (needed === 0) return [...selected];
         if (available.length < needed || visitedNodes >= nodeBudget) return undefined;
         for (let cursor = 0; cursor <= available.length - needed && visitedNodes < nodeBudget; cursor += 1) {
           visitedNodes += 1;
           const candidate = available[cursor]!;
-          if (!compatible(candidate, selected)) continue;
-          selected.push(candidate);
-          const remaining = available.slice(cursor + 1).filter((other) => compatible(other, selected));
+          // Every entry of `available` is already separated from the current
+          // selection, so only the newly added anchor needs checking.
+          selected.push(candidates[candidate]!);
+          const row = candidate * candidateCount;
+          const remaining: number[] = [];
+          for (let next = cursor + 1; next < available.length; next += 1) {
+            if (!close[row + available[next]!]) remaining.push(available[next]!);
+          }
           const result = findSeparatedAnchors(remaining);
           if (result) return result;
           selected.pop();
@@ -1021,26 +1063,52 @@ function ensureOverlandStartCategoriesOnPlane(
       coastal = anchors.slice(requested.land, requested.land + requested.coastal);
       water = anchors.slice(requested.land + requested.coastal);
     } else {
-      const conflicts = new Map(candidates.map((candidate) => [candidate.id, new Set(candidates
-        .filter((other) => other.id !== candidate.id
-          && (distancesFrom(candidate.id).get(other.id) ?? 0) < minimumStartSeparation)
-        .map((other) => other.id))]));
+      // Greedy minimum-conflict packing. conflicts[slot] lists the other
+      // candidates close to that candidate and conflictedBy is its reverse,
+      // so each removal updates the live conflict counts instead of
+      // recounting them.
+      const conflicts: number[][] = Array.from({ length: candidateCount }, () => []);
+      const conflictedBy: number[][] = Array.from({ length: candidateCount }, () => []);
+      for (let slot = 0; slot < candidateCount; slot += 1) {
+        for (let other = 0; other < candidateCount; other += 1) {
+          if (other === slot || !close[slot * candidateCount + other]) continue;
+          conflicts[slot]!.push(other);
+          conflictedBy[other]!.push(slot);
+        }
+      }
       let anchors: Province[] | undefined;
       for (let variant = 0; variant < 24 && !anchors; variant += 1) {
-        const available = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+        const jitter = candidates.map((candidate) =>
+          hashString(`${project.seed}:large-anchor:${degreeLabel}:${variant}:${candidate.id}`) % 100000);
+        const available = new Uint8Array(candidateCount).fill(1);
+        const liveConflicts = Int32Array.from(conflictCounts);
+        let availableCount = candidateCount;
+        const remove = (slot: number) => {
+          if (!available[slot]) return;
+          available[slot] = 0;
+          availableCount -= 1;
+          for (const other of conflictedBy[slot]!) liveConflicts[other] -= 1;
+        };
         const chosen: Province[] = [];
-        while (available.size && chosen.length < total) {
-          const candidate = [...available.values()].sort((a, b) => {
-            const conflictsA = [...(conflicts.get(a.id) ?? [])].filter((id) => available.has(id)).length;
-            const conflictsB = [...(conflicts.get(b.id) ?? [])].filter((id) => available.has(id)).length;
-            const jitterA = hashString(`${project.seed}:large-anchor:${degreeLabel}:${variant}:${a.id}`) % 100000;
-            const jitterB = hashString(`${project.seed}:large-anchor:${degreeLabel}:${variant}:${b.id}`) % 100000;
-            return conflictsA - conflictsB || jitterA - jitterB || a.index - b.index;
-          })[0];
-          if (!candidate) break;
-          chosen.push(candidate);
-          available.delete(candidate.id);
-          for (const id of conflicts.get(candidate.id) ?? []) available.delete(id);
+        while (availableCount && chosen.length < total) {
+          // The first available candidate, in candidate order, that is least
+          // conflicted, then lowest jitter, then lowest index: exactly the
+          // head of a stable sort by that comparator.
+          let best = -1;
+          for (let slot = 0; slot < candidateCount; slot += 1) {
+            if (!available[slot]) continue;
+            if (best < 0) {
+              best = slot;
+              continue;
+            }
+            const order = liveConflicts[slot]! - liveConflicts[best]!
+              || jitter[slot]! - jitter[best]!
+              || candidates[slot]!.index - candidates[best]!.index;
+            if (order < 0) best = slot;
+          }
+          chosen.push(candidates[best]!);
+          remove(best);
+          for (const other of conflicts[best]!) remove(other);
         }
         if (chosen.length === total) anchors = chosen;
       }
@@ -3486,6 +3554,11 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
   }
 
   const adjacency = new Map(project.planes.map((plane) => [plane.id, adjacencyFor(plane, { traversableOnly: true })]));
+  // Every start search below measures on these fixed graphs and terrain;
+  // share their BFS maps and start-type checks for the whole pass instead of
+  // rebuilding them per candidate.
+  const searchMemo = createStartSearchMemo();
+  const distancesFrom = searchMemo.distancesFrom;
   const planeTargets = generatedStartPlaneTargets(project, requested);
   // Authored nation starts are fixed capitals: never reuse their province and
   // keep every generated capital at least three moves away (the export floor).
@@ -3548,6 +3621,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
           planeTargets,
           adjacency,
           authoredStarts,
+          searchMemo,
         );
         if (!candidate) return [];
         attempt.push(candidate);
@@ -3597,20 +3671,10 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
     }
     const attempt: ProvinceRef[] = [];
     const used = new Set<string>();
-    const distanceCache = new Map<string, Map<string, number>>();
-    const distancesFrom = (ref: ProvinceRef) => {
-      const key = globalProvinceKey(ref.plane.id, ref.province.id);
-      let distances = distanceCache.get(key);
-      if (!distances) {
-        distances = shortestDistances(adjacency.get(ref.plane.id)!, ref.province.id);
-        distanceCache.set(key, distances);
-      }
-      return distances;
-    };
     const separationFromAttempt = (candidate: ProvinceRef) => {
       const samePlane = attempt.filter((item) => item.plane.id === candidate.plane.id);
       if (!samePlane.length) return 8;
-      const distances = distancesFrom(candidate);
+      const distances = distancesFrom(adjacency.get(candidate.plane.id)!, candidate.province.id);
       return Math.min(...samePlane.map((item) => distances.get(item.province.id) ?? 0));
     };
     const authoredSeparation = (candidate: ProvinceRef) =>
@@ -3721,7 +3785,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
       && (!usesConnectedRegions(item.plane) || !bridgeEndpoints.get(item.plane.id)?.has(item.province.id)))
     && preparedPlacement.every((item, index) => preparedPlacement.slice(index + 1).every((other) => {
       if (item.plane.id !== other.plane.id) return true;
-      return (shortestDistances(adjacency.get(item.plane.id)!, item.province.id).get(other.province.id) ?? 0)
+      return (distancesFrom(adjacency.get(item.plane.id)!, item.province.id).get(other.province.id) ?? 0)
         >= (preferredSeparation.get(item.plane.id) ?? 3);
     }));
   // Category anchors are planned before authored starts are considered.
@@ -3744,7 +3808,8 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
         const attempt: ProvinceRef[] = kept.map(({ plane, planeIndex, province }) => ({ plane, planeIndex, province }));
         for (const [slot, item] of crowded.entries()) {
           const candidate = chooseDistributedStart(project, item.type, attempt, adjacency, twoRingCapacity, bridgeEndpoints,
-            `${project.seed}:distributed:prepared-substitute:${slot}`, forcedDegree, separationPlan, planeTargets, adjacency, authoredStarts);
+            `${project.seed}:distributed:prepared-substitute:${slot}`, forcedDegree, separationPlan, planeTargets, adjacency, authoredStarts,
+            searchMemo);
           if (!candidate) break;
           attempt.push(candidate);
         }
@@ -3773,7 +3838,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
           const nearestDistances = attempt.flatMap((item) => {
             const peers = attempt.filter((other) => other.plane.id === item.plane.id && other.province.id !== item.province.id);
             if (!peers.length) return [];
-            const distances = shortestDistances(adjacency.get(item.plane.id)!, item.province.id);
+            const distances = distancesFrom(adjacency.get(item.plane.id)!, item.province.id);
             return [Math.min(...peers.map((other) => distances.get(other.province.id) ?? 99))];
           });
           const nearestSpread = nearestDistances.length ? max(nearestDistances) - min(nearestDistances) : 0;
@@ -3830,7 +3895,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
   if (!selected.length) {
     for (const type of placementOrder) {
       for (let slot = 0; slot < requested[type]; slot += 1) {
-        const candidate = chooseDistributedStart(project, type, selected, adjacency, twoRingCapacity, bridgeEndpoints, `${project.seed}:distributed:${type}:${slot}`, undefined, 0, planeTargets, adjacency, authoredStarts);
+        const candidate = chooseDistributedStart(project, type, selected, adjacency, twoRingCapacity, bridgeEndpoints, `${project.seed}:distributed:${type}:${slot}`, undefined, 0, planeTargets, adjacency, authoredStarts, searchMemo);
         if (!candidate) break;
         selected.push(candidate);
       }
@@ -3841,7 +3906,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
   // total number of capitals. Fill remaining slots from safe provinces and
   // record their real category so startAllocation exposes the shortfall.
   while (selected.length < project.settings.players) {
-    const candidate = chooseDistributedStart(project, undefined, selected, adjacency, twoRingCapacity, bridgeEndpoints, `${project.seed}:distributed:fallback:${selected.length}`, undefined, 0, planeTargets, adjacency, authoredStarts);
+    const candidate = chooseDistributedStart(project, undefined, selected, adjacency, twoRingCapacity, bridgeEndpoints, `${project.seed}:distributed:fallback:${selected.length}`, undefined, 0, planeTargets, adjacency, authoredStarts, searchMemo);
     if (!candidate) break;
     selected.push(candidate);
   }
@@ -3854,24 +3919,22 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
     // A lone generated capital still needs repair when it crowds an authored start.
     if (current.length < ((authoredStarts.get(plane.id)?.length ?? 0) ? 1 : 2)) return current;
     const local = adjacency.get(plane.id)!;
-    const distances = new Map<string, Map<string, number>>();
-    const distancesFrom = (id: string) => {
-      let result = distances.get(id);
-      if (!result) {
-        result = shortestDistances(adjacency.get(plane.id)!, id);
-        distances.set(id, result);
-      }
-      return result;
-    };
+    const planeDistancesFrom = (id: string) => distancesFrom(local, id);
     const preferredPlaneSeparation = preferredSeparation.get(plane.id) ?? 3;
     const authoredDistance = (id: string) => authoredStartDistance(authoredStarts, plane.id, id);
     const isAuthored = (id: string) => authoredKeys.has(globalProvinceKey(plane.id, id));
     const clearOfAuthored = (items: readonly ProvinceRef[]) => items.every((item) => authoredDistance(item.province.id) >= 3);
     const minimumPairDistance = (items: readonly ProvinceRef[]) => items.reduce((minimum, item, left) =>
       Math.min(minimum, ...items.slice(left + 1).map((other) =>
-        distancesFrom(item.province.id).get(other.province.id) ?? Infinity)), Infinity);
-    const degreeAfterBorderRepair = (province: Province) => plane.edges.filter((edge) =>
-      edge.a === province.id || edge.b === province.id).length;
+        planeDistancesFrom(item.province.id).get(other.province.id) ?? Infinity)), Infinity);
+    // Incident-edge counts are fixed during repair: count them once rather
+    // than scanning every edge per ranking comparison.
+    const incidentEdgeCounts = new Map<string, number>();
+    for (const edge of plane.edges) {
+      incidentEdgeCounts.set(edge.a, (incidentEdgeCounts.get(edge.a) ?? 0) + 1);
+      if (edge.b !== edge.a) incidentEdgeCounts.set(edge.b, (incidentEdgeCounts.get(edge.b) ?? 0) + 1);
+    }
+    const degreeAfterBorderRepair = (province: Province) => incidentEdgeCounts.get(province.id) ?? 0;
     const regional = usesConnectedRegions(plane);
     const currentMeets = (separation: number) => minimumPairDistance(current) >= separation
       && clearOfAuthored(current)
@@ -3927,7 +3990,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
       for (const [type, count] of counts) {
         let pool = plane.provinces.filter((province) => isEligibleStartProvince(province)
           && !isAuthored(province.id)
-          && matchesStartType({ plane, planeIndex, province }, type, local)
+          && matchesStartType({ plane, province }, type, local)
           && (local.get(province.id)?.length ?? 0) >= minimumUsefulDegree
           && (forcedDegree === undefined || degreeAfterBorderRepair(province) === forcedDegree))
           .map((province) => ({ plane, planeIndex, province }));
@@ -3939,49 +4002,112 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
       const working: ProvinceRef[] = [];
       let visitedNodes = 0;
       const nodeBudget = authoredOnPlane ? 12_000 : 250_000;
-      const compatible = (candidate: ProvinceRef) => authoredDistance(candidate.province.id) >= 3
-        && working.every((other) =>
-          (distancesFrom(candidate.province.id).get(other.province.id) ?? Infinity) >= requiredSeparation);
+      // Index every pooled province once. conflictsFrom[from] lists each `to`
+      // closer than the required separation measured from `from` (unreachable
+      // never conflicts) and blockers[to] lists every such `from`. blockedBy
+      // counts each candidate's conflicts with the working set, so a node
+      // filters its pools with typed lookups instead of distance queries.
+      const slotById = new Map<string, number>();
+      for (const pool of pools.values()) for (const item of pool) if (!slotById.has(item.province.id)) slotById.set(item.province.id, slotById.size);
+      const slotCount = slotById.size;
+      const slotIds = [...slotById.keys()];
+      const poolSlots = new Map([...pools].map(([type, pool]) => [type, pool.map((item) => slotById.get(item.province.id)!)]));
+      const conflictsFrom: number[][] = [];
+      const blockers: number[][] = Array.from({ length: slotCount }, () => []);
+      for (let from = 0; from < slotCount; from += 1) {
+        const distances = planeDistancesFrom(slotIds[from]!);
+        const row: number[] = [];
+        for (let to = 0; to < slotCount; to += 1) {
+          if ((distances.get(slotIds[to]!) ?? Infinity) >= requiredSeparation) continue;
+          row.push(to);
+          blockers[to]!.push(from);
+        }
+        conflictsFrom.push(row);
+      }
+      // Marks the current node's candidate slots while their conflicts are counted.
+      const nextMark = new Int32Array(slotCount);
+      let nextGeneration = 0;
+      const authoredClear = new Uint8Array(slotCount);
+      const degreeDelta = new Int32Array(slotCount);
+      for (let slot = 0; slot < slotCount; slot += 1) {
+        authoredClear[slot] = authoredDistance(slotIds[slot]!) >= 3 ? 1 : 0;
+        degreeDelta[slot] = Math.abs((incidentEdgeCounts.get(slotIds[slot]!) ?? 0) - preferredGeneratedDegree);
+      }
+      // Deterministic per-type tie-break jitter, hashed on first use (-1 = unset).
+      const jitterByType = new Map<StartType, Int32Array>();
+      const blockedBy = new Int32Array(slotCount);
+      const inWorking = new Uint8Array(slotCount);
       const search = (): ProvinceRef[] | undefined => {
         if (working.length === current.length) return [...working];
         if (visitedNodes >= nodeBudget) return undefined;
         let nextType: StartType | undefined;
         let nextCandidates: ProvinceRef[] = [];
+        let nextSlots: number[] = [];
         let tightness = Infinity;
         for (const [type, needed] of remaining) {
           if (needed <= 0) continue;
-          const available = (pools.get(type) ?? []).filter((candidate) => compatible(candidate)
-            && !working.some((item) => item.province.id === candidate.province.id));
+          const pool = pools.get(type) ?? [];
+          const slots = poolSlots.get(type) ?? [];
+          const available: ProvinceRef[] = [];
+          const availableSlots: number[] = [];
+          for (let index = 0; index < pool.length; index += 1) {
+            const slot = slots[index]!;
+            if (authoredClear[slot] !== 1 || blockedBy[slot] !== 0 || inWorking[slot] !== 0) continue;
+            available.push(pool[index]!);
+            availableSlots.push(slot);
+          }
           if (available.length < needed) return undefined;
           const candidateTightness = available.length / needed;
           if (candidateTightness < tightness) {
             nextType = type;
             nextCandidates = available;
+            nextSlots = availableSlots;
             tightness = candidateTightness;
           }
         }
         if (!nextType) return undefined;
-        const conflictCounts = new Map(nextCandidates.map((candidate) => [candidate.province.id, nextCandidates.reduce((count, other) =>
-          count + (other.province.id !== candidate.province.id
-            && (distancesFrom(candidate.province.id).get(other.province.id) ?? Infinity) < requiredSeparation ? 1 : 0), 0)]));
-        nextCandidates.sort((a, b) => {
-          const degreeA = degreeAfterBorderRepair(a.province);
-          const degreeB = degreeAfterBorderRepair(b.province);
-          const jitterA = hashString(`${project.seed}:plane-start-repair:${plane.id}:${nextType}:${a.province.id}`) % 100000;
-          const jitterB = hashString(`${project.seed}:plane-start-repair:${plane.id}:${nextType}:${b.province.id}`) % 100000;
-          return (conflictCounts.get(a.province.id) ?? 0) - (conflictCounts.get(b.province.id) ?? 0)
-            || Math.abs(degreeA - preferredGeneratedDegree) - Math.abs(degreeB - preferredGeneratedDegree)
-            || jitterA - jitterB || a.province.index - b.province.index;
-        });
-        for (const candidate of nextCandidates) {
+        let jitter = jitterByType.get(nextType);
+        if (!jitter) {
+          jitter = new Int32Array(slotCount).fill(-1);
+          jitterByType.set(nextType, jitter);
+        }
+        // Each candidate's conflicts with the other candidates of this node.
+        // Slots map one-to-one onto province ids, so skipping the candidate's
+        // own slot excludes it exactly as comparing ids would.
+        nextGeneration += 1;
+        for (const slot of nextSlots) nextMark[slot] = nextGeneration;
+        const conflictCounts = new Int32Array(nextCandidates.length);
+        for (let index = 0; index < nextCandidates.length; index += 1) {
+          const slot = nextSlots[index]!;
+          let count = 0;
+          for (const other of conflictsFrom[slot]!) if (other !== slot && nextMark[other] === nextGeneration) count += 1;
+          conflictCounts[index] = count;
+          if (jitter[slot]! < 0) {
+            jitter[slot] = hashString(`${project.seed}:plane-start-repair:${plane.id}:${nextType}:${slotIds[slot]!}`) % 100000;
+          }
+        }
+        // Rank by position with precomputed keys; the stable sort yields the
+        // same order as ranking the candidates with the equivalent comparator.
+        const typeJitter = jitter;
+        const order = nextCandidates.map((_, index) => index).sort((a, b) =>
+          conflictCounts[a]! - conflictCounts[b]!
+          || degreeDelta[nextSlots[a]!]! - degreeDelta[nextSlots[b]!]!
+          || typeJitter[nextSlots[a]!]! - typeJitter[nextSlots[b]!]!
+          || nextCandidates[a]!.province.index - nextCandidates[b]!.province.index);
+        for (const index of order) {
           if (visitedNodes >= nodeBudget) break;
           visitedNodes += 1;
-          working.push(candidate);
+          const slot = nextSlots[index]!;
+          working.push(nextCandidates[index]!);
+          inWorking[slot] += 1;
+          for (const candidate of blockers[slot]!) blockedBy[candidate] += 1;
           remaining.set(nextType, remaining.get(nextType)! - 1);
           const result = search();
           if (result) return result;
           remaining.set(nextType, remaining.get(nextType)! + 1);
           working.pop();
+          inWorking[slot] -= 1;
+          for (const candidate of blockers[slot]!) blockedBy[candidate] -= 1;
         }
         return undefined;
       };
@@ -4166,6 +4292,150 @@ function appendGuardianCapacityWarnings(project: MapProject) {
   }
 }
 
+/** Unbounded movement distances from one start province on one adjacency graph. */
+type StartDistanceLookup = (adjacency: Map<string, string[]>, start: string) => ReadonlyMap<string, number>;
+
+/**
+ * Memoize `shortestDistances(adjacency, start)` per adjacency graph object for
+ * one start-placement pass. Start searches ask for the same capitals'
+ * distance maps on every candidate evaluation; callers must not mutate the
+ * adjacency graphs while the cache is in use.
+ */
+function createStartDistanceCache(): StartDistanceLookup {
+  const byGraph = new WeakMap<Map<string, string[]>, Map<string, ReadonlyMap<string, number>>>();
+  return (adjacency, start) => {
+    let graphCache = byGraph.get(adjacency);
+    if (!graphCache) {
+      graphCache = new Map();
+      byGraph.set(adjacency, graphCache);
+    }
+    let distances = graphCache.get(start);
+    if (!distances) {
+      distances = shortestDistances(adjacency, start);
+      graphCache.set(start, distances);
+    }
+    return distances;
+  };
+}
+
+/**
+ * Memo shared by the start searches of one placement pass. Terrain, edges,
+ * province order and adjacency graphs must stay fixed while it is in use.
+ */
+interface StartSearchMemo {
+  distancesFrom: StartDistanceLookup;
+  /**
+   * `distancesFrom(adjacency, start)` laid out by position in
+   * `plane.provinces`, with -1 where the map has no entry.
+   */
+  distancesByPosition(plane: Plane, adjacency: Map<string, string[]>, start: string): Int32Array;
+  /** `matchesStartType` for `plane.provinces[position]` measured on `adjacency`. */
+  matchesTypeAt(plane: Plane, position: number, type: StartType, adjacency: Map<string, string[]>): boolean;
+}
+
+interface PositionalGraph {
+  positionById: Map<string, number>;
+  neighbours: Int32Array[];
+}
+
+/**
+ * `adjacency` re-indexed by position in `plane.provinces`, or undefined when
+ * that is not a faithful copy: duplicate province ids, or graph nodes that
+ * are not provinces. Neighbour ids that are not provinces are dropped; a BFS
+ * reaches them but they have no neighbours of their own to continue from.
+ */
+function positionalGraph(plane: Plane, adjacency: Map<string, string[]>): PositionalGraph | undefined {
+  const positionById = new Map<string, number>();
+  for (let position = 0; position < plane.provinces.length; position += 1) {
+    const id = plane.provinces[position]!.id;
+    if (positionById.has(id)) return undefined;
+    positionById.set(id, position);
+  }
+  if (adjacency.size !== positionById.size) return undefined;
+  for (const id of adjacency.keys()) if (!positionById.has(id)) return undefined;
+  const neighbours = plane.provinces.map((province) => {
+    const positions: number[] = [];
+    for (const id of adjacency.get(province.id) ?? []) {
+      const position = positionById.get(id);
+      if (position !== undefined) positions.push(position);
+    }
+    return Int32Array.from(positions);
+  });
+  return { positionById, neighbours };
+}
+
+function createStartSearchMemo(): StartSearchMemo {
+  const distancesFrom = createStartDistanceCache();
+  const layouts = new Map<Map<string, string[]>, {
+    plane: Plane;
+    graph: PositionalGraph | undefined;
+    byStart: Map<string, Int32Array>;
+  }>();
+  const typeMatches = new Map<Plane, { adjacency: Map<string, string[]>; byType: Map<StartType, Uint8Array> }>();
+  const layOut = (plane: Plane, distances: ReadonlyMap<string, number>) => {
+    const layout = new Int32Array(plane.provinces.length);
+    for (let position = 0; position < layout.length; position += 1) layout[position] = distances.get(plane.provinces[position]!.id) ?? -1;
+    return layout;
+  };
+  // The same unbounded BFS as shortestDistances, over positions: every
+  // province's distance is identical, and it never builds a string-keyed map.
+  const positionalDistances = (graph: PositionalGraph, start: number) => {
+    const layout = new Int32Array(graph.neighbours.length).fill(-1);
+    const queue = new Int32Array(graph.neighbours.length);
+    layout[start] = 0;
+    queue[0] = start;
+    let tail = 1;
+    for (let head = 0; head < tail; head += 1) {
+      const current = queue[head]!;
+      const distance = layout[current]! + 1;
+      for (const next of graph.neighbours[current]!) {
+        if (layout[next]! >= 0) continue;
+        layout[next] = distance;
+        queue[tail] = next;
+        tail += 1;
+      }
+    }
+    return layout;
+  };
+  return {
+    distancesFrom,
+    distancesByPosition(plane, adjacency, start) {
+      let entry = layouts.get(adjacency);
+      if (!entry) {
+        entry = { plane, graph: positionalGraph(plane, adjacency), byStart: new Map() };
+        layouts.set(adjacency, entry);
+      }
+      if (entry.plane !== plane) return layOut(plane, distancesFrom(adjacency, start));
+      let layout = entry.byStart.get(start);
+      if (!layout) {
+        const startPosition = entry.graph?.positionById.get(start);
+        layout = entry.graph && startPosition !== undefined
+          ? positionalDistances(entry.graph, startPosition)
+          : layOut(plane, distancesFrom(adjacency, start));
+        entry.byStart.set(start, layout);
+      }
+      return layout;
+    },
+    matchesTypeAt(plane, position, type, adjacency) {
+      const province = plane.provinces[position]!;
+      let entry = typeMatches.get(plane);
+      if (!entry) {
+        entry = { adjacency, byType: new Map() };
+        typeMatches.set(plane, entry);
+      }
+      if (entry.adjacency !== adjacency) return matchesStartType({ plane, province }, type, adjacency);
+      let states = entry.byType.get(type);
+      if (!states) {
+        states = new Uint8Array(plane.provinces.length);
+        entry.byType.set(type, states);
+      }
+      // 0 = not yet evaluated, 1 = no, 2 = yes.
+      if (states[position] === 0) states[position] = matchesStartType({ plane, province }, type, adjacency) ? 2 : 1;
+      return states[position] === 2;
+    },
+  };
+}
+
 function chooseDistributedStart(
   project: MapProject,
   requestedType: StartType | undefined,
@@ -4182,6 +4452,7 @@ function chooseDistributedStart(
   ),
   separationAdjacencyByPlane: Map<string, Map<string, string[]>> = adjacencyByPlane,
   authoredStarts: AuthoredStartsByPlane = NO_AUTHORED_STARTS,
+  memo: StartSearchMemo = createStartSearchMemo(),
 ): ProvinceRef | undefined {
   const target = project.settings.startDegreeTarget ?? 4;
   const selectedDegrees = selected.map((item) => adjacencyByPlane.get(item.plane.id)?.get(item.province.id)?.length ?? 0);
@@ -4196,27 +4467,31 @@ function chooseDistributedStart(
   for (const [planeId, starts] of authoredStarts) for (const start of starts) selectedKeys.add(globalProvinceKey(planeId, start.provinceId));
   const authoredRequired = minimumSeparation === 0 ? 0 : 3;
   const startsByPlane = new Map(project.planes.map((plane) => [plane.id, selected.filter((item) => item.plane.id === plane.id).map((item) => item.province)]));
-  const distanceMaps = new Map(project.planes.map((plane) => {
+  // Each selected capital's distances on its plane, by province position.
+  const distanceLayouts = project.planes.map((plane) => {
     const adjacency = separationAdjacencyByPlane.get(plane.id)!;
-    return [plane.id, (startsByPlane.get(plane.id) ?? []).map((start) => shortestDistances(adjacency, start.id))];
-  }));
-  const rawCandidateFacts = (plane: Plane, planeIndex: number, province: Province) => {
+    return (startsByPlane.get(plane.id) ?? []).map((start) => memo.distancesByPosition(plane, adjacency, start.id));
+  });
+  // The selected set is fixed for this call, so each plane's typed load is too.
+  const planeTypeLoads = new Map(project.planes.map((plane) => [plane.id, requestedType === undefined ? 0 : selected.filter((item) => item.plane.id === plane.id
+    && matchesStartType(item, requestedType, adjacencyByPlane.get(item.plane.id)!)).length]));
+  const computeCandidateFacts = (plane: Plane, planeIndex: number, position: number) => {
+    const province = plane.provinces[position]!;
     const adjacency = adjacencyByPlane.get(plane.id)!;
     const ref = { plane, planeIndex, province };
     const planeQuota = requestedType === undefined ? Infinity : planeTargets.get(requestedType)?.get(plane.id) ?? 0;
-    const planeTypeLoad = requestedType === undefined ? 0 : selected.filter((item) => item.plane.id === plane.id
-      && matchesStartType(item, requestedType, adjacencyByPlane.get(item.plane.id)!)).length;
+    const planeTypeLoad = planeTypeLoads.get(plane.id) ?? 0;
     if (!eligiblePlaneIds.has(plane.id)
       || planeTypeLoad >= planeQuota
       || !isEligibleStartProvince(province)
       || selectedKeys.has(globalProvinceKey(plane.id, province.id))
-      || (requestedType && !matchesStartType(ref, requestedType, adjacency))) return undefined;
+      || (requestedType && !memo.matchesTypeAt(plane, position, requestedType, adjacency))) return undefined;
     const planeStarts = startsByPlane.get(plane.id) ?? [];
-    const maps = distanceMaps.get(plane.id) ?? [];
+    const layouts = distanceLayouts[planeIndex]!;
     const requiredSeparation = separationForPlane(minimumSeparation, plane.id);
-    const generatedDistance = maps.length
-      ? Math.min(...maps.map((distances) => distances.get(province.id) ?? 0))
-      : 6;
+    // The nearest selected capital; one that cannot reach this province counts as 0.
+    let generatedDistance = layouts.length ? Infinity : 6;
+    for (const layout of layouts) generatedDistance = Math.min(generatedDistance, Math.max(0, layout[position]!));
     // Authored starts hold the hard three-move floor in every spaced search,
     // so they never cost generated capitals their scaled mutual spacing.
     const authoredDistance = authoredStartDistance(authoredStarts, plane.id, province.id);
@@ -4233,14 +4508,27 @@ function chooseDistributedStart(
       requiredSeparation,
     };
   };
+  // Every input above is fixed for this call, so each province's facts are
+  // computed once (by plane and position) rather than once per ranking pass.
+  const factsByPlane = project.planes.map((plane) =>
+    new Array<ReturnType<typeof computeCandidateFacts> | null | undefined>(plane.provinces.length));
+  const rawCandidateFacts = (plane: Plane, planeIndex: number, position: number) => {
+    const row = factsByPlane[planeIndex]!;
+    let facts = row[position];
+    if (facts === undefined) {
+      facts = computeCandidateFacts(plane, planeIndex, position) ?? null;
+      row[position] = facts;
+    }
+    return facts ?? undefined;
+  };
   // A regional passage endpoint can have the closest two-ring capacity while
   // still sitting on a graph bridge. Prefer genuinely safe regional capital
   // candidates before capacity matching narrows the pool. Keep Underworld's
   // ranking and physically constrained fallback behavior unchanged.
   const regionalBridgeSafePlanes = new Set(project.planes.flatMap((plane, planeIndex) => {
     if (!usesConnectedRegions(plane)) return [];
-    const safe = plane.provinces.some(province => {
-      const facts = rawCandidateFacts(plane, planeIndex, province);
+    const safe = plane.provinces.some((_, position) => {
+      const facts = rawCandidateFacts(plane, planeIndex, position);
       if (!facts || facts.incidentBridge || !facts.safe) return false;
       if (forcedDegree !== undefined) return facts.degree === forcedDegree;
       if (preferredDegree !== undefined) return facts.degree === preferredDegree;
@@ -4248,19 +4536,35 @@ function chooseDistributedStart(
     });
     return safe ? [plane.id] : [];
   }));
-  const candidateFacts = (plane: Plane, planeIndex: number, province: Province) => {
-    const facts = rawCandidateFacts(plane, planeIndex, province);
+  const candidateFacts = (plane: Plane, planeIndex: number, position: number) => {
+    const facts = rawCandidateFacts(plane, planeIndex, position);
     return facts?.incidentBridge && regionalBridgeSafePlanes.has(plane.id) ? undefined : facts;
   };
-  const hasSafePreferredDegree = preferredDegree !== undefined && project.planes.some((plane, planeIndex) => plane.provinces.some((province) => {
-    const facts = candidateFacts(plane, planeIndex, province);
+  // Blocking start-edge counts per province, built once per plane on demand
+  // (an edge counts once for each distinct endpoint, as an incident filter would).
+  const blockingEdgeCounts = new Map<Plane, Map<string, number>>();
+  const blockingEdgesAt = (plane: Plane, provinceId: string) => {
+    let counts = blockingEdgeCounts.get(plane);
+    if (!counts) {
+      counts = new Map();
+      for (const edge of plane.edges) {
+        if (!blocksReliableStartEdge(edge)) continue;
+        counts.set(edge.a, (counts.get(edge.a) ?? 0) + 1);
+        if (edge.b !== edge.a) counts.set(edge.b, (counts.get(edge.b) ?? 0) + 1);
+      }
+      blockingEdgeCounts.set(plane, counts);
+    }
+    return counts.get(provinceId) ?? 0;
+  };
+  const hasSafePreferredDegree = preferredDegree !== undefined && project.planes.some((plane, planeIndex) => plane.provinces.some((_, position) => {
+    const facts = candidateFacts(plane, planeIndex, position);
     return facts?.degree === preferredDegree && facts.safe;
   }));
   let closestCapacityDifference = Infinity;
   if (preferredCapacity !== undefined) {
     for (let planeIndex = 0; planeIndex < project.planes.length; planeIndex += 1) {
-      for (const province of project.planes[planeIndex]!.provinces) {
-        const facts = candidateFacts(project.planes[planeIndex]!, planeIndex, province);
+      for (let position = 0; position < project.planes[planeIndex]!.provinces.length; position += 1) {
+        const facts = candidateFacts(project.planes[planeIndex]!, planeIndex, position);
         if (!facts || !facts.safe || (forcedDegree !== undefined && facts.degree !== forcedDegree)) continue;
         if (hasSafePreferredDegree && facts.degree !== preferredDegree) continue;
         closestCapacityDifference = Math.min(closestCapacityDifference, Math.abs(facts.capacity - preferredCapacity));
@@ -4268,8 +4572,8 @@ function chooseDistributedStart(
     }
   }
   const hasComparableCapacity = closestCapacityDifference <= capacityTolerance;
-  const hasBridgeSafeCandidate = project.planes.some((plane, planeIndex) => plane.provinces.some((province) => {
-    const facts = candidateFacts(plane, planeIndex, province);
+  const hasBridgeSafeCandidate = project.planes.some((plane, planeIndex) => plane.provinces.some((_, position) => {
+    const facts = candidateFacts(plane, planeIndex, position);
     if (!facts || facts.incidentBridge || !facts.safe) return false;
     if (forcedDegree !== undefined && facts.degree !== forcedDegree) return false;
     if (hasSafePreferredDegree && facts.degree !== preferredDegree) return false;
@@ -4281,9 +4585,10 @@ function chooseDistributedStart(
   let bestScore = -Infinity;
   for (let planeIndex = 0; planeIndex < project.planes.length; planeIndex += 1) {
     const plane = project.planes[planeIndex]!;
-    for (const province of plane.provinces) {
-      const facts = candidateFacts(plane, planeIndex, province);
+    for (let position = 0; position < plane.provinces.length; position += 1) {
+      const facts = candidateFacts(plane, planeIndex, position);
       if (!facts) continue;
+      const province = plane.provinces[position]!;
       const { ref, planeStarts, distance, spaced, safe, degree, capacity, incidentBridge, requiredSeparation } = facts;
       if (forcedDegree !== undefined && degree !== forcedDegree) continue;
       if (!spaced) continue;
@@ -4292,7 +4597,7 @@ function chooseDistributedStart(
         && Math.abs(capacity - preferredCapacity) > closestCapacityDifference) continue;
       if (hasBridgeSafeCandidate && incidentBridge) continue;
       const load = planeStarts.length / Math.max(1, plane.provinces.length);
-      const blockingEdges = plane.edges.filter((edge) => (edge.a === province.id || edge.b === province.id) && blocksReliableStartEdge(edge)).length;
+      const blockingEdges = blockingEdgesAt(plane, province.id);
       const targetScore = degree >= target ? 36 - Math.abs(degree - target) * 4 : -80 - (target - degree) * 25;
       const parityScore = preferredDegree === undefined ? 0 : degree === preferredDegree ? 64 : -Math.abs(degree - preferredDegree) * 24;
       const capacityScore = preferredCapacity === undefined ? 0 : -Math.abs(capacity - preferredCapacity) * 14;
@@ -4366,7 +4671,7 @@ function provinceLookup(plane: Pick<Plane, "provinces">): Map<string, Province> 
   return lookup;
 }
 
-function matchesStartType(ref: ProvinceRef, type: StartType, adjacency: Map<string, string[]>): boolean {
+function matchesStartType(ref: Pick<ProvinceRef, "plane" | "province">, type: StartType, adjacency: Map<string, string[]>): boolean {
   const { plane, province } = ref;
   const overland = isSurfaceCorePlaneForSizing(plane);
   if (type === "water") return overland && isWaterProvince(province);
@@ -5282,9 +5587,10 @@ export function nearestSourceDistances(adjacency: Map<string, string[]>, sources
 }
 
 function reachableWithin(adjacency: Map<string, string[]>, start: string, radius: number): number {
-  let count = 0;
-  for (const distance of shortestDistances(adjacency, start).values()) if (distance <= radius) count += 1;
-  return count;
+  // A radius-bounded BFS discovers exactly the provinces within `radius`
+  // (at their true distances) without walking the rest of the plane.
+  if (!(radius >= 0)) return 0;
+  return shortestDistances(adjacency, start, Math.floor(radius)).size;
 }
 
 export function calculateFairness(project: MapProject): FairnessMetrics {
