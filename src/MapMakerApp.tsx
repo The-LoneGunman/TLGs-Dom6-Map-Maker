@@ -58,6 +58,7 @@ import {
   ISLAND_CHAIN_MIN_WATER_PERCENT,
   normalizeEconomyBalanceMode,
   normalizeOverlandTopologyMode,
+  preflightAuthoredStartNotices,
   preflightStartPlan,
   removeGeneratedCaveSpecificStarts,
   synchronizePlaneEdges,
@@ -482,6 +483,7 @@ export function MapMakerApp() {
   const caveStartNations = project.settings.caveStartNations ?? [];
   const allocatedStarts = Object.values(startDistribution).reduce((sum, value) => sum + value, 0);
   const startPlanErrors = useMemo(() => preflightStartPlan(project), [project]);
+  const authoredStartNotices = useMemo(() => preflightAuthoredStartNotices(project), [project]);
   const planeConnectionRules = useMemo(() => resolvePlaneConnectionRules(project), [project]);
   const selectedPlaneConnectionRules = planeConnectionRules.filter((rule) => rule.a === activePlane.id || rule.b === activePlane.id);
   const activePlaneGates = gatesTouchingPlane(project.gates, activePlane.id);
@@ -1349,6 +1351,17 @@ export function MapMakerApp() {
                   <ul>{startPlanErrors.map((message) => <li key={message}>{message}</li>)}</ul>
                 </div>
               )}
+              {authoredStartNotices.length > 0 && (
+                <div id="authored-start-notices" className="warning-copy authored-start-notices" role="status" aria-live="polite" aria-atomic="true">
+                  <strong>Nation-specific starts need spacing.</strong>
+                  <ul>{authoredStartNotices.map((notice) => <li key={`${notice.planeId}:${notice.provinceId}`}>
+                    {notice.message}{" "}
+                    <button className="text-button danger-text" type="button" onClick={() => mutate((draft) => {
+                      setNationSpecificStart(draft, notice.planeId, notice.provinceId, undefined);
+                    })}>Remove nation {notice.nation} start</button>
+                  </li>)}</ul>
+                </div>
+              )}
               <NumberField scope="Next generation" label="Target useful connections at starts" value={project.settings.startDegreeTarget ?? 4} min={1} max={8} onChange={(value) => mutate((draft) => { draft.settings.startDegreeTarget = value; })} />
               <p className="microcopy">Land, coast, water, cave, and other counts must total the player count. Four useful connections is the recommended multiplayer baseline; targets from five to eight use the closest feasible common degree when the province geometry cannot give every start the requested value.</p>
               <Divider />
@@ -1428,7 +1441,7 @@ export function MapMakerApp() {
                 className="button generate-button"
                 type="button"
                 disabled={allocatedStarts !== project.settings.players || startPlanErrors.length > 0 || generationBusy}
-                aria-describedby={`${START_ALLOCATION_STATUS_ID}${startPlanErrors.length ? " start-plan-errors" : ""}${generationBusy ? " generation-progress" : ""}`}
+                aria-describedby={`${START_ALLOCATION_STATUS_ID}${startPlanErrors.length ? " start-plan-errors" : ""}${authoredStartNotices.length ? " authored-start-notices" : ""}${generationBusy ? " generation-progress" : ""}`}
                 onClick={handleGenerate}
               ><span>✦</span> {generationBusy ? "Generating atlas…" : `Generate balanced atlas (${project.planes.length} plane${project.planes.length === 1 ? "" : "s"})`}</button>
               {generationBusy && generationProgress && (
@@ -2115,7 +2128,9 @@ function DestructiveConfirmationDialog({ action, project, onClose, onBackup, onC
           kicker: "GENERATE MAP",
           title: "Replace the current map geometry?",
           description: "Generate rebuilds provinces, borders, starts, sites, guardians, and gateways for the planned planes. Manual province names are preserved. Undo can restore this version once, but a downloaded backup is the safest recovery point.",
-          details: [`${action.impact.planeCount} planned plane${action.impact.planeCount === 1 ? "" : "s"}`, `${action.impact.provinceCount} current provinces`, `${action.impact.gatewayCount} current gateways`],
+          details: [`${action.impact.planeCount} planned plane${action.impact.planeCount === 1 ? "" : "s"}`, `${action.impact.provinceCount} current provinces`, `${action.impact.gatewayCount} current gateways`,
+            // Proceeding is allowed; cancelling leaves the nation start to move or remove below Generate.
+            ...preflightAuthoredStartNotices(project).map((notice) => notice.message)],
           confirmLabel: "Generate and replace",
         }
       : {

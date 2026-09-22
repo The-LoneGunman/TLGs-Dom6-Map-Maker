@@ -19,10 +19,10 @@ export function GenerationPlanSummary({ project, onReview }: { project: MapProje
     <details><summary>Province budget by plane</summary>
       <ul className="budget-planes">{budget.planes.map((row, i) => <li key={row.planeId}>
         <strong>{i + 1}. {row.name}: {row.current} → {row.target}</strong>
-        <span>{row.core ? "Core" : "Bonus"}{row.reserved ? " · generated starts blocked" : ""}. {row.reason}.</span>
+        <span>{row.core ? "Core" : "Bonus"}{row.reserved ? " · generated starts blocked" : ` · ${row.allocatedStarts} generated start${row.allocatedStarts === 1 ? "" : "s"}`}. {row.reason}.</span>
       </li>)}</ul>
       {budget.usesFallbackCore && <p>No core planes: bonus sizes reference Players × Provinces/player ({budget.referenceCore}), not a hidden core layer.</p>}
-      <p>Counts are planned, not a spacing guarantee. Review generation-plan errors before generating. Water quotas and themed guardian coverage can also produce best-effort notices.</p>
+      <p>Generate sizes each plane and places its generated starts from this same plan. Counts are planned, not a spacing guarantee. Review generation-plan errors before generating. Water quotas and themed guardian coverage can also produce best-effort notices.</p>
     </details>
     <button type="button" className="button quiet wide" onClick={onReview} aria-haspopup="dialog">Review current starts</button>
   </section>;
