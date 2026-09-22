@@ -1596,7 +1596,7 @@ export function MapMakerApp() {
                     onClick={() => { setActivePlaneId(plane.id); setSelectedId(undefined); }}
                   >
                     <span className={`plane-gem kind-${plane.kind}`}>{index + 1}</span>
-                    <span><strong>{plane.name}</strong><small>{plane.provinces.length ? `${plane.provinces.length} provinces` : "Draft — not generated"} · {plane.kind}</small></span>
+                    <span><strong>{plane.name}</strong><small>{plane.provinces.length ? `${plane.provinces.length} provinces` : "Draft — not generated"} · {PLANE_KINDS.find((item) => item.value === plane.kind)?.label ?? plane.kind}</small></span>
                     <i className={issues.some((issue) => issue.severity === "error" && issue.planeId === plane.id) ? "bad" : "good"} />
                   </button>
                 ))}
@@ -1734,7 +1734,7 @@ export function MapMakerApp() {
           </section>}
 
           {leftTab === "iterate" && <div id="setup-active-panel" className="panel-scroll setup-stack" role="tabpanel" aria-labelledby="setup-tab-iterate">
-            <IterationPanel key={activePlane.id} project={project} planeId={activePlane.id} selectedId={selectedId} catalog={catalog} busy={generationBusy || exportBusy}
+            <IterationPanel key={activePlane.id} project={project} planeId={activePlane.id} selectedId={selectedId} catalog={catalog} busy={generationBusy || exportBusy} onClearHighlight={() => setAnalysisSelection(undefined)}
               onCommit={(next, expectedSource) => {
                 if (currentProjectRef.current !== expectedSource) { setToast("The project changed after this preview. Preview the operation again; the current atlas was kept."); return false; }
                 next.updatedAt = new Date().toISOString();
@@ -1937,7 +1937,7 @@ export function MapMakerApp() {
       <footer className="statusbar">
         <span><i className={errorCount ? "status-dot bad" : "status-dot good"} />{errorCount ? `${errorCount} export blocker${errorCount === 1 ? "" : "s"}` : "Dominions checks ready"}</span>
         <span>{project.planes.length} plane{project.planes.length === 1 ? "" : "s"} · {totalProvinces} provinces · {project.settings.players} starts target</span>
-        <button className="status-review" type="button" aria-haspopup="dialog" onClick={() => setBalanceOpen(true)}>Fairness (structural) <strong className={scoreClass(fairness.overall)}>{fairness.overall}</strong> · Inspect starts</button>
+        <button className="status-review" type="button" aria-haspopup="dialog" onClick={() => setBalanceOpen(true)}>Fairness (structural) <strong className={scoreClass(fairness.overall)}>{fairness.overall}</strong> · Start analysis…</button>
         <span>{Math.round(zoom * 100)}%</span>
         <span>{formatBytes(estimatedPackageBytes(project, catalog))} package</span>
       </footer>
@@ -2423,7 +2423,7 @@ function ValidationDrawer({ issues, fairness, onClose, onReview, onSelectIssue }
       </section>)}
       <details className="validation-fairness">
         <summary>Structural fairness <strong className={scoreClass(fairness.overall)}>{fairness.overall}</strong><small>Heuristic only · never overrides an export error</small></summary>
-        <div className="score-hero"><div className={`score-ring ${scoreClass(fairness.overall)}`} style={{ "--score": fairness.overall } as CSSProperties}><strong>{fairness.overall}</strong><small>of 100</small></div><div><h3>Structural heuristics</h3><p>A high average is not proof of nation or combat balance and never overrides an export error.</p><button className="button quiet" type="button" onClick={onReview}>Inspect every start</button></div></div>
+        <div className="score-hero"><div className={`score-ring ${scoreClass(fairness.overall)}`} style={{ "--score": fairness.overall } as CSSProperties}><strong>{fairness.overall}</strong><small>of 100</small></div><div><h3>Structural heuristics</h3><p>A high average is not proof of nation or combat balance and never overrides an export error.</p><button className="button quiet" type="button" aria-haspopup="dialog" onClick={onReview}>Start analysis…</button></div></div>
         <div className="metric-grid">{([['Start spacing', fairness.startSeparation], ['Expansion proxy', fairness.expansionParity], ['Nearby throne parity', fairness.throneAccess], ['Start exits', fairness.startDegree], ['Terrain variety', fairness.terrainVariety], ['Connectivity', fairness.connectivity], ['Allocation', fairness.startAllocation]] as Array<[string, number]>).map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong><i><b style={{ width: `${value}%` }} /></i></div>)}</div>
         <details className="validation-score-notes"><summary>Score assumptions and notes</summary><ul>{fairness.notes.map(note => <li key={note}>{note}</li>)}</ul></details>
       </details>

@@ -987,7 +987,7 @@ Clicking a validation issue that identifies a plane/province navigates to it whe
 
 ### Start-region analysis
 
-Open **Start analysis…** under Generate, **Inspect starts** in the footer, or **Inspect every start** in Validate. The panel separates export blockers, the **Structural score** (including low subscores), and limited analysis confidence. All generic, team, and nation-specific start locations are included and deduplicated. Manual map edits recalculate the current diagnostics; they do not need regeneration.
+Open **Start analysis…** under Generate, from the fairness status in the footer, or in Validate's **Structural fairness** section. The panel separates export blockers, the **Structural score** (including low subscores), and limited analysis confidence. All generic, team, and nation-specific start locations are included and deduplicated. Manual map edits recalculate the current diagnostics; they do not need regeneration.
 
 Choose an access model:
 

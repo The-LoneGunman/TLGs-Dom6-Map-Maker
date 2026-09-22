@@ -361,7 +361,7 @@ test("rendered workbench exposes scope, plan provenance, budgets, search and neu
   markup = renderToStaticMarkup(createElement(MapMakerApp));
   assert.match(markup, /Map \+ next generation/);
   assert.match(markup, /Next generation/);
-  assert.match(markup, /Inspect starts/);
+  assert.match(markup, /Fairness \(structural\)[\s\S]*?· Start analysis…/);
 });
 
 test("analysis overlays are source-bound, navigation-safe and not passed to PNG export", () => {
