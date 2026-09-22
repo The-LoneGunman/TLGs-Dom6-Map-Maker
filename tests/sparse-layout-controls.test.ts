@@ -197,6 +197,12 @@ test("the planes screen reports one effective layout and exposes no classic sele
   assert.match(underworld, /River Styx layout/);
   assert.match(underworld, /realm-bisecting Styx/);
   assert.doesNotMatch(underworld, /<select|classic/i);
+  for (const kind of ["cloud", "air"] as const) {
+    const sky = render(kind);
+    assert.match(sky, /Connected regions &amp; passages/);
+    assert.match(sky, /floating-island provinces/);
+    assert.match(sky, /wind-shaped coastlines and broad, gently curved causeways/);
+  }
   assert.equal(render("surface"), "");
   assert.equal(render("cave", "solid"), "");
 });

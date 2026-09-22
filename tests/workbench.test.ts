@@ -374,8 +374,8 @@ test("analysis overlays are source-bound, navigation-safe and not passed to PNG 
   const canvas = readFileSync(new URL("../src/MapCanvas.tsx", import.meta.url), "utf8");
   const png = canvas.slice(canvas.indexOf("export async function renderPlanePng"), canvas.indexOf("export async function renderPlanePng") + 2300);
   assert.doesNotMatch(png, /analysisProvinceIds/);
-  assert.equal((canvas.match(/options\.analysisProvinceIds\?\.has\(province.id\)/g) ?? []).length, 3, "solid, sparse and sky renderers retain analysis overlays");
-  const sky = canvas.slice(canvas.indexOf("function paintSkyPlane("), canvas.indexOf("const sparsePaintMaskCache"));
-  assert.match(sky, /const path = mask\.ownerPaths\[index\]/);
-  assert.match(sky, /options\.analysisProvinceIds\?\.has\(province\.id\)[^\n]+context\.fill\(path\)/, "sky analysis is filled only inside the selected owner's raster path");
+  assert.equal((canvas.match(/options\.analysisProvinceIds\?\.has\(province.id\)/g) ?? []).length, 3, "solid, sparse and procedural renderers retain analysis overlays");
+  const procedural = canvas.slice(canvas.indexOf("function paintProceduralPlane("), canvas.indexOf("const sparsePaintMaskCache"));
+  assert.match(procedural, /const path = mask\.ownerPaths\[index\]/);
+  assert.match(procedural, /options\.analysisProvinceIds\?\.has\(province\.id\)[^\n]+context\.fill\(path\)/, "realm analysis is filled only inside the selected owner's raster path");
 });

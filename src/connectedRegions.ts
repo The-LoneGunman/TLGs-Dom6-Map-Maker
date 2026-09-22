@@ -209,22 +209,38 @@ function buildRegionalModel(source: Plane, plan: ConnectedRegionPlan): RegionOwn
   const keys = new Set(plane.edges.map(e => pairKey(e.a,e.b)));
   const pixel = Math.max(aspect / Math.max(1,plane.width), 1 / Math.max(1,plane.height));
   const centres = plane.provinces.map(p => ({x:p.x*aspect,y:p.y}));
+  const sky = plane.kind === "cloud" || plane.kind === "air";
   const radii = plane.provinces.map((p,i) => {
     const passage = plan.passageOwners.has(i);
     const size = p.small ? .84 : p.large ? 1.13 : 1;
-    const scale = passage ? .235 : plane.kind === "cavern" ? .65 : .59;
+    const scale = passage ? sky ? .32 : .235 : sky ? .64 : plane.kind === "cavern" ? .65 : .59;
     return Math.max(pixel*1.6,plan.localSpacings[i]! * scale * size * (.93 + roll(`${p.id}:region-size`)*.14));
   });
   const phases = plane.provinces.map(p => roll(`${p.id}:region-outline`)*Math.PI*2);
+  // Sky groups share a prevailing direction, with varied individual headlands.
+  // Only the contour changes: centres, group membership and movement stay put.
+  const skyContours = sky ? plane.provinces.map((p,owner) => {
+    const group = plan.groups[plan.groupByOwner[owner]!] ?? [owner];
+    const anchor = plane.provinces[group[0]!]!.id;
+    const rotation = roll(`${anchor}:sky-wind`)*Math.PI + (roll(`${p.id}:sky-tilt`) - .5)*.7;
+    const stretch = (plane.kind === "air" ? 1.22 : 1.08) + roll(`${p.id}:sky-stretch`)*.3;
+    return { radiusX:radii[owner]!*Math.sqrt(stretch), radiusY:radii[owner]!/Math.sqrt(stretch),
+      rotation, cos:Math.cos(rotation), sin:Math.sin(rotation) };
+  }) : undefined;
   const silhouette: SparseSilhouette = plane.kind === "cloud" ? "cloud-island" : plane.kind === "air" ? "air-stream"
     : plane.kind === "cavern" ? "cavern-vault" : plane.kind === "hell" ? "infernal-fracture"
       : plane.kind === "abyss" ? "abyss-pocket" : plane.kind === "dream" ? "dream-lobe"
         : plane.kind === "elemental" ? "elemental-shard" : "cave-chamber";
-  const chambers: ProvinceChamberPrimitive[] = plane.provinces.map((p,i) => ({
-    kind:"chamber",owner:i,center:{x:p.x,y:p.y},radius:radii[i]!*1.12,radiusX:radii[i]!,radiusY:radii[i]!,
-    rotation:0,rotationCos:1,rotationSin:0,contourPower:2,organicPower:2,warpX:0,warpY:0,
-    lobeX:0,lobeY:0,lobeScale:0,hub:!plan.passageOwners.has(i),silhouette,
-  }));
+  const chambers: ProvinceChamberPrimitive[] = plane.provinces.map((p,i) => {
+    const contour = skyContours?.[i];
+    return {
+      kind:"chamber",owner:i,center:{x:p.x,y:p.y},radius:contour ? contour.radiusX*1.23 : radii[i]!*1.12,
+      radiusX:contour?.radiusX ?? radii[i]!,radiusY:contour?.radiusY ?? radii[i]!,
+      rotation:contour?.rotation ?? 0,rotationCos:contour?.cos ?? 1,rotationSin:contour?.sin ?? 0,
+      contourPower:2,organicPower:2,warpX:0,warpY:0,
+      lobeX:0,lobeY:0,lobeScale:0,hub:!plan.passageOwners.has(i),silhouette,
+    };
+  });
   const frontierDistance=(owner:number,c:Contact)=>c.limit-c.nx*centres[owner]!.x-c.ny*centres[owner]!.y;
   const closestFrontiers=plan.contacts.map((contacts,owner)=>{
     const nearest=new Map<number,number>();
@@ -240,11 +256,16 @@ function buildRegionalModel(source: Plane, plan: ConnectedRegionPlan): RegionOwn
   })
     .map(c => {
       const regional = plan.groupByOwner[owner]! >= 0 && plan.groupByOwner[owner] === plan.groupByOwner[c.neighbour];
+      const key = pairKey(plane.provinces[owner]!.id,plane.provinces[c.neighbour]!.id);
       const width = Math.max(pixel*1.6,Math.min(plan.localSpacings[owner]!,plan.localSpacings[c.neighbour]!)
-        * (regional ? .48 : .235) * (.94 + roll(pairKey(plane.provinces[owner]!.id,plane.provinces[c.neighbour]!.id))*.12));
-      return {contact:c,portal:{x:(c.from.x+c.to.x)/2,y:(c.from.y+c.to.y)/2},width};
+        * (regional ? sky ? .51 : .48 : sky ? .30 : .235) * (.94 + roll(key)*.12));
+      const portal = {x:(c.from.x+c.to.x)/2,y:(c.from.y+c.to.y)/2};
+      const route = sky ? skyPassage(centres[owner]!,portal,width,pixel,key,regional) : undefined;
+      return {contact:c,portal,width,route};
     }));
-  const walls = plan.contacts.map((contacts,owner) => contacts.filter(c => !keys.has(pairKey(plane.provinces[owner]!.id,plane.provinces[c.neighbour]!.id))));
+  const walls = plan.contacts.map((contacts,owner) => contacts.filter(c => !keys.has(pairKey(plane.provinces[owner]!.id,plane.provinces[c.neighbour]!.id)))
+    .map(c => ({...c,shoreLimit:Math.min(...outlets[owner]!.map(outlet =>
+      (c.limit-c.nx*outlet.portal.x-c.ny*outlet.portal.y)*.5))})));
   const toOwnerFrame = (x:number,y:number,owner:number) => ({
     x:centres[owner]!.x + periodic(x-plane.provinces[owner]!.x,plane.wrapX)*aspect,
     y:centres[owner]!.y + periodic(y-plane.provinces[owner]!.y,plane.wrapY),
@@ -256,12 +277,33 @@ function buildRegionalModel(source: Plane, plan: ConnectedRegionPlan): RegionOwn
     // Two-sided rock seams at omitted contacts preserve an edited movement
     // graph. A bounded margin keeps even small/high-density centres intact.
     const margin = Math.min(plan.localSpacings[owner]!* .18,Math.max(pixel*1.1,plan.spacing*.025));
-    for (const wall of walls[owner]!) if (wall.limit-wall.nx*point.x-wall.ny*point.y < margin-EPS) return false;
+    for (const wall of walls[owner]!) {
+      // Omitted sky frontiers are open air, not straight cuts through stone.
+      // Keep the existing gap floor, and bound the extra setback by nearby
+      // doorway clearance so a short, valid frontier cannot be swallowed.
+      const shore = sky ? Math.max(margin,Math.min(wall.shoreLimit,plan.localSpacings[owner]!*.22,
+        Math.max(pixel*1.1,plan.spacing*.045)*(1+.35*Math.sin(
+        (-wall.ny*point.x+wall.nx*point.y)/plan.spacing*4+phases[owner]!,
+      )))) : margin;
+      if (wall.limit-wall.nx*point.x-wall.ny*point.y < shore-EPS) return false;
+    }
     const dx=point.x-centre.x,dy=point.y-centre.y;
-    const angle=Math.atan2(dy,dx),phase=phases[owner]!;
-    const radius=radii[owner]!*(1+.065*Math.sin(angle*3+phase)+.035*Math.sin(angle*5-phase));
-    if(dx*dx+dy*dy<=radius*radius)return true;
-    for(const outlet of outlets[owner]!) if(segmentDistanceSquared(point,centre,outlet.portal)<=outlet.width*outlet.width)return true;
+    const phase=phases[owner]!,contour=skyContours?.[owner];
+    if (contour) {
+      const u=(dx*contour.cos+dy*contour.sin)/contour.radiusX;
+      const v=(-dx*contour.sin+dy*contour.cos)/contour.radiusY;
+      const angle=Math.atan2(v,u);
+      const coast=1+.11*Math.sin(angle*2+phase)+.075*Math.sin(angle*3-phase)+.04*Math.sin(angle*5+phase);
+      if(u*u+v*v<=coast*coast)return true;
+    } else {
+      const angle=Math.atan2(dy,dx);
+      const radius=radii[owner]!*(1+.065*Math.sin(angle*3+phase)+.035*Math.sin(angle*5-phase));
+      if(dx*dx+dy*dy<=radius*radius)return true;
+    }
+    for(const outlet of outlets[owner]!) {
+      if(outlet.route ? insideSkyPassage(point,outlet.route)
+        : segmentDistanceSquared(point,centre,outlet.portal)<=outlet.width*outlet.width)return true;
+    }
     return false;
   };
   const candidateBuckets = exactCandidateBuckets(plane,columns,rows,aspect);
@@ -289,8 +331,19 @@ function buildRegionalModel(source: Plane, plan: ConnectedRegionPlan): RegionOwn
     const p=plane.provinces[owner]!;
     const imageDistance=frontierDistance(owner,c)*2;
     const end={x:p.x+c.nx*imageDistance/aspect,y:p.y+c.ny*imageDistance};
+    const reverse = outlet.route && outlets[other]!.find(candidate => candidate.contact.neighbour===owner
+      && Math.abs(periodic(candidate.portal.x/aspect-outlet.portal.x/aspect,plane.wrapX))<EPS
+      && Math.abs(periodic(candidate.portal.y-outlet.portal.y,plane.wrapY))<EPS);
+    const route = outlet.route && reverse?.route ? [
+      ...outlet.route,
+      ...reverse.route.slice(0,-1).reverse().map(point => ({
+        x:point.x+outlet.portal.x-reverse.portal.x,y:point.y+outlet.portal.y-reverse.portal.y,width:point.width,
+      })),
+    ] : undefined;
     corridors.push({kind:"corridor",owners:[owner,other],key,from:{x:p.x,y:p.y},to:end,
-      halfWidth:outlet.width,path:[{x:p.x,y:p.y},{x:outlet.portal.x/aspect,y:outlet.portal.y},end],halfWidths:[outlet.width,outlet.width,outlet.width]});
+      halfWidth:outlet.width,path:route?.map(point=>({x:point.x/aspect,y:point.y}))
+        ?? [{x:p.x,y:p.y},{x:outlet.portal.x/aspect,y:outlet.portal.y},end],
+      halfWidths:route?.map(point=>point.width) ?? [outlet.width,outlet.width,outlet.width]});
     const length=Math.hypot(c.to.x-c.from.x,c.to.y-c.from.y);
     const steps=Math.max(32,Math.min(1024,Math.ceil(length/pixel*2)));
     const pointAt=(t:number)=>({x:(c.from.x+(c.to.x-c.from.x)*t)/aspect,y:c.from.y+(c.to.y-c.from.y)*t});
@@ -438,6 +491,31 @@ function segmentDistanceSquared(p:Point,a:Point,b:Point):number {
   const dx=b.x-a.x,dy=b.y-a.y,length=dx*dx+dy*dy;
   const t=length>EPS?clamp(((p.x-a.x)*dx+(p.y-a.y)*dy)/length,0,1):0;
   return (p.x-a.x-dx*t)**2+(p.y-a.y-dy*t)**2;
+}
+
+interface SkyPassagePoint extends Point { width: number }
+
+/** A shallow, tapered sweep replaces straight, constant-width sky causeways. */
+function skyPassage(from:Point,to:Point,width:number,pixel:number,key:string,regional:boolean):SkyPassagePoint[] {
+  const dx=to.x-from.x,dy=to.y-from.y,length=Math.hypot(dx,dy);
+  const bend=Math.min(length*.18,width*.45)*(roll(`${key}:sky-bend`)*2-1)*(regional ? .4 : 1);
+  const swell=.1+roll(`${key}:sky-swell`)*.18;
+  return Array.from({length:5},(_,i)=>{
+    const t=i/4,wave=Math.sin(t*Math.PI);
+    return {x:from.x+dx*t-(length>EPS ? dy/length*bend*wave : 0),
+      y:from.y+dy*t+(length>EPS ? dx/length*bend*wave : 0),
+      width:Math.max(pixel*1.6,width*(1+swell*wave))};
+  });
+}
+
+function insideSkyPassage(point:Point,route:readonly SkyPassagePoint[]):boolean {
+  for(let i=1;i<route.length;i++) {
+    const a=route[i-1]!,b=route[i]!,dx=b.x-a.x,dy=b.y-a.y,length=dx*dx+dy*dy;
+    const t=length>EPS ? clamp(((point.x-a.x)*dx+(point.y-a.y)*dy)/length,0,1) : 0;
+    const width=a.width+(b.width-a.width)*t;
+    if((point.x-a.x-dx*t)**2+(point.y-a.y-dy*t)**2<=width*width)return true;
+  }
+  return false;
 }
 
 function appendWrappedSegments(target:Map<string,BorderSegment[]>,key:string,a:Point,b:Point,plane:Plane) {

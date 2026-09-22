@@ -44,15 +44,16 @@ terrain combination.
 
 ## Where the artwork appears
 
-The September 21 development source additionally draws Cloud/Air cloud banks,
-floating cliff faces, shadows, and terrain motifs procedurally in `src/skyArt.ts`.
-These are original code-generated pixels under the project license, not new
-ImageGen assets or copied community-map images. They replace the normal sky
-preview painter at supported dimensions; the bundled backdrop remains available
-to the fallback renderer. No extra downloads or third-party assets are required.
+The September 21 development source draws Cloud/Air cloud banks and floating
+islands procedurally in `src/skyArt.ts`. It also uses `src/realmArt.ts` for
+textured cave rock with fungal/crystal details, Underworld tomb stones and mist,
+infernal ember fissures, abyssal obsidian, dream vegetation, and variant-led
+elemental accents. These are original code-generated pixels under the project
+license, not new ImageGen assets or copied community-map
+images. No extra downloads, external artwork, or new dependencies are required.
 
-The material textures, backdrops, and procedural sky pixels are presentation assets for the Atlas editor and its high-resolution PNG previews. Backdrops give sparse planes a theme behind areas that no province owns.
+The bundled material textures and backdrops are presentation assets for the Atlas editor and its high-resolution PNG previews. Backdrops give sparse planes a theme behind areas that no province owns. The September 22 development exporter also packages the procedural sky/realm pixels as playable TGA image sheets when **Illustrated realms** is selected.
 
-None is embedded in the current native `.d6m` export. Atlas's `#imagefile` references the D6M geography recipe, not a raster illustration, so Dominions uses its own scenery for exported geography and terrain. A registered-image loading experiment is documented separately and is not production export behavior; see [sky-realm rendering options](research/SKY_RENDERING_OPTIONS_2026-09-21.md).
+The default **Native scenery** mode does not embed these pixels: Dominions renders the D6M geography itself. Illustrated export retains native scenery for Surface and Custom planes while supplying 18 terrain/season image sheets and exact province areas for the nine procedural realm kinds. No third-party images are incorporated. See [illustrated export and verification](ILLUSTRATED_EXPORT_2026-09-22.md); earlier [sky-format research](research/SKY_RENDERING_OPTIONS_2026-09-21.md) describes the preceding experimental checkpoint.
 
 These original project assets use the root [0BSD license](../LICENSE). This does not apply to the separately licensed Dominions selector catalog. See the [illustrated asset specification](ILLUSTRATED_ASSET_SPEC.md) for the shipped implementation and future pack requirements.

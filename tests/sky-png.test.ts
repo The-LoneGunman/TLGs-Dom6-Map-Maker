@@ -4,6 +4,7 @@ import type { Plane, PreviewCondition } from "../src/domain";
 import { createDefaultProject } from "../src/generator";
 import { renderPlanePng, samplePlaneOwnership } from "../src/MapCanvas";
 import { renderSkyRgb, skyVariantForPreview } from "../src/skyArt";
+import { renderRealmRgb } from "../src/realmArt";
 import { previewProvinceTerrain } from "../src/terrainVisuals";
 
 function skyFixture(seed: string): Plane {
@@ -174,5 +175,79 @@ test("small imported sky drafts retain the existing masked-renderer fallback", a
     assert.equal(raster.context.imageData, undefined);
     assert.ok(raster.context.compositeModes.includes("destination-in"));
     assert.ok(fixture.imageRequests.includes("/plane-backgrounds/cloud-air.png"), "fallback still loads themed artwork");
+  } finally { fixture.restore(); }
+});
+
+test("all new realm PNGs preserve exact procedural pixels, terrain conditions and unmasked semantic labels", async () => {
+  const fixture = installCanvasFixture();
+  try {
+    for (const kind of ["cave", "cavern", "underworld", "hell", "abyss", "dream", "elemental"] as const) {
+      const plane = skyFixture(`realm-png-${kind}`);
+      plane.kind = kind;
+      plane.provinces[0]!.defenders = [{ commander: "5", squads: [] }];
+      plane.provinces[1]!.terrainFlags = ["sea", "cave"];
+      plane.provinces[2]!.terrainFlags = ["forest", "highland"];
+      plane.provinces[3]!.terrainFlags = ["cavewall", "sea", "forest"];
+      const before = structuredClone(plane);
+      let normal: Uint8ClampedArray | undefined;
+      for (const condition of ["normal", "winter", "forested", "flooded", "wasted", "farmland"] as const) {
+        const { output, raster } = await fixture.render(plane, condition);
+        assert.deepEqual([output.width, output.height, raster.width, raster.height], [320, 256, 320, 256]);
+        const rgba = raster.context.imageData!.data;
+        const displayed = { ...plane, provinces: plane.provinces.map(province => ({ ...province, ...previewProvinceTerrain(province, condition) })) };
+        const expected = renderRealmRgb(displayed, samplePlaneOwnership(plane, plane.width, plane.height), `${plane.id}:realm-art`);
+        for (let pixel = 0; pixel < plane.width * plane.height; pixel++) {
+          assert.equal(rgba[pixel * 4], expected[pixel * 3]);
+          assert.equal(rgba[pixel * 4 + 1], expected[pixel * 3 + 1]);
+          assert.equal(rgba[pixel * 4 + 2], expected[pixel * 3 + 2]);
+          assert.equal(rgba[pixel * 4 + 3], 255);
+        }
+        if (condition === "normal") normal = rgba;
+        if (condition === "winter") assert.deepEqual(rgba, normal, `${kind}: established special-realm winter policy is unchanged`);
+        assert.ok(output.context.text.some(text => text.value === "G"));
+        assert.ok(output.context.text.some(text => text.value === "◎"));
+        assert.ok(output.context.text.some(text => text.value === "Sky 1"));
+        assert.ok(output.context.text.every(text => !text.clipped));
+        assert.equal(raster.context.text.length, 0);
+      }
+      assert.deepEqual(plane, before, `${kind}: no gameplay mutation`);
+    }
+    assert.deepEqual(fixture.imageRequests, [], "all supported realms are self-contained");
+  } finally { fixture.restore(); }
+});
+
+test("realm PNG caching follows variant changes, restores old artwork, and retains terrain edit responses", async () => {
+  const fixture = installCanvasFixture();
+  try {
+    const plane = skyFixture("realm-png-cache");
+    plane.kind = "cave";
+    plane.variant = "fungal";
+    plane.provinces.forEach(province => { province.terrainFlags = ["cave", "forest"]; });
+    const fungal = await fixture.render(plane);
+    assert.equal((await fixture.render(plane)).raster, fungal.raster);
+    plane.variant = "crystal";
+    const crystal = await fixture.render(plane);
+    assert.notDeepEqual(crystal.raster.context.imageData!.data, fungal.raster.context.imageData!.data);
+    plane.variant = "fungal";
+    assert.deepEqual((await fixture.render(plane)).raster.context.imageData!.data, fungal.raster.context.imageData!.data);
+    plane.provinces[0]!.terrainFlags = ["sea", "cave"];
+    assert.notDeepEqual((await fixture.render(plane)).raster.context.imageData!.data, fungal.raster.context.imageData!.data);
+  } finally { fixture.restore(); }
+});
+
+test("surface and Custom planes keep the established painter and materials", async () => {
+  const fixture = installCanvasFixture();
+  try {
+    for (const kind of ["surface", "custom"] as const) {
+      const plane = skyFixture(`realm-png-exclusion-${kind}`);
+      plane.kind = kind;
+      plane.variant = "infernal";
+      plane.ownershipMode = "solid";
+      const { output } = await fixture.render(plane);
+      assert.equal(output.context.imageData, undefined);
+      assert.equal(output.context.drawImages.length, 0, "solid vector path paints directly");
+      assert.ok(output.context.text.length > 0);
+    }
+    assert.ok(fixture.imageRequests.includes("/map-art/materials/earth.png"));
   } finally { fixture.restore(); }
 });

@@ -70,6 +70,7 @@ import { createFreshProject, createProjectImportGuard, prepareProjectForOpening,
 import { createCatalogImportSession } from "./catalog/importSession";
 import { assertProjectLocks, pruneAuthoringRegions } from "./authoringLocks";
 import { connectedRegionLayoutNotice } from "./connectedRegions";
+import { illustratedExportError, type ExportArtwork } from "./illustratedMap";
 import {
   downloadPackage,
   downloadProject,
@@ -272,7 +273,7 @@ const PLANE_KINDS: Array<{ value: PlaneKind; label: string; description: string 
   { value: "surface", label: "Surface", description: "Temperate land and water biomes." },
   { value: "cave", label: "Cave", description: "Tighter cave terrain with native underground populations." },
   { value: "cavern", label: "Great cavern", description: "Broader subterranean regions and crystal deeps." },
-  { value: "cloud", label: "Cloud realm", description: "Stormy high realm with sparse ground." },
+  { value: "cloud", label: "Cloud realm", description: "Floating-island groups with broad aerial causeways." },
   { value: "air", label: "Air plane", description: "Aerial and storm-biased other plane." },
   { value: "underworld", label: "Underworld", description: "Fungal death-realms bisected by the connected River Styx." },
   { value: "hell", label: "Infernal realm", description: "Volcanic and infernal terrain." },
@@ -437,6 +438,7 @@ export function MapMakerApp() {
   const [balanceOpen, setBalanceOpen] = useState(false);
   const [analysisSelection, setAnalysisSelection] = useState<{ project: MapProject; keys: string[]; label: string; mode: AnalysisMode; kind?: "iteration" }>();
   const [exportOpen, setExportOpen] = useState(false);
+  const [exportArtwork, setExportArtwork] = useState<ExportArtwork>("native");
   const [replaceAllNamesOpen, setReplaceAllNamesOpen] = useState(false);
   const [destructiveConfirmation, setDestructiveConfirmation] = useState<DestructiveConfirmation>();
   const [exportProgress, setExportProgress] = useState<ExportProgress>();
@@ -1057,7 +1059,7 @@ export function MapMakerApp() {
     setExportProgress({ stage: "preparing", plane: 0, planeCount: project.planes.length, percent: 0, message: "Preparing the atlas…" });
     try {
       if (kind === "install") {
-        const result = await installPackage(project, setExportProgress, catalog);
+        const result = await installPackage(project, setExportProgress, catalog, exportArtwork);
         if (result === "unsupported") {
           setToast("Direct folder access or safe cross-tab locking is unavailable here. Use the ready-to-install ZIP instead.");
         } else if (result === "installed") {
@@ -1065,7 +1067,7 @@ export function MapMakerApp() {
           setToast("Installed into your selected Dominions 6 maps folder.");
         }
       } else {
-        await downloadPackage(project, setExportProgress, catalog, kind === "player" ? "player" : "host");
+        await downloadPackage(project, setExportProgress, catalog, kind === "player" ? "player" : "host", exportArtwork);
         clearActionError("package-export");
         setToast("Ready-to-install map package downloaded.");
       }
@@ -1391,7 +1393,7 @@ export function MapMakerApp() {
               </Field>
               <div className="resolution-card">
                 <span>{activePlane.width.toLocaleString()} × {activePlane.height.toLocaleString()}</span>
-                <small>Native D6M • editor/PNG conditions</small>
+                <small>Native or illustrated game export</small>
               </div>
               <Toggle scope="Current Map + next generation" label="Wrap east / west" checked={activePlane.wrapX} onChange={(value) => updateWrap("wrapX", value)} />
               <Toggle scope="Current Map + next generation" label="Wrap north / south" checked={activePlane.wrapY} onChange={(value) => updateWrap("wrapY", value)} />
@@ -1457,8 +1459,8 @@ export function MapMakerApp() {
               })}>{PLANE_KINDS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></Field>
               <p className="field-note">{PLANE_KINDS.find((item) => item.value === activePlane.kind)?.description}</p>
               {activePlane.kind !== "surface" && activePlane.kind !== "custom" && <p className="field-note">{activePlane.kind === "cloud" || activePlane.kind === "air"
-                ? "Procedural floating islands and cloud banks respond to terrain conditions and winter in the editor and exported PNG preview. This artwork is not embedded in the native D6M; Dominions renders the playable map with its own scenery."
-                : "Themed artwork fills ownerless space in the editor and exported PNG preview. Native D6M has no separate background-raster layer, so Dominions renders that space with its own realm presentation."}</p>}
+                ? "Procedural floating islands and cloud banks respond to terrain conditions and winter. Choose Illustrated realms in Install / export to include this artwork in the game; Native scenery keeps the game’s own renderer. PNG previews remain available separately."
+                : "Procedural realm scenery, rock edges and terrain details follow the current province shapes and flags. Water remains aquatic, including flooded caves and the Styx. Choose Illustrated realms in Install / export to include the artwork in-game; Native scenery keeps the game’s own renderer."}</p>}
               <Field scope="Current Map + next generation" label="Terrain variant"><select value={activePlane.variant ?? defaultVariantForKind(activePlane.kind)} onChange={(event) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.variant = event.target.value as PlaneVariant; })}>{PLANE_VARIANTS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></Field>
               <PlaneLayoutInfo plane={activePlane} />
               <Toggle scope="Next generation" label="Auto-size from player count" checked={activePlane.autoSize ?? project.planes[0]?.id === activePlane.id} onChange={(value) => mutate((draft) => { draft.planes.find((plane) => plane.id === activePlane.id)!.autoSize = value; })} />
@@ -1722,6 +1724,8 @@ export function MapMakerApp() {
         issues={issues}
         progress={exportProgress}
         busy={exportBusy}
+        artwork={exportArtwork}
+        onArtworkChange={setExportArtwork}
         onClose={() => !exportBusy && setExportOpen(false)}
         onInstall={() => runExport("install")}
         onZip={() => runExport("zip")}
@@ -1792,7 +1796,7 @@ function TerrainInspector({ planeId, province, update, mutateProject }: { planeI
       <div className="path-grid">
         {MAGIC_PATHS.map((path) => <CheckCard key={path} compact label={MAGIC_PATH_LABELS[path]} checked={province.siteBias.includes(path)} onChange={(value) => update((item) => { item.siteBias = value ? [...new Set([...item.siteBias, path])] : item.siteBias.filter((entry) => entry !== path); })} />)}
       </div>
-      <div className="info-card"><strong>Terrain changes update the artwork</strong><p>Combined flags appear together: fields for Farm, trees or kelp for Forest, and an arch for Cave. The map and PNG update immediately; zoom in for small details. Download or install the package again to use edited terrain in a new Dominions game. Dominions draws its own native artwork from the exported terrain mask and geography, not from the PNG.</p></div>
+      <div className="info-card"><strong>Terrain changes update the artwork</strong><p>Combined flags appear together: fields for Farm, trees, kelp or cavern growth for Forest, and cave details for Cave. The map and PNG update immediately; zoom in for small details. Export again for a new Dominions game. Native scenery uses the game’s renderer; Illustrated realms packages Atlas’s procedural realm artwork with terrain and winter image sheets.</p></div>
     </div>
   );
 }
@@ -2131,9 +2135,10 @@ function ValidationDrawer({ issues, fairness, onClose, onReview, onSelectIssue }
   </aside></div>;
 }
 
-export function ExportDialog({ project, catalog = BUILTIN_DOM6_CATALOG, activePlane, issues, progress, busy, onClose, onInstall, onZip, onPlayerZip, onProject, onPreview, onValidate }: { project: MapProject; catalog?: Dom6CatalogBundle; activePlane: Plane; issues: ValidationIssue[]; progress?: ExportProgress; busy: boolean; onClose: () => void; onInstall: () => void; onZip: () => void; onPlayerZip?: () => void; onProject: () => void; onPreview: () => void; onValidate: () => void }) {
+export function ExportDialog({ project, catalog = BUILTIN_DOM6_CATALOG, activePlane, issues, progress, busy, artwork = "native", onArtworkChange, onClose, onInstall, onZip, onPlayerZip, onProject, onPreview, onValidate }: { project: MapProject; catalog?: Dom6CatalogBundle; activePlane: Plane; issues: ValidationIssue[]; progress?: ExportProgress; busy: boolean; artwork?: ExportArtwork; onArtworkChange?: (artwork: ExportArtwork) => void; onClose: () => void; onInstall: () => void; onZip: () => void; onPlayerZip?: () => void; onProject: () => void; onPreview: () => void; onValidate: () => void }) {
   const errors = issues.filter((issue) => issue.severity === "error").length;
-  const zipSafety = zipPackageSafety(project, catalog);
+  const artworkError = artwork === "illustrated" ? illustratedExportError(project) : undefined;
+  const zipSafety = zipPackageSafety(project, catalog, artwork);
   const zipBlocked = zipSafety.level === "blocked";
   const dialogRef = useDialogFocus<HTMLElement>(onClose, busy);
   const progressPercent = Math.max(0, Math.min(100, progress?.percent ?? 0));
@@ -2147,8 +2152,11 @@ export function ExportDialog({ project, catalog = BUILTIN_DOM6_CATALOG, activePl
   }, [busy, dialogRef]);
   return <div className="modal-backdrop"><section ref={dialogRef} className="export-dialog" tabIndex={-1} role="dialog" aria-modal="true" aria-busy={busy} aria-label="Install or export map">
     <div className="dialog-heading"><div><p className="eyebrow">DOMINIONS 6 PACKAGE</p><h2>Install a playable atlas</h2></div><button type="button" disabled={busy} onClick={onClose} aria-label="Close">×</button></div>
-    <div className="package-summary"><div className="package-glyph">D6</div><div><strong>{sanitizeMapName(project.name)}.map</strong><span>{project.planes.length} plane{project.planes.length === 1 ? "" : "s"} · {project.planes.reduce((sum, plane) => sum + plane.provinces.length, 0)} provinces · {formatBytes(estimatedPackageBytes(project, catalog))}</span></div><i className={errors ? "bad" : "good"}>{errors ? "!" : "✓"}</i></div>
-    {errors ? <div className="export-blocked"><strong>{errors} compatibility blocker{errors === 1 ? "" : "s"}</strong><p>Resolve export errors before building the package.</p><button className="button quiet" type="button" onClick={onValidate}>Review validation</button></div> : <div className="export-options">
+    <Field label="In-game artwork" scope="Host / export"><select value={artwork} disabled={busy || !onArtworkChange} onChange={event => onArtworkChange?.(event.target.value as ExportArtwork)} aria-describedby="artwork-export-help"><option value="native">Native scenery (existing exporter)</option><option value="illustrated">Illustrated realms (custom artwork)</option></select></Field>
+    <p id="artwork-export-help" className="hint">Illustrated realms bundles custom sky, cave, Underworld, Hell, Abyss, Dreamlands and Elemental artwork with terrain and winter image sheets. Surface and Custom planes keep native scenery. Image provinces are renumbered on export; the editable project is unchanged. Change artwork modes only for a new game, not an existing save. Larger packages take longer to render.</p>
+    <div className="package-summary"><div className="package-glyph">D6</div><div><strong>{sanitizeMapName(project.name)}.map</strong><span>{project.planes.length} plane{project.planes.length === 1 ? "" : "s"} · {project.planes.reduce((sum, plane) => sum + plane.provinces.length, 0)} provinces · up to {formatBytes(estimatedPackageBytes(project, catalog, undefined, artwork))}</span></div><i className={errors || artworkError ? "bad" : "good"}>{errors || artworkError ? "!" : "✓"}</i></div>
+    {artworkError && <div className="export-blocked" role="alert">{artworkError}</div>}
+    {errors ? <div className="export-blocked"><strong>{errors} compatibility blocker{errors === 1 ? "" : "s"}</strong><p>Resolve export errors before building the package.</p><button className="button quiet" type="button" onClick={onValidate}>Review validation</button></div> : !artworkError && <div className="export-options">
       <button className="export-option primary-option" type="button" onClick={onInstall} disabled={busy}><span className="option-icon" aria-hidden="true">↳</span><span><strong>Install directly</strong><small>Choose the Dominions 6 <code>maps</code> folder once; the ready-to-play folder is written there.</small></span><b>Recommended</b></button>
       <button
         className="export-option"
@@ -2177,7 +2185,7 @@ export function ExportDialog({ project, catalog = BUILTIN_DOM6_CATALOG, activePl
       aria-valuetext={`${progressMessage}. ${progressPercent}%. Plane ${progressPlane} of ${progressPlaneCount}.`}
     ><div><span>{progressMessage}</span><strong>{progressPercent}%</strong></div><i aria-hidden="true"><b style={{ width: `${progressPercent}%` }} /></i><small>Plane {progressPlane} of {progressPlaneCount}</small></div>}
     <div className="secondary-exports"><button type="button" onClick={onProject} disabled={busy}>Editable project JSON</button><button type="button" onClick={onPreview} disabled={busy || !canRenderPlanePreview(activePlane)} title={!canRenderPlanePreview(activePlane) ? "Fix the plane dimensions before exporting a preview." : undefined}>High-res {activePlane.width}×{activePlane.height} preview of {planeDisplayLabel(project, activePlane)}</button></div>
-    <p className="export-note"><strong>Native export.</strong> Native <code>.d6m</code> files let Dominions render condition changes. Procedural Cloud/Air preview art stays in the editor and PNG; it is not embedded in the playable package. The host package also includes host settings, the editable project, and a balance report. Custom catalog content may require the host’s mods.</p>
+    <p className="export-note"><strong>{artwork === "native" ? "Native export." : "Illustrated export."}</strong> {artwork === "native" ? "Native .d6m files let Dominions render condition changes; this mode does not include Atlas’s custom realm images." : "Custom .tga artwork and province click areas are included for supported realms. Cave and other seasonless realms intentionally keep their appearance in winter. Advanced raw commands require native export because their province references cannot be safely renumbered."} The host package also includes host settings, the editable project, and a balance report. Custom catalog content may require the host’s mods.</p>
   </section></div>;
 }
 
@@ -2232,6 +2240,7 @@ function Toggle({ label, checked, describedBy, onChange, scope }: { label: strin
 export function PlaneLayoutInfo({ plane }: { plane: Plane }) {
   if (resolvePlaneOwnershipMode(plane) !== "sparse") return null;
   const underworld = plane.kind === "underworld";
+  const sky = plane.kind === "cloud" || plane.kind === "air";
   const layoutNotice = usesConnectedRegions(plane) ? connectedRegionLayoutNotice(plane) : undefined;
   const noticeDetail = layoutNotice?.replace(/^Compatibility geometry is retained(?: because)?\s*/i, "");
   const noticeId = `${plane.id}-province-layout-notice`;
@@ -2241,6 +2250,7 @@ export function PlaneLayoutInfo({ plane }: { plane: Plane }) {
       <strong>{underworld ? "River Styx layout" : "Connected regions & passages"}</strong>
       <small>{underworld
         ? "The Underworld keeps its realm-bisecting Styx and controlled crossings."
+        : sky ? "Adjoining floating-island provinces have wind-shaped coastlines and broad, gently curved causeways."
         : "Adjoining province groups are joined by broad, playable passage provinces."}</small>
     </div>
     {layoutNotice && <p id={noticeId} className="warning-copy province-layout-notice" role="status">
