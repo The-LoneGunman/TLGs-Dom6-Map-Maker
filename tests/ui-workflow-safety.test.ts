@@ -115,9 +115,56 @@ test("autosave conflict UI never resolves a reviewed conflict with an unconditio
   assert.match(source, /Inspect other copy/);
 });
 
-test("the fixed project-import affordance remains a readable touch target on narrow screens", () => {
-  const source = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
-  assert.match(source, /\.import-fab\s*\{[\s\S]*?min-height:\s*36px;[\s\S]*?font-size:\s*11px;/);
-  assert.match(source, /@media \(max-width: 979px\)[\s\S]*?\.import-fab\s*\{[\s\S]*?min-width:\s*112px;[\s\S]*?min-height:\s*44px;[\s\S]*?font-size:\s*11px;/);
-  assert.match(source, /bottom:\s*max\(10px, env\(safe-area-inset-bottom\)\);/);
+test("project file actions live in the header File menu as readable touch targets, never a floating overlay", () => {
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../src/MapMakerApp.tsx", import.meta.url), "utf8");
+  // The former fixed "Open project" button covered panel content; no floating file action may return.
+  assert.doesNotMatch(source, /import-fab/);
+  assert.doesNotMatch(css, /\.import-fab/);
+  const menu = source.slice(source.indexOf('<div className="file-menu"'), source.indexOf('title="Undo"'));
+  for (const action of [">New atlas<", ">Open project…<", ">Save now<", ">Download project JSON<"]) assert.ok(menu.includes(action), action);
+  assert.match(menu, /setDestructiveConfirmation\(\{ kind: "new-atlas" \}\)/);
+  assert.match(menu, /importRef\.current\?\.click\(\)/);
+  assert.match(menu, /saveAutosaveNow\(false\)/);
+  assert.match(menu, /downloadProject\(project\)/);
+  assert.match(menu, /aria-expanded=\{fileMenuOpen\}/);
+  assert.match(css, /\.file-menu-panel \.menu-item\s*\{[^}]*min-height:\s*36px;[^}]*font-size:\s*13px;/);
+  assert.match(css, /@media \(max-width: 979px\)[\s\S]*?\.file-menu-panel \.menu-item\s*\{\s*min-height:\s*44px;/);
+});
+
+test("map workbench keeps transient status over the map and offers direct next steps", () => {
+  const source = readFileSync(new URL("../src/MapMakerApp.tsx", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  // Armed Link/Gate endpoints are a banner over the map, so arming never resizes the toolbar or shifts the map.
+  const banners = source.slice(source.indexOf('className="map-banners"'), source.indexOf('className="map-title-card"'));
+  assert.match(banners, /className="pending-link"[\s\S]*Cancel endpoint/);
+  assert.match(css, /\.map-banners\s*\{[^}]*position:\s*absolute;/);
+  // The long condition-preview note lives in a disclosure instead of wrapping the toolbar.
+  assert.match(source, /<details className="toolbar-popover">[\s\S]*?className="condition-preview-note"/);
+  // The strip's add button adds a plane rather than only switching tabs; drafts explain how to get provinces.
+  assert.match(source, /className="add-plane-mini"[^>]*onClick=\{stagePlane\}/);
+  assert.match(source, /Draft plane — Generate to create provinces/);
+  assert.match(source, />Go to Generate</);
+  // Find a province sits in the map toolbar with a "/" shortcut that ignores typing targets and open dialogs.
+  assert.match(source, /className="map-find"[^>]*>\s*<ProvinceExplorer/);
+  assert.match(source, /event\.key !== "\/"/);
+  assert.match(source, /isShortcutBlockedTarget\(event\.target\) \|\| document\.querySelector\('\[aria-modal="true"\]'\)/);
+});
+
+test("inspector tabs wrap instead of scrolling hidden tabs out of view", () => {
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const tabs = css.match(/\.inspector-tabs\s*\{[^}]*\}/)?.[0] ?? "";
+  assert.doesNotMatch(tabs, /overflow-x:\s*auto/);
+  assert.match(css, /\.inspector-tabs button\s*\{[^}]*min-width:\s*0;/);
+  assert.doesNotMatch(css, /\.inspector-tabs button\s*\{[^}]*min-width:\s*max-content/);
+});
+
+test("narrow layouts show the map before the inspector and setup panel", () => {
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const narrow = css.slice(css.indexOf("@media (max-width: 979px)"));
+  assert.match(narrow, /\.canvas-column \{ order: 1; \}/);
+  assert.match(narrow, /\.right-panel \{ order: 2; \}/);
+  assert.match(narrow, /\.left-panel \{ order: 3; \}/);
+  assert.match(narrow, /\.narrow-nav \{ position: sticky;/);
+  assert.match(narrow, /\.map-title-card \{ display: none; \}/);
 });

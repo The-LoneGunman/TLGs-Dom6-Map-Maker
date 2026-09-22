@@ -83,6 +83,8 @@ Uninstall through **Windows Settings -> Apps -> Installed apps -> Pantokrator At
 7. Resolve every red validation error.
 8. Choose **Install / export**, select the desired **In-game artwork** when using current source, and either install directly into the Dominions user-data `maps` folder or download the ready ZIP.
 
+While no province is selected, the province inspector shows these steps as a **Getting started** checklist: Generate, Planes, Scenario, Validate, and Install. Each step opens its tab or dialog.
+
 ## The safest editing workflow
 
 > **Generate before detailed manual editing.** Full generation rebuilds geography, starts, borders, gateways, and most province content. Plane/Scenario configuration and manually authored names remain. Field locks can retain compatible content during same-seed generation; they do not make arbitrary regeneration lossless. Use content-only rerolls when geography must stay fixed.
@@ -104,19 +106,20 @@ Adding a plane to the generation plan preserves every existing actual gateway; t
 
 The main areas and controls are:
 
-- **Header:** project name, autosave state, New atlas, Save now, Undo, Redo, Validate, and Install / export.
-- **Setup panel:** Find a province, then Generate, Planes, Scenario, and Iterate tabs.
-- **Map workbench:** the active plane, editing tools, condition preview, zoom, plane strip, and generation/fairness status.
-- **Province inspector:** Terrain, Gameplay, Sites & guardians, and Advanced tabs for the selected province.
-- **Open project:** the fixed button near the lower-left corner imports a saved Atlas project JSON.
+- **Header:** project name, autosave state, the **File** menu, Undo, Redo, Validate, and Install / export. **File** contains **New atlas**, **Open project…** (imports a saved Atlas project JSON), **Save now** (writes device autosave immediately), and **Download project JSON** (the same editable backup as Install / export -> Editable project JSON).
+- **Setup panel:** Generate, Planes, Scenario, and Iterate tabs.
+- **Map workbench:** editing tools, **Find a province**, condition preview, the active plane with its legend, zoom, the plane strip, and generation/fairness status.
+- **Province inspector:** Terrain, Gameplay, Sites & guardians, and Advanced tabs for the selected province, or a Getting started checklist when nothing is selected.
 
-Selecting a plane in the Planes list or the strip below the map makes it active. Selecting a province opens it in the inspector.
+Selecting a plane in the Planes list or the strip below the map makes it active. Selecting a province opens it in the inspector. **+ Add plane** at the end of the plane strip adds the same draft plane as **Add plane to plan** and opens the Planes tab. A draft plane has no provinces yet, so the map shows a **Draft plane** notice with **Go to Generate** and **Configure on Planes tab**.
 
-**Find a province** searches all planes by province name, plane name, or number. Numbers (with or without `#`) match either the editor's global number or the local province number; these match Native scenery export. Illustrated image provinces can have different in-game numbers; use the mapping in `host_settings.txt` to cross-reference them. Add a plane-name word to narrow ambiguous local numbers. The first 30 matches are shown with both editor numbers. Selecting a result switches to **Select** and cancels any armed border/gateway endpoint; it does not edit the map.
+On screens narrower than 980 pixels the workbench stacks vertically: the map comes first, then the province inspector, then the setup panel. The **Map**, **Province**, and **Setup** bar stays at the top of the screen and jumps to each section. Selecting a province on the map, in search results, or from a validation issue scrolls to the inspector. The plane title card is hidden there because the plane strip shows the same plane.
+
+**Find a province** is the search box in the map toolbar. Press `/` anywhere except inside a text field, or select the box, to open it; **Escape** closes it. It searches all planes by province name, plane name, or number. Numbers (with or without `#`) match either the editor's global number or the local province number; these match Native scenery export. Illustrated image provinces can have different in-game numbers; use the mapping in `host_settings.txt` to cross-reference them. Add a plane-name word to narrow ambiguous local numbers. The first 30 matches are shown with both editor numbers. Selecting a result switches to **Select** and cancels any armed border/gateway endpoint; it does not edit the map.
 
 Control labels identify their scope: **Next generation**, **Current Map**, **Current Map + next generation**, **Host / export**, **Preview only**, **Saved note only**, or **On project open**. Current-map changes are reflected in later exports; they do not alter a map already installed in Dominions. Biome and patch notes are descriptive, while primary terrain and terrain flags affect artwork and game rules.
 
-The map marker legend distinguishes all authored gameplay markers instead of collapsing them into a generic symbol: **S/#/N** means generic/team/nation-specific start, **♜/♛/×** means preferred/fixed/avoided throne, **✦/M** means a placed site/many-sites terrain, **G** means guardian groups, and **◎** means a gateway endpoint. A province can show several badges at once. The selected-province screen-reader status announces its combined terrain, the same marker meanings, and relevant group, nation, site, guardian, and gate numbers.
+The map marker legend (**Legend** in the lower-left corner of the map folds and unfolds it; it starts folded when the window is 1,220 pixels wide or less) distinguishes all authored gameplay markers instead of collapsing them into a generic symbol: **S/#/N** means generic/team/nation-specific start, **♜/♛/×** means preferred/fixed/avoided throne, **✦/M** means a placed site/many-sites terrain, **G** means guardian groups, and **◎** means a gateway endpoint. A province can show several badges at once. The selected-province screen-reader status announces its combined terrain, the same marker meanings, and relevant group, nation, site, guardian, and gate numbers.
 
 The **Project** name in the header becomes the map title and the basis for the exported folder and filenames. Export shows the safe normalized file stem before writing anything; changing the displayed project name does not rename an already installed folder on disk.
 
@@ -154,7 +157,7 @@ The pending summary groups inputs changed since the last generation recorded by 
 | Initial plane | Surface, Temperate, 96 provinces |
 | Initial wrapping | East/west and north/south |
 
-Device autosave may restore your previous atlas instead of showing a fresh project. Use **New atlas** in the header when you deliberately want a clean project.
+Device autosave may restore your previous atlas instead of showing a fresh project. Use **File -> New atlas** in the header when you deliberately want a clean project.
 
 ### New atlas
 
@@ -640,7 +643,7 @@ Selects a province and opens the inspector.
 
 Click two provinces on the active plane.
 
-After the first click, the armed-state banner identifies the source plane and province number. If you switch planes, return to the source plane for a shared-border destination, or click a province on the active plane to replace the source. **Cancel endpoint** clears the pending source.
+After the first click, the armed-state banner at the top of the map identifies the source plane and province number. If you switch planes, return to the source plane for a shared-border destination, or click a province on the active plane to replace the source. **Cancel endpoint** clears the pending source.
 
 - Existing links are not duplicated.
 - On a solid plane, provinces must share a positive-length visible border.
@@ -668,7 +671,7 @@ Toggles the **Many sites** terrain bit. It does not place a named magic site; us
 
 ### Condition preview
 
-Options are Normal, Frozen/winter, Forested, Submerged, Wasted, and Farmland. This selector changes only the editor and exported PNG preview, not project terrain or the starting conditions of a game. Native D6M lets Dominions render actual condition changes. The optional Illustrated realms exporter independently builds its complete terrain/winter image set; you do not need to select or export each preview condition.
+Options are Normal, Frozen/winter, Forested, Submerged, Wasted, and Farmland. The **?** button beside the selector explains the preview limits, and the plane title card names the active preview whenever it is not Normal. This selector changes only the editor and exported PNG preview, not project terrain or the starting conditions of a game. Native D6M lets Dominions render actual condition changes. The optional Illustrated realms exporter independently builds its complete terrain/winter image set; you do not need to select or export each preview condition.
 
 These previews are illustrative, not simulations of temperature or game events. Winter cover skips water and caves. Cloud/Air dry islands receive their existing winter treatment; the newly illustrated Underworld, Infernal, Abyss, Dream, and Elemental realms do not gain snow. Warmer and Colder flags adjust cover only on eligible dry land. Submerged adds water while retaining cave identity and turning forest cover into kelp. Forested, Wasted, and Farmland replace incompatible vegetation instead of leaving the original symbols underneath; Farmland does not turn seas or caves into fields.
 
@@ -680,7 +683,7 @@ The editor preserves the map's aspect ratio, so unused space may appear around i
 
 ## Province inspector
 
-The header shows the editable province name and the decimal Dominions 64-bit terrain mask. Editing the name marks it manual, so normal generation and name rerolls preserve it.
+The header shows the editable province name and a **Current Map** note: every inspector edit changes the current map immediately, and Undo reverts it. Editing the name marks it manual, so normal generation and name rerolls preserve it. The decimal Dominions 64-bit terrain mask is shown on the Advanced tab.
 
 ### Terrain tab
 
@@ -713,17 +716,17 @@ Biome is saved descriptive metadata. Changing it alone does not change terrain f
 
 Heartland, Wildwood, Marshlands, Sunscorched, High country, Tundra, Archipelago, Deep ocean, Living caves, Crystal deeps, Ashen deeps, and Void reaches.
 
-#### Terrain property cards
+#### Size, climate, and terrain properties
 
-- **Small province** and **Large province** are mutually exclusive.
+- **Province size:** Normal, Small province, or Large province. Small and Large are mutually exclusive bits.
+- **Climate:** Normal, Warmer, or Colder. Warmer and Colder are mutually exclusive climate bits.
 - **No random start** blocks random placement and clears a generic start.
 - **Many sites** adds the site-rich terrain bit.
 - **Fresh-water marker** is an auxiliary bit; it remains land unless Sea is also set.
-- **Warmer** and **Colder** are mutually exclusive climate bits.
 
 #### Additional terrain flags
 
-Sea, Highland, Swamp, Wasteland, Forest, Farm, Deep sea, Cave, Mountains, and Impassable cave wall can be combined additively.
+Sea, Highland, Swamp, Wasteland, Forest, Farm, Deep sea, Cave, Mountains, and Impassable cave wall can be combined additively. The tab shows what the primary terrain already contributes and the resulting effective mask; **About terrain flags** holds the combination, Cave Wall, and artwork notes.
 
 The cave-wall cleanup and mixed Swamp/Sea relief corrections described below are unreleased repairs on current main. The published 0.1.5 build does not include them.
 
@@ -775,6 +778,8 @@ The Generate throne count creates preferred locations, not fixed sites. Fixed th
 
 #### Ownership and economy
 
+This section is folded unless the province already has an override; its heading shows how many values are set.
+
 - **Owner nation:** `#owner`; valid independent owners are 0, 2, and 4, or use a playable nation ID 5+.
 - **Population type:** vanilla `#poptype`, controlling local recruitment.
 - **Fortification:** `#fort`.
@@ -791,9 +796,9 @@ Population type affects local recruitment; it is not a separate initial-army or 
 #### Placed magic sites
 
 - **Remove randomly generated sites:** emits `#killfeatures` before authored sites.
-- The default picker includes all ordinary rarity 0-4 province sites.
-- **Show terrain mismatches:** reveals entries that do not match the province's additive terrain/coast location mask.
-- **Include all non-capital sites:** adds verified non-random sites that are not nation homes/capitals or thrones.
+- The default picker includes all ordinary rarity 0-4 province sites. The filter row shows how many sites the picker currently offers; **About these lists** gives the pool sizes and notes.
+- **Show terrain mismatches** (filter chip): reveals entries that do not match the province's additive terrain/coast location mask.
+- **Include all non-capital sites** (filter chip): adds verified non-random sites that are not nation homes/capitals or thrones.
 - Nation home/capital sites are deliberately excluded. Thrones are selected under Gameplay.
 - **Place magic site:** adds a row; fill or remove it because an empty row blocks export.
 - **Known:** emits `#knownfeature`; unchecked emits hidden `#feature`.
@@ -804,8 +809,9 @@ Compatibility includes plain, forest, mountain, waste, farm, sea, coast, swamp, 
 
 Guardian groups are explicit initial independent defenders, not replenishing post-capture PD.
 
+- The **Initial-defender preview** for population-matched defenders appears above the guardian groups on this tab.
 - The standard picker browses gameplay unit records; obvious test, debug, and unused records stay hidden.
-- **Use role-focused lists** narrows the picker to known commanders or troops. Unusual summons and independents remain available in the broader list.
+- **Use role-focused lists** (filter chip) narrows the picker to known commanders or troops. Unusual summons and independents remain available in the broader list. **About these lists** explains the map-only boundary and the role sources.
 - Exact numeric IDs remain accepted, including valid records hidden from normal browsing.
 - A group contains a Commander, optional display name, and any number of squads.
 - Each squad has a unit and count from 1 to 1,000.
@@ -847,9 +853,11 @@ Choosing Custom starts with the existing border value (0 for Standard) and revea
 
 Referenced `.tga`, `.rgb`, or `.d3m` assets are not bundled automatically. Copy them into the exported map folder; validation warns when external assets are referenced.
 
-#### Raw province directives
+#### Terrain mask and raw directives
 
-Appended inside that province's `#land` or `#setland` block after structured features and guardian commands. See [Raw directives](#raw-directives).
+**Terrain mask** shows the decimal Dominions 64-bit value built from the Terrain tab's primary terrain, flags, and climate.
+
+**Province directives** are appended inside that province's `#land` or `#setland` block after structured features and guardian commands. **Plane directives** apply to the whole selected plane, not only this province; the same plane-level text can also be edited from the Planes tab. See [Raw directives](#raw-directives).
 
 ### Raw directives
 
@@ -880,7 +888,7 @@ Imports merge in selection order. Reset cancels pending imports, and a failed sa
 
 ## Validation and balance report
 
-Choose **Validate** in the header before export.
+Choose **Validate** in the header before export. The drawer starts with the number of export blockers, warnings, and notes, then lists the issues grouped in that order. The structural fairness score and its subscores are in the folded **Structural fairness** section at the end.
 
 - **Error:** blocks direct install and ready ZIP.
 - **Warning:** does not block export but identifies compatibility or quality risk.
@@ -980,7 +988,7 @@ Projects saved by current source can contain optional analysis requirements, hos
 
 Choose **Install / export -> Editable project JSON** for a portable backup named `<map-name>.atlas.json`. Host packages and direct installs also include `atlas_project.json`; player ZIPs deliberately do not.
 
-Choose **Open project** and select either file to reopen it. The importer accepts up to 16 MiB of UTF-8 Atlas schema-v1 JSON with at most 8 planes and 800 provinces per plane. It does not open ZIP, `.map`, `.d6m`, custom catalog JSON, or arbitrary JSON.
+Choose **File -> Open project…** and select either file to reopen it. **File -> Download project JSON** saves the same `<map-name>.atlas.json` backup from the header. The importer accepts up to 16 MiB of UTF-8 Atlas schema-v1 JSON with at most 8 planes and 800 provinces per plane. It does not open ZIP, `.map`, `.d6m`, custom catalog JSON, or arbitrary JSON.
 
 After choosing **Add plane to plan**, the new plane has no provinces until generation. That planned state round-trips through autosave and project JSON, but it remains a playable-export error until you configure the plan and Generate.
 
@@ -1077,6 +1085,8 @@ When the map has keyboard focus:
 - Arrow navigation never applies Start, Throne, Link, Gate, or Site.
 
 For the setup and inspector tab groups, Arrow keys move between tabs and Home/End jumps to the first/last tab.
+
+Press `/` to open **Find a province** from anywhere except a text field, select box, or open dialog; Escape closes the search and returns focus to it. In the header **File** menu, Tab moves through the actions and Escape closes the menu.
 
 In catalog fields, type a name or ID, use Up/Down to move through results, Enter to commit, and Escape to close and restore the previous value. Nation, population-type and fort fields accept numeric IDs (including `#15`) or an exact unique name on blur. An ambiguous name such as **Agartha**, which exists in several eras, keeps the previous value and asks you to choose a result. Only explicitly clearing the field removes its assignment. Unit and site fields still accept raw mod references.
 

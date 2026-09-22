@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ChangeEvent,
   type CSSProperties,
   type KeyboardEvent,
@@ -262,6 +263,11 @@ const CONDITIONS: Array<{ value: PreviewCondition; label: string }> = [
   { value: "wasted", label: "Wasted" },
   { value: "farmland", label: "Farmland" },
 ];
+const CONDITION_PREVIEW_NOTE = "Illustrative preview, not a temperature simulation. Winter skips water and caves; Cloud/Air dry islands are included, while other special realms keep their normal palette. Warmer/Colder affect eligible dry land.";
+/** Matches the single-column CSS layout, where panels stack below the map. */
+const NARROW_LAYOUT_QUERY = "(max-width: 979px)";
+/** Below this width the map column is too narrow for the full legend to stay open by default. */
+const COMPACT_MAP_QUERY = "(max-width: 1220px)";
 
 const TOOL_ITEMS: Array<{ id: Tool; mark: string; label: string; hint: string }> = [
   { id: "select", mark: "⌖", label: "Select", hint: "Inspect and edit provinces" },
@@ -455,6 +461,16 @@ export function MapMakerApp() {
   const [autosaveState, setAutosaveState] = useState<AutosaveState>({ backend: "none", errors: [], migrated: false });
   const [autosaveSaving, setAutosaveSaving] = useState(false);
   const [userCatalog, setUserCatalog] = useState<Dom6CatalogBundle>();
+  const [fileMenuOpen, setFileMenuOpen] = useState(false);
+  const fileMenuRef = useRef<HTMLDivElement>(null);
+  const findRef = useRef<HTMLDivElement>(null);
+  const compactMap = useMediaQuery(COMPACT_MAP_QUERY);
+  // The legend starts folded where it would cover much of a narrow map; an explicit toggle wins.
+  const [legendPreference, setLegendPreference] = useState<boolean>();
+  const legendOpen = legendPreference ?? !compactMap;
+  const leftPanelRef = useRef<HTMLElement>(null);
+  const canvasColumnRef = useRef<HTMLElement>(null);
+  const rightPanelRef = useRef<HTMLElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const catalogImportRef = useRef<HTMLInputElement>(null);
   const generationTaskRef = useRef<ProjectGenerationTask | undefined>(undefined);
@@ -632,6 +648,58 @@ export function MapMakerApp() {
     const timeout = window.setTimeout(() => setToast(undefined), 3600);
     return () => window.clearTimeout(timeout);
   }, [toast]);
+
+  useEffect(() => {
+    const findElement = findRef.current;
+    const findDetails = () => findElement?.querySelector("details") ?? undefined;
+    const focusFindInput = () => window.requestAnimationFrame(() => {
+      const input = findDetails()?.querySelector<HTMLInputElement>('input[type="search"]');
+      input?.focus();
+      input?.select();
+    });
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target instanceof Node ? event.target : null;
+      if (!fileMenuRef.current?.contains(target)) setFileMenuOpen(false);
+      const details = findDetails();
+      if (details?.open && !findElement?.contains(target)) details.open = false;
+    };
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        const details = findDetails();
+        if (details?.open && findElement?.contains(document.activeElement)) {
+          event.preventDefault();
+          details.open = false;
+          details.querySelector("summary")?.focus();
+        }
+        if (fileMenuRef.current?.contains(document.activeElement)) {
+          setFileMenuOpen(false);
+          fileMenuRef.current.querySelector<HTMLButtonElement>(".file-menu-trigger")?.focus();
+        }
+        return;
+      }
+      // "/" jumps to province search unless the user is typing or a dialog owns the keyboard.
+      if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented) return;
+      if (isShortcutBlockedTarget(event.target) || document.querySelector('[aria-modal="true"]')) return;
+      const details = findDetails();
+      if (!details) return;
+      event.preventDefault();
+      details.open = true;
+      if (window.matchMedia?.(NARROW_LAYOUT_QUERY)?.matches) findElement?.scrollIntoView({ block: "nearest" });
+      focusFindInput();
+    };
+    const handleToggle = (event: Event) => {
+      const details = findDetails();
+      if (event.target === details && details.open) focusFindInput();
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    findElement?.addEventListener("toggle", handleToggle, true);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+      findElement?.removeEventListener("toggle", handleToggle, true);
+    };
+  }, []);
 
   useEffect(() => () => {
     importGuardRef.current.cancel();
@@ -906,6 +974,32 @@ export function MapMakerApp() {
     setSelectedId(undefined);
     setLeftTab("planes");
     setToast("Plane added to the generation plan. Configure it, then generate the atlas.");
+  };
+
+  /** Stacked narrow layouts scroll to the section a command opened; wide layouts already show every panel. */
+  const revealSection = (element: HTMLElement | null, always = false) => {
+    if (!element || (!always && !window.matchMedia?.(NARROW_LAYOUT_QUERY)?.matches)) return;
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    element.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+  };
+
+  const openSetupTab = (tab: LeftTab) => {
+    setLeftTab(tab);
+    revealSection(leftPanelRef.current);
+  };
+
+  const goToGenerate = () => {
+    setLeftTab("generate");
+    window.requestAnimationFrame(() => {
+      const button = leftPanelRef.current?.querySelector<HTMLButtonElement>(".generate-button");
+      button?.scrollIntoView({ block: "center" });
+      button?.focus({ preventScroll: true });
+    });
+  };
+
+  const closeFind = () => {
+    const details = findRef.current?.querySelector("details");
+    if (details) details.open = false;
   };
 
   const importCatalog = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -1258,8 +1352,15 @@ export function MapMakerApp() {
           </span>
         </div>
         <div className="top-actions">
-          <button className="button quiet" type="button" aria-haspopup="dialog" onClick={() => setDestructiveConfirmation({ kind: "new-atlas" })}>New atlas</button>
-          <button className="button quiet" type="button" disabled={!hydrated || autosaveSaving} onClick={() => { void saveAutosaveNow(false); }}>Save now</button>
+          <div className="file-menu" ref={fileMenuRef} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFileMenuOpen(false); }}>
+            <button className="button quiet file-menu-trigger" type="button" aria-expanded={fileMenuOpen} aria-controls="file-menu-actions" title="New atlas, Open project, Save now, Download project JSON" onClick={() => setFileMenuOpen((open) => !open)}>File <span aria-hidden="true">▾</span></button>
+            {fileMenuOpen && <div id="file-menu-actions" className="file-menu-panel" role="group" aria-label="Project file actions">
+              <button className="menu-item" type="button" aria-haspopup="dialog" title="Replace this atlas with a fresh default project (asks first)" onClick={() => { setFileMenuOpen(false); setDestructiveConfirmation({ kind: "new-atlas" }); }}>New atlas</button>
+              <button className="menu-item" type="button" title="Open an Atlas project" onClick={() => { setFileMenuOpen(false); importRef.current?.click(); }}>Open project…</button>
+              <button className="menu-item" type="button" title="Save this atlas to device autosave now" disabled={!hydrated || autosaveSaving} onClick={() => { setFileMenuOpen(false); void saveAutosaveNow(false); }}>Save now</button>
+              <button className="menu-item" type="button" title="Download an editable backup you can reopen with Open project" onClick={() => { setFileMenuOpen(false); downloadProject(project); setToast("Editable project downloaded."); }}>Download project JSON</button>
+            </div>}
+          </div>
           <button className="icon-button" type="button" onClick={handleUndo} disabled={!undoStack.length} title="Undo" aria-label="Undo">↶</button>
           <button className="icon-button" type="button" onClick={handleRedo} disabled={!redoStack.length} title="Redo" aria-label="Redo">↷</button>
           <button className="button quiet" type="button" onClick={() => setValidationOpen(true)}>
@@ -1268,6 +1369,12 @@ export function MapMakerApp() {
           <button className="button primary" type="button" onClick={() => setExportOpen(true)}>Install / export</button>
         </div>
       </header>
+
+      <nav className="narrow-nav" aria-label="Workbench sections">
+        <button type="button" onClick={() => revealSection(canvasColumnRef.current, true)}>Map</button>
+        <button type="button" onClick={() => revealSection(rightPanelRef.current, true)}>{selected ? `Province ${selected.index}` : "Province"}</button>
+        <button type="button" onClick={() => revealSection(leftPanelRef.current, true)}>Setup</button>
+      </nav>
 
       {autosaveState.conflict && <section className="autosave-conflict" role="alert" aria-live="assertive">
         <div>{autosaveState.conflict.reason === "unreadable-copy"
@@ -1282,8 +1389,7 @@ export function MapMakerApp() {
       </section>}
 
       <div className="workbench">
-        <aside className="left-panel panel">
-          <ProvinceExplorer project={project} onSelect={inspectProvince} />
+        <aside className="left-panel panel" ref={leftPanelRef} aria-label="Setup panel">
           <div className="tab-row compact-tabs" role="tablist" aria-label="Map setup">
             {LEFT_TABS.map((tab) => (
               <button key={tab} id={`setup-tab-${tab}`} type="button" role="tab" tabIndex={leftTab === tab ? 0 : -1} aria-selected={leftTab === tab} aria-controls="setup-active-panel" className={leftTab === tab ? "active" : ""} onClick={() => setLeftTab(tab)} onKeyDown={(event) => handleTabKey(event, LEFT_TABS, leftTab, setLeftTab)}>
@@ -1641,7 +1747,7 @@ export function MapMakerApp() {
           )}
         </aside>
 
-        <section className="canvas-column">
+        <section className="canvas-column" ref={canvasColumnRef} aria-label="Map">
           <div className="canvas-toolbar">
             <div className="tool-group" role="toolbar" aria-label="Map tools">
               {TOOL_ITEMS.map((item) => (
@@ -1657,54 +1763,81 @@ export function MapMakerApp() {
               ))}
             </div>
             <div className="canvas-controls">
-              {armedStatus && <div className="pending-link">
-                <span role="status" aria-live="polite" aria-atomic="true" title={armedStatus}>{armedStatus}</span>
-                <button type="button" onClick={() => { setLinkSource(undefined); setGateSource(undefined); }}>Cancel endpoint</button>
-              </div>}
-              <label>Condition preview <ScopeBadge scope="Preview only" />
+              <div className="map-find" ref={findRef}>
+                <ProvinceExplorer project={project} onSelect={(reference) => { inspectProvince(reference); closeFind(); revealSection(rightPanelRef.current); }} />
+                <kbd className="map-find-key" aria-hidden="true" title="Press / to find a province">/</kbd>
+              </div>
+              <label title={CONDITION_PREVIEW_NOTE}>Condition preview <ScopeBadge scope="Preview only" />
                 <select value={preview} onChange={(event) => setPreview(event.target.value as PreviewCondition)}>
                   {CONDITIONS.map((condition) => <option value={condition.value} key={condition.value}>{condition.label}</option>)}
                 </select>
               </label>
-              <small className="condition-preview-note">Illustrative preview, not a temperature simulation. Winter skips water and caves; Cloud/Air dry islands are included, while other special realms keep their normal palette. Warmer/Colder affect eligible dry land.</small>
+              <details className="toolbar-popover">
+                <summary aria-label="About condition previews" title="About condition previews">?</summary>
+                <p className="condition-preview-note">{CONDITION_PREVIEW_NOTE}</p>
+              </details>
             </div>
           </div>
           <div className="map-stage">
-            <MapCanvas key={activePlane.id} plane={activePlane} selectedId={selectedId} previewCondition={preview} markerAnnotations={activePlaneMarkerAnnotations} analysisProvinceIds={analysisProvinceIds} onNavigate={setSelectedId} onActivate={handleProvinceClick} onZoomChange={setZoom} tool={tool} />
-            {currentAnalysis && <div className="analysis-region-banner" role="status"><span>Teal: {currentAnalysis.kind === "iteration" ? `${currentAnalysis.label} · selected provinces` : `${currentAnalysis.label}, 2-step region · ${currentAnalysis.mode === "structural" ? "potential" : "conservative"} routes`} · preview only</span><button type="button" onClick={() => setAnalysisSelection(undefined)}>Clear highlight</button></div>}
-            {!currentAnalysis && <div className="map-title-card">
+            <MapCanvas key={activePlane.id} plane={activePlane} selectedId={selectedId} previewCondition={preview} markerAnnotations={activePlaneMarkerAnnotations} analysisProvinceIds={analysisProvinceIds} onNavigate={setSelectedId} onActivate={(provinceId) => {
+              handleProvinceClick(provinceId);
+              if (tool === "select") revealSection(rightPanelRef.current);
+            }} onZoomChange={setZoom} tool={tool} />
+            {(armedStatus || currentAnalysis) && <div className="map-banners">
+              {armedStatus && <div className="pending-link">
+                <span role="status" aria-live="polite" aria-atomic="true">{armedStatus}</span>
+                <button type="button" onClick={() => { setLinkSource(undefined); setGateSource(undefined); }}>Cancel endpoint</button>
+              </div>}
+              {currentAnalysis && <div className="analysis-region-banner" role="status"><span>Teal: {currentAnalysis.kind === "iteration" ? `${currentAnalysis.label} · selected provinces` : `${currentAnalysis.label}, 2-step region · ${currentAnalysis.mode === "structural" ? "potential" : "conservative"} routes`} · preview only</span><button type="button" onClick={() => setAnalysisSelection(undefined)}>Clear highlight</button></div>}
+            </div>}
+            {!currentAnalysis && !armedStatus && activePlane.provinces.length > 0 && <div className="map-title-card">
               <span>{activePlane.kind}</span>
               <strong>{activePlane.name}</strong>
               <small>{activePlane.provinces.length} provinces · {activePlane.width}×{activePlane.height}</small>
+              {preview !== "normal" && <em>{CONDITIONS.find((condition) => condition.value === preview)?.label} preview · illustrative only</em>}
+            </div>}
+            {!activePlane.provinces.length && <div className="draft-plane-overlay">
+              <section className="draft-plane-card" aria-labelledby="draft-plane-title">
+                <p className="eyebrow">DRAFT PLANE · {(PLANE_KINDS.find((item) => item.value === activePlane.kind)?.label ?? activePlane.kind).toLocaleUpperCase()}</p>
+                <h2 id="draft-plane-title">Draft plane — Generate to create provinces</h2>
+                <p>{activePlane.name} is in the generation plan but has no provinces yet. Generate builds every planned plane together; review its archetype, size and links on the Planes tab first if needed.</p>
+                <div className="draft-plane-actions">
+                  <button className="button primary" type="button" onClick={goToGenerate}>Go to Generate</button>
+                  <button className="button quiet" type="button" onClick={() => openSetupTab("planes")}>Configure on Planes tab</button>
+                </div>
+              </section>
             </div>}
             <div className="map-legend">
-              <span><i className="legend-border" />Shared border = connected</span>
-              <span><b>S/#/N</b> Generic/team/nation start</span>
-              <span><b>♜/♛/×</b> Preferred/fixed/avoid throne</span>
-              <span><b>✦/M</b> Placed/many sites</span>
-              <span><b>G</b> Guardians</span>
-              <span><b>◎</b> Gateway</span>
+              <button className="map-legend-toggle" type="button" aria-expanded={legendOpen} onClick={() => setLegendPreference(!legendOpen)}>Legend <span aria-hidden="true">{legendOpen ? "▾" : "▸"}</span></button>
+              {legendOpen && <>
+                <span><i className="legend-border" />Shared border = connected</span>
+                <span><b>S/#/N</b> Generic/team/nation start</span>
+                <span><b>♜/♛/×</b> Preferred/fixed/avoid throne</span>
+                <span><b>✦/M</b> Placed/many sites</span>
+                <span><b>G</b> Guardians</span>
+                <span><b>◎</b> Gateway</span>
+              </>}
             </div>
           </div>
           <div className="plane-strip" role="group" aria-label="Plane selector">
             {project.planes.map((plane, index) => (
-              <button key={plane.id} type="button" className={plane.id === activePlane.id ? "active" : ""} aria-pressed={plane.id === activePlane.id} onClick={() => { setActivePlaneId(plane.id); setSelectedId(undefined); }}>
-                <span>{index + 1}</span><strong>{plane.name}</strong><small>{plane.provinces.length}</small>
+              <button key={plane.id} type="button" className={plane.id === activePlane.id ? "active" : ""} aria-pressed={plane.id === activePlane.id} title={`${PLANE_KINDS.find((item) => item.value === plane.kind)?.label ?? plane.kind} · ${plane.provinces.length ? `${plane.provinces.length} provinces` : "draft, not generated"} · ${plane.width}×${plane.height}`} onClick={() => { setActivePlaneId(plane.id); setSelectedId(undefined); }}>
+                <span>{index + 1}</span><strong>{plane.name}</strong><small>{plane.provinces.length || "Draft"}</small>
               </button>
             ))}
-            {project.planes.length < MAX_PLANES && <button className="add-plane-mini" type="button" onClick={() => setLeftTab("planes")}>+ Plane</button>}
+            {project.planes.length < MAX_PLANES && <button className="add-plane-mini" type="button" title="Add a draft plane to the generation plan, then configure it on the Planes tab" onClick={stagePlane}>+ Add plane</button>}
           </div>
         </section>
 
-        <aside className="right-panel panel">
+        <aside className="right-panel panel" ref={rightPanelRef} aria-label="Province inspector">
           {selected ? (
             <>
               <div className="province-header">
                 <div>
                   <p className="eyebrow">PROVINCE {selected.index}</p>
                   <input maxLength={MAX_IMPORTED_STRING_LENGTH} value={selected.name} onChange={(event) => updateSelected((province) => { province.name = event.target.value; province.nameSource = "authored"; })} aria-label="Province name" />
+                  <p className="inspector-scope"><ScopeBadge scope="Current Map" /><span>Edits apply immediately; Undo reverts.</span></p>
                 </div>
-                <details className="terrain-mask"><summary>Terrain mask</summary><code>{terrainMask(selected).toString()}</code></details>
               </div>
               <div className="tab-row inspector-tabs" role="tablist" aria-label="Province inspector">
                 {INSPECTOR_TABS.map((tab) => (
@@ -1715,29 +1848,45 @@ export function MapMakerApp() {
               </div>
               <div id="inspector-active-panel" className="panel-scroll inspector-scroll" role="tabpanel" aria-labelledby={`inspector-tab-${inspectorTab}`}>
                 {inspectorTab === "terrain" && <TerrainInspector catalog={catalog} planeId={activePlane.id} province={selected} update={updateSelected} mutateProject={mutate} />}
-                {inspectorTab === "gameplay" && <><GameplayInspector catalog={catalog} project={project} planeId={activePlane.id} province={selected} update={updateSelected} mutateProject={mutate} />
-                  <div className="inspector-stack"><PopulationDefenseProvinceStatus project={project} catalog={catalog} planeId={activePlane.id} provinceId={selected.id} onConfigure={() => setLeftTab("scenario")} /></div>
-                </>}
+                {inspectorTab === "gameplay" && <GameplayInspector catalog={catalog} project={project} planeId={activePlane.id} province={selected} update={updateSelected} mutateProject={mutate} />}
                 {inspectorTab === "sites" && <SitesDefenseInspector
                   catalog={catalog}
                   plane={activePlane}
                   province={selected}
                   protectedStart={selected.start || selected.teamStart !== undefined || project.specificStarts.some((start) => start.planeId === activePlane.id && start.provinceId === selected.id)}
                   update={updateSelected}
-                  populationDefenseStatus={<PopulationDefenseProvinceStatus project={project} catalog={catalog} planeId={activePlane.id} provinceId={selected.id} onConfigure={() => setLeftTab("scenario")} />}
+                  populationDefenseStatus={<PopulationDefenseProvinceStatus project={project} catalog={catalog} planeId={activePlane.id} provinceId={selected.id} onConfigure={() => openSetupTab("scenario")} />}
                 />}
-                {inspectorTab === "advanced" && <AdvancedInspector project={project} planeId={activePlane.id} province={selected} update={updateSelected} mutateProject={mutate} />}
+                {inspectorTab === "advanced" && <AdvancedInspector project={project} planeId={activePlane.id} province={selected} update={updateSelected} mutateProject={mutate} onOpenPlanes={() => openSetupTab("planes")} />}
               </div>
             </>
           ) : (
             <div className="empty-inspector">
-              <span className="empty-sigil">⌖</span>
+              <span className="empty-sigil" aria-hidden="true">⌖</span>
               <p className="eyebrow">PROVINCE INSPECTOR</p>
               <h2>Select a province</h2>
-              <p>Inspect terrain, starts, thrones, magic sites, unique guardians, battle scenery, and raw map commands.</p>
+              <p>Click a province on the map to inspect terrain, starts, thrones, magic sites, unique guardians, battle scenery, and raw map commands.</p>
               <div className="selection-hints">
-                <span><kbd>Scroll</kbd> zoom</span><span><kbd>Drag</kbd> pan</span><span><kbd>Arrows</kbd> next province</span>
+                <span><kbd>Scroll</kbd> zoom</span><span><kbd>Drag</kbd> pan</span><span><kbd>Arrows</kbd> next province</span><span><kbd>/</kbd> find a province</span>
               </div>
+              <section className="getting-started" aria-labelledby="getting-started-title">
+                <h3 id="getting-started-title">Getting started</h3>
+                <ol>
+                  {([
+                    ["generate", "Generate", "Seed, players, provinces per player and start allocation"],
+                    ["planes", "Planes", "Add and configure every plane and its planned links"],
+                    ["scenario", "Scenario", "Hosting restrictions; then Generate balanced atlas"],
+                    ["validate", "Validate", errorCount ? `${errorCount} export blocker${errorCount === 1 ? "" : "s"} to resolve` : "No export blockers; review any warnings"],
+                    ["install", "Install", "Install directly or download a ready ZIP"],
+                  ] as Array<[LeftTab | "validate" | "install", string, string]>).map(([step, label, detail], index) => <li key={step}>
+                    <button type="button" aria-haspopup={step === "validate" || step === "install" ? "dialog" : undefined} onClick={() => {
+                      if (step === "validate") setValidationOpen(true);
+                      else if (step === "install") setExportOpen(true);
+                      else openSetupTab(step);
+                    }}><b aria-hidden="true">{index + 1}</b><span><strong>{label}</strong><small>{detail}</small></span></button>
+                  </li>)}
+                </ol>
+              </section>
             </div>
           )}
         </aside>
@@ -1771,6 +1920,8 @@ export function MapMakerApp() {
         if (issue.planeId) setActivePlaneId(issue.planeId);
         if (issue.provinceId) setSelectedId(issue.provinceId);
         setValidationOpen(false);
+        // Closing the drawer restores header focus first; reveal the inspector afterwards on narrow layouts.
+        if (issue.provinceId) window.requestAnimationFrame(() => revealSection(rightPanelRef.current));
       }} />}
 
       {exportOpen && <ExportDialog
@@ -1793,7 +1944,6 @@ export function MapMakerApp() {
 
       <input ref={importRef} className="sr-only" type="file" tabIndex={-1} aria-hidden="true" accept=".json,.atlas.json,application/json" onChange={importProject} />
       <input ref={catalogImportRef} className="sr-only" type="file" tabIndex={-1} aria-hidden="true" accept=".json,application/json" onChange={importCatalog} />
-      <button className="import-fab" type="button" onClick={() => importRef.current?.click()} title="Open an Atlas project">Open project</button>
       {actionError && <ActionErrorAlert key={actionError.sequence} error={actionError} onDismiss={() => setActionError(undefined)} />}
       {toast && <div className="toast" role="status">{toast}</div>}
     </main>
@@ -1812,9 +1962,16 @@ function TerrainInspector({ catalog, planeId, province, update, mutateProject }:
         mutateProject((draft) => { applyPrimaryTerrain(draft, planeId, province.id, terrain, catalog); });
       }}>{TERRAIN_KEYS.map((key) => <option value={key} key={key}>{TERRAIN_LABELS[key]}</option>)}</select></Field>
       <Field scope="Saved note only" label="Biome (descriptive only)"><select value={province.biome} onChange={(event) => update((item) => { item.biome = event.target.value as BiomeKey; })}>{BIOME_KEYS.map((key) => <option value={key} key={key}>{BIOME_LABELS[key]}</option>)}</select></Field>
-      <div className="choice-grid">
-        <CheckCard label="Small province" checked={province.small} onChange={(value) => update((item) => { item.small = value; if (value) item.large = false; })} />
-        <CheckCard label="Large province" checked={province.large} onChange={(value) => update((item) => { item.large = value; if (value) item.small = false; })} />
+      <div className="field-grid two">
+        {/* Small/Large and Warmer/Colder are mutually exclusive terrain bits. */}
+        <Field label="Province size"><select value={province.large ? "large" : province.small ? "small" : "normal"} onChange={(event) => update((item) => { item.small = event.target.value === "small"; item.large = event.target.value === "large"; })}>
+          <option value="normal">Normal</option><option value="small">Small province</option><option value="large">Large province</option>
+        </select></Field>
+        <Field label="Climate"><select value={province.warmer ? "warmer" : province.colder ? "colder" : "normal"} onChange={(event) => update((item) => { item.warmer = event.target.value === "warmer"; item.colder = event.target.value === "colder"; })}>
+          <option value="normal">Normal</option><option value="warmer">Warmer</option><option value="colder">Colder</option>
+        </select></Field>
+      </div>
+      <div className="choice-grid three">
         <CheckCard label="No random start" checked={province.noStart} onChange={(value) => update((item) => { item.noStart = value; if (value) item.start = false; })} />
         <CheckCard label="Many sites" checked={province.manySites} onChange={(value) => update((item) => { item.manySites = value; })} />
         <CheckCard label="Fresh-water marker" checked={effectiveFlags.has("freshwater")} onChange={(value) => update((item) => {
@@ -1822,12 +1979,10 @@ function TerrainInspector({ catalog, planeId, province, update, mutateProject }:
           item.terrainFlags = item.terrainFlags?.filter((flag) => flag !== "freshwater");
           if (!item.terrainFlags?.length) item.terrainFlags = undefined;
         })} />
-        <CheckCard label="Warmer" checked={province.warmer} onChange={(value) => update((item) => { item.warmer = value; if (value) item.colder = false; })} />
-        <CheckCard label="Colder" checked={province.colder} onChange={(value) => update((item) => { item.colder = value; if (value) item.warmer = false; })} />
       </div>
       <Divider />
       <SectionHeading kicker="ADDITIVE BITMASK" title="Additional terrain flags" />
-      <p className="microcopy">Primary terrain contributes {([...inherentFlags].map((flag) => TERRAIN_FLAG_LABELS[flag]).join(" + ") || "plain land")}. Add any legal Dominions combination below; the manual recommends no more than two adverse types.</p>
+      <p className="microcopy">Primary terrain contributes {([...inherentFlags].map((flag) => TERRAIN_FLAG_LABELS[flag]).join(" + ") || "plain land")}.</p>
       <div className="choice-grid">
         {additionalFlags.map((flag) => <CheckCard
           key={flag}
@@ -1839,14 +1994,20 @@ function TerrainInspector({ catalog, planeId, province, update, mutateProject }:
           })}
         />)}
       </div>
-      <p className="field-note">Effective mask: {[...effectiveFlags].map((flag) => TERRAIN_FLAG_LABELS[flag]).join(" + ") || "plain land"}. Sea + Mountains enables underwater-mountain sites; Sea + Forest is kelp/underwater forest. Fresh water remains a land marker unless Sea is also set.</p>
-      <p className="field-note">Cave Wall blocks the province and clears all starts, throne setup, catalogued throne sites, and guardian groups. Undo restores the previous contents. Raw province commands are preserved; recognized guardian and throne-site commands block export.</p>
+      <p className="field-note">Effective mask: {[...effectiveFlags].map((flag) => TERRAIN_FLAG_LABELS[flag]).join(" + ") || "plain land"}.</p>
+      <details className="inspector-about">
+        <summary>About terrain flags</summary>
+        <div className="details-body">
+          <p className="microcopy">Add any legal Dominions combination; the manual recommends no more than two adverse types. Sea + Mountains enables underwater-mountain sites; Sea + Forest is kelp/underwater forest. Fresh water remains a land marker unless Sea is also set.</p>
+          <p className="microcopy">Cave Wall blocks the province and clears all starts, throne setup, catalogued throne sites, and guardian groups. Undo restores the previous contents. Raw province commands are preserved; recognized guardian and throne-site commands block export.</p>
+          <div className="info-card"><strong>Terrain changes update the artwork</strong><p>Combined flags appear together: fields for Farm, trees, kelp or cavern growth for Forest, and cave details for Cave. The map and PNG update immediately; zoom in for small details. Export again for a new Dominions game. Native scenery uses the game’s renderer; Illustrated realms packages Atlas’s procedural realm artwork with terrain and winter image sheets.</p></div>
+        </div>
+      </details>
       <Divider />
       <SectionHeading kicker="SITE AFFINITY" title="Magic path bias" />
       <div className="path-grid">
         {MAGIC_PATHS.map((path) => <CheckCard key={path} compact label={MAGIC_PATH_LABELS[path]} checked={province.siteBias.includes(path)} onChange={(value) => update((item) => { item.siteBias = value ? [...new Set([...item.siteBias, path])] : item.siteBias.filter((entry) => entry !== path); })} />)}
       </div>
-      <div className="info-card"><strong>Terrain changes update the artwork</strong><p>Combined flags appear together: fields for Farm, trees, kelp or cavern growth for Forest, and cave details for Cave. The map and PNG update immediately; zoom in for small details. Export again for a new Dominions game. Native scenery uses the game’s renderer; Illustrated realms packages Atlas’s procedural realm artwork with terrain and winter image sheets.</p></div>
     </div>
   );
 }
@@ -1855,6 +2016,8 @@ function GameplayInspector({ catalog, project, planeId, province, update, mutate
   const specific = project.specificStarts.find((start) => start.planeId === planeId && start.provinceId === province.id);
   const plane = project.planes.find((item) => item.id === planeId)!;
   const playableNations = playerNationEntries(catalog.nations);
+  const ownershipOverrides = [province.owner, province.poptype, province.fort, province.population, province.unrest, province.provinceDefense]
+    .filter((value) => value !== undefined).length + Number(province.temple) + Number(province.lab);
   return (
     <div className="inspector-stack">
       <SectionHeading kicker="MULTIPLAYER" title="Starts & thrones" />
@@ -1879,20 +2042,22 @@ function GameplayInspector({ catalog, project, planeId, province, update, mutate
       {province.throne === "fixed" && <CatalogCombobox label="Fixed throne site" value={province.fixedThrone} entries={catalog.sites.filter((entry) => entry.tags?.includes("throne"))} getEntryStatus={(entry) => siteCompatibility(entry, province, plane)} onCommit={(value) => update((item) => { item.fixedThrone = value || undefined; })} placeholder="Search throne name or ID" />}
       {province.throne === "fixed" && <p className="warning-copy">Fixed thrones use a magic-site feature and can conflict with a unique site selected randomly. Preferred locations are the reliable multiplayer default.</p>}
       <Divider />
-      <SectionHeading kicker="PROVINCE SETUP" title="Ownership & economy" />
-      <div className="catalog-field-grid">
-        <CatalogCombobox numericOnly label="Owner nation" value={province.owner} entries={catalog.nations} placeholder="Search nation name or ID" onCommit={(value) => update((item) => { item.owner = optionalNumber(value); if (item.owner !== undefined && [0, 2, 4].includes(item.owner)) item.provinceDefense = undefined; })} />
-        <CatalogCombobox numericOnly label="Population type" value={province.poptype} entries={catalog.poptypes} placeholder="Search poptype name or ID" onCommit={(value) => update((item) => { item.poptype = optionalNumber(value); })} />
-        <CatalogCombobox numericOnly label="Fortification" value={province.fort} entries={catalog.forts} placeholder="Search fort name or ID" onCommit={(value) => update((item) => { item.fort = optionalNumber(value); })} />
-      </div>
-      <div className="field-grid two">
-        <OptionalNumberField label="Population" value={province.population} min={0} max={50000} onChange={(value) => update((item) => { item.population = value; })} />
-        <OptionalNumberField label="Unrest" value={province.unrest} min={0} max={500} onChange={(value) => update((item) => { item.unrest = value; })} />
-        <OptionalNumberField label="Owned PD level" value={province.provinceDefense} min={0} max={125} disabled={province.owner !== undefined && [0, 2, 4].includes(province.owner)} onChange={(value) => update((item) => { item.provinceDefense = value; })} />
-      </div>
-      <p className="microcopy">The map manual guarantees that poptype changes local recruitment, not the initial independent army. It does not define separate PD-roster IDs. Owned PD level only applies when a playable owner nation is set.</p>
-      <Toggle label="Temple" checked={province.temple} onChange={(value) => update((item) => { item.temple = value; })} />
-      <Toggle label="Laboratory" checked={province.lab} onChange={(value) => update((item) => { item.lab = value; })} />
+      {/* Collapsed until the province has an override; the key restores that default per province. */}
+      <InspectorSection key={province.id} kicker="PROVINCE SETUP" title="Ownership & economy" status={ownershipOverrides ? `${ownershipOverrides} override${ownershipOverrides === 1 ? "" : "s"} set` : "Game defaults · no overrides"} defaultOpen={ownershipOverrides > 0}>
+        <div className="catalog-field-grid">
+          <CatalogCombobox numericOnly label="Owner nation" value={province.owner} entries={catalog.nations} placeholder="Search nation name or ID" onCommit={(value) => update((item) => { item.owner = optionalNumber(value); if (item.owner !== undefined && [0, 2, 4].includes(item.owner)) item.provinceDefense = undefined; })} />
+          <CatalogCombobox numericOnly label="Population type" value={province.poptype} entries={catalog.poptypes} placeholder="Search poptype name or ID" onCommit={(value) => update((item) => { item.poptype = optionalNumber(value); })} />
+          <CatalogCombobox numericOnly label="Fortification" value={province.fort} entries={catalog.forts} placeholder="Search fort name or ID" onCommit={(value) => update((item) => { item.fort = optionalNumber(value); })} />
+        </div>
+        <div className="field-grid two">
+          <OptionalNumberField label="Population" value={province.population} min={0} max={50000} onChange={(value) => update((item) => { item.population = value; })} />
+          <OptionalNumberField label="Unrest" value={province.unrest} min={0} max={500} onChange={(value) => update((item) => { item.unrest = value; })} />
+          <OptionalNumberField label="Owned PD level" value={province.provinceDefense} min={0} max={125} disabled={province.owner !== undefined && [0, 2, 4].includes(province.owner)} onChange={(value) => update((item) => { item.provinceDefense = value; })} />
+        </div>
+        <p className="microcopy">The map manual guarantees that poptype changes local recruitment, not the initial independent army. It does not define separate PD-roster IDs. Owned PD level only applies when a playable owner nation is set.</p>
+        <Toggle label="Temple" checked={province.temple} onChange={(value) => update((item) => { item.temple = value; })} />
+        <Toggle label="Laboratory" checked={province.lab} onChange={(value) => update((item) => { item.lab = value; })} />
+      </InspectorSection>
     </div>
   );
 }
@@ -1920,8 +2085,11 @@ export function SitesDefenseInspector({ catalog, plane, province, protectedStart
     <div className="inspector-stack">
       <SectionHeading kicker="MAGIC SITES" title="Placed sites" />
       <Toggle label="Remove randomly generated sites" checked={province.killRandomSites} onChange={(value) => update((item) => { item.killRandomSites = value; })} />
-      <div className="catalog-filter-bar"><span>{showTerrainMismatches ? `Showing all ${siteChoices.length.toLocaleString()}` : `${siteChoices.length.toLocaleString()} terrain-compatible`} of {sitePool.length.toLocaleString()} {showSpecialSites ? "non-capital" : "ordinary"} province sites</span><button type="button" className={showTerrainMismatches ? "active" : ""} onClick={() => setShowTerrainMismatches((value) => !value)}>{showTerrainMismatches ? "Compatible only" : "Show terrain mismatches"}</button></div>
-      <div className="catalog-filter-bar"><span>{ordinarySites.length.toLocaleString()} ordinary + {(placeableSites.length - ordinarySites.length).toLocaleString()} non-random non-home sites available</span><button type="button" className={showSpecialSites ? "active" : ""} aria-pressed={showSpecialSites} onClick={() => setShowSpecialSites((value) => !value)}>{showSpecialSites ? "Ordinary sites only" : `Include all ${placeableSites.length.toLocaleString()} non-capital sites`}</button></div>
+      <div className="filter-chip-row" role="group" aria-label="Site picker filters">
+        <span>{showTerrainMismatches ? `Showing all ${siteChoices.length.toLocaleString()}` : `${siteChoices.length.toLocaleString()} terrain-compatible`} of {sitePool.length.toLocaleString()} {showSpecialSites ? "non-capital" : "ordinary"} province sites</span>
+        <button type="button" className="filter-chip" aria-pressed={showTerrainMismatches} onClick={() => setShowTerrainMismatches((value) => !value)}>Show terrain mismatches</button>
+        <button type="button" className="filter-chip" aria-pressed={showSpecialSites} onClick={() => setShowSpecialSites((value) => !value)}>{`Include all ${placeableSites.length.toLocaleString()} non-capital sites`}</button>
+      </div>
       <div className="site-list">
         {province.sites.map((site, index) => (
           <div className="site-row" key={site.id}>
@@ -1935,13 +2103,27 @@ export function SitesDefenseInspector({ catalog, plane, province, protectedStart
         ))}
       </div>
       <button className="button quiet wide" type="button" onClick={() => update((item) => { item.sites.push({ id: `site-${Date.now().toString(36)}`, value: "", known: false }); })}>+ Place magic site</button>
-      <p className="microcopy">The default picker includes the complete {ordinarySites.length.toLocaleString()}-site ordinary pool (rarity 0-4); the expanded {placeableSites.length.toLocaleString()}-site pool also includes verified non-random sites that are not nation homes. Nation home/capital sites and Thrones of Ascension stay excluded; fixed thrones are selected under Gameplay. Hidden sites use <code>#feature</code>; known sites use <code>#knownfeature</code>.</p>
+      <details className="inspector-about">
+        <summary>About these lists</summary>
+        <div className="details-body">
+          <p className="microcopy">{ordinarySites.length.toLocaleString()} ordinary + {(placeableSites.length - ordinarySites.length).toLocaleString()} non-random non-home sites available.</p>
+          <p className="microcopy">The default picker includes the complete {ordinarySites.length.toLocaleString()}-site ordinary pool (rarity 0-4); the expanded {placeableSites.length.toLocaleString()}-site pool also includes verified non-random sites that are not nation homes. Nation home/capital sites and Thrones of Ascension stay excluded; fixed thrones are selected under Gameplay. Hidden sites use <code>#feature</code>; known sites use <code>#knownfeature</code>.</p>
+        </div>
+      </details>
       <Divider />
       <SectionHeading kicker="UNIQUE INITIAL DEFENSE" title="Guardian groups" />
       {populationDefenseStatus}
-      <div className="info-card amber"><strong>Map-only boundary</strong><p>These commanders and squads are unique initial independents. Persistent purchasable PD composition is defined by a vanilla poptype or nation; a wholly new PD roster requires enabling a separate mod.</p></div>
-      <div className="catalog-filter-bar"><span>{showAllGuardianUnits ? `All ${selectableUnits.length.toLocaleString()} gameplay records available; role filters cover ${roleCommanders.length.toLocaleString()} commanders / ${roleTroops.length.toLocaleString()} troops` : `${roleCommanders.length.toLocaleString()} known commanders / ${roleTroops.length.toLocaleString()} known troops`}</span><button type="button" className={!showAllGuardianUnits ? "active" : ""} aria-pressed={!showAllGuardianUnits} onClick={() => setShowAllGuardianUnits((value) => !value)}>{showAllGuardianUnits ? "Use role-focused lists" : `Search all ${selectableUnits.length.toLocaleString()} units`}</button></div>
-      <p className="microcopy">Role-focused lists combine the pinned Inspector nation and magic-site recruitment tables, not unit-name guesses. {internalUnitCount.toLocaleString()} Test, Debug, XXX, or Unused data records are hidden from normal browsing. Dominions map commands can still instantiate any verified raw numeric ID, and an already selected hidden record remains visible.</p>
+      <div className="filter-chip-row" role="group" aria-label="Guardian unit filters">
+        <span>{showAllGuardianUnits ? `All ${selectableUnits.length.toLocaleString()} gameplay records available; role filters cover ${roleCommanders.length.toLocaleString()} commanders / ${roleTroops.length.toLocaleString()} troops` : `${roleCommanders.length.toLocaleString()} known commanders / ${roleTroops.length.toLocaleString()} known troops`}</span>
+        <button type="button" className="filter-chip" aria-pressed={!showAllGuardianUnits} title={showAllGuardianUnits ? undefined : `Turn off to search all ${selectableUnits.length.toLocaleString()} units`} onClick={() => setShowAllGuardianUnits((value) => !value)}>Use role-focused lists</button>
+      </div>
+      <details className="inspector-about">
+        <summary>About these lists</summary>
+        <div className="details-body">
+          <div className="info-card amber"><strong>Map-only boundary</strong><p>These commanders and squads are unique initial independents. Persistent purchasable PD composition is defined by a vanilla poptype or nation; a wholly new PD roster requires enabling a separate mod.</p></div>
+          <p className="microcopy">Role-focused lists combine the pinned Inspector nation and magic-site recruitment tables, not unit-name guesses. {internalUnitCount.toLocaleString()} Test, Debug, XXX, or Unused data records are hidden from normal browsing. Dominions map commands can still instantiate any verified raw numeric ID, and an already selected hidden record remains visible.</p>
+        </div>
+      </details>
       {province.defenders.map((defense, defenseIndex) => (
         <div className="defense-card" key={`${defense.commander}-${defenseIndex}`}>
           <div className="card-heading"><strong>Guardian group {defenseIndex + 1}</strong><button type="button" aria-label={`Remove guardian group ${defenseIndex + 1}`} onClick={() => update((item) => { item.defenders.splice(defenseIndex, 1); })}>Remove</button></div>
@@ -1985,7 +2167,7 @@ export function SitesDefenseInspector({ catalog, plane, province, protectedStart
   );
 }
 
-export function AdvancedInspector({ project, planeId, province, update, mutateProject }: { project: MapProject; planeId: string; province: Province; update: (recipe: (province: Province) => void) => void; mutateProject: (recipe: (project: MapProject) => void) => void }) {
+export function AdvancedInspector({ project, planeId, province, update, mutateProject, onOpenPlanes }: { project: MapProject; planeId: string; province: Province; update: (recipe: (province: Province) => void) => void; mutateProject: (recipe: (project: MapProject) => void) => void; onOpenPlanes?: () => void }) {
   const plane = project.planes.find((item) => item.id === planeId)!;
   const incident = plane.edges.filter((edge) => edge.a === province.id || edge.b === province.id);
   return (
@@ -2017,8 +2199,12 @@ export function AdvancedInspector({ project, planeId, province, update, mutatePr
         <Field label="Rock RGB"><input placeholder="0.3 0.3 0.3" value={province.battle.rockColor ?? ""} onChange={(event) => update((item) => { item.battle.rockColor = event.target.value || undefined; })} /></Field>
         <Field label="Fog RGB"><input placeholder="0.6 0.6 0.7" value={province.battle.fogColor ?? ""} onChange={(event) => update((item) => { item.battle.fogColor = event.target.value || undefined; })} /></Field>
       </div>
-      <Field label="Province directives"><textarea maxLength={MAX_IMPORTED_DIRECTIVE_LENGTH} className="code-input" rows={7} placeholder="#clearmagic\n#mag_fire 2" value={province.rawDirectives} onChange={(event) => update((item) => { item.rawDirectives = event.target.value; })} /></Field>
+      <Divider />
+      <SectionHeading kicker="RAW DOMINIONS DATA" title="Terrain mask & directives" />
+      <div className="terrain-mask-card"><span>Terrain mask</span><code>{terrainMask(province).toString()}</code><small>Decimal Dominions 64-bit value built from the Terrain tab’s primary terrain, flags and climate.</small></div>
+      <Field label="Province directives"><textarea maxLength={MAX_IMPORTED_DIRECTIVE_LENGTH} className="code-input" rows={7} placeholder={"#clearmagic\n#mag_fire 2"} value={province.rawDirectives} onChange={(event) => update((item) => { item.rawDirectives = event.target.value; })} /></Field>
       <Field label="Plane directives"><textarea maxLength={MAX_IMPORTED_DIRECTIVE_LENGTH} className="code-input" rows={5} placeholder="#maptextcol …" value={plane.rawDirectives} onChange={(event) => mutateProject((draft) => { draft.planes.find((item) => item.id === planeId)!.rawDirectives = event.target.value; })} /></Field>
+      <p className="microcopy">Plane directives apply to the whole {plane.name} plane, not only this province. They are also editable on the Planes tab.{onOpenPlanes && <>{" "}<button className="text-button" type="button" onClick={onOpenPlanes}>Open Planes tab</button></>}</p>
       <details className="coverage-list"><summary>Dominions feature coverage ({ADVANCED_COMMANDS.length} command families)</summary><div>{ADVANCED_COMMANDS.map((item) => <span key={item.command}><code>{item.command}</code><small>{item.description}</small></span>)}</div></details>
     </div>
   );
@@ -2176,14 +2362,30 @@ export function BalanceDialog({ onClose, ...props }: React.ComponentProps<typeof
   </section></div>;
 }
 
+const VALIDATION_GROUPS: Array<{ severity: ValidationIssue["severity"]; label: string; one: string; many: string; mark: string }> = [
+  { severity: "error", label: "Export blockers", one: "export blocker", many: "export blockers", mark: "!" },
+  { severity: "warning", label: "Warnings", one: "warning", many: "warnings", mark: "△" },
+  { severity: "info", label: "Info", one: "note", many: "notes", mark: "✓" },
+];
+
 function ValidationDrawer({ issues, fairness, onClose, onReview, onSelectIssue }: { issues: ValidationIssue[]; fairness: ReturnType<typeof calculateFairness>; onClose: () => void; onReview: () => void; onSelectIssue: (issue: ValidationIssue) => void }) {
   const dialogRef = useDialogFocus<HTMLElement>(onClose);
+  const groups = VALIDATION_GROUPS.map((group) => ({ ...group, issues: issues.filter((issue) => issue.severity === group.severity) }));
   return <div className="drawer-backdrop"><aside ref={dialogRef} className="validation-drawer" tabIndex={-1} aria-modal="true" role="dialog" aria-label="Map validation">
     <div className="dialog-heading"><div><p className="eyebrow">EXPORT READINESS</p><h2>Compatibility & fairness</h2></div><button type="button" onClick={onClose} aria-label="Close">×</button></div>
-    <div className="score-hero"><div className={`score-ring ${scoreClass(fairness.overall)}`} style={{ "--score": fairness.overall } as CSSProperties}><strong>{fairness.overall}</strong><small>structural</small></div><div><h3>Structural heuristics</h3><p>A high average is not proof of nation or combat balance and never overrides an export error.</p><button className="button quiet" type="button" onClick={onReview}>Inspect every start</button></div></div>
-    <div className="metric-grid">{([['Start spacing', fairness.startSeparation], ['Expansion proxy', fairness.expansionParity], ['Nearby throne parity', fairness.throneAccess], ['Start exits', fairness.startDegree], ['Terrain variety', fairness.terrainVariety], ['Connectivity', fairness.connectivity], ['Allocation', fairness.startAllocation]] as Array<[string, number]>).map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong><i><b style={{ width: `${value}%` }} /></i></div>)}</div>
-    <details className="validation-score-notes"><summary>Score assumptions and notes</summary><ul>{fairness.notes.map(note => <li key={note}>{note}</li>)}</ul></details>
-    <div className="validation-list">{issues.map((issue) => <button key={issue.id} type="button" className={`issue ${issue.severity}`} onClick={() => onSelectIssue(issue)}><span>{issue.severity === "error" ? "!" : issue.severity === "warning" ? "△" : "✓"}</span><p><strong>{issue.severity}</strong>{issue.message}</p></button>)}</div>
+    <div className="validation-body">
+      <div className="validation-counts" role="status">{groups.map((group) => <span key={group.severity} className={`validation-count ${group.severity}`}><strong>{group.issues.length}</strong> {group.issues.length === 1 ? group.one : group.many}</span>)}</div>
+      {groups.filter((group) => group.issues.length).map((group) => <section key={group.severity} className="validation-group" aria-labelledby={`validation-group-${group.severity}`}>
+        <h3 id={`validation-group-${group.severity}`}>{group.label} <span>{group.issues.length}</span></h3>
+        <div className="validation-list">{group.issues.map((issue) => <button key={issue.id} type="button" className={`issue ${issue.severity}`} onClick={() => onSelectIssue(issue)}><span>{group.mark}</span><p><strong>{issue.severity}</strong>{issue.message}</p></button>)}</div>
+      </section>)}
+      <details className="validation-fairness">
+        <summary>Structural fairness <strong className={scoreClass(fairness.overall)}>{fairness.overall}</strong><small>Heuristic only · never overrides an export error</small></summary>
+        <div className="score-hero"><div className={`score-ring ${scoreClass(fairness.overall)}`} style={{ "--score": fairness.overall } as CSSProperties}><strong>{fairness.overall}</strong><small>of 100</small></div><div><h3>Structural heuristics</h3><p>A high average is not proof of nation or combat balance and never overrides an export error.</p><button className="button quiet" type="button" onClick={onReview}>Inspect every start</button></div></div>
+        <div className="metric-grid">{([['Start spacing', fairness.startSeparation], ['Expansion proxy', fairness.expansionParity], ['Nearby throne parity', fairness.throneAccess], ['Start exits', fairness.startDegree], ['Terrain variety', fairness.terrainVariety], ['Connectivity', fairness.connectivity], ['Allocation', fairness.startAllocation]] as Array<[string, number]>).map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong><i><b style={{ width: `${value}%` }} /></i></div>)}</div>
+        <details className="validation-score-notes"><summary>Score assumptions and notes</summary><ul>{fairness.notes.map(note => <li key={note}>{note}</li>)}</ul></details>
+      </details>
+    </div>
   </aside></div>;
 }
 
@@ -2335,6 +2537,15 @@ export function PlaneStartPolicyControl({ plane, onChange }: { plane: Pick<Plane
   </>;
 }
 
+/** A collapsible inspector section whose default is chosen once; afterwards the user's open/closed choice wins. */
+function InspectorSection({ kicker, title, status, defaultOpen, children }: { kicker: string; title: string; status: string; defaultOpen: boolean; children: ReactNode }) {
+  const [initiallyOpen] = useState(defaultOpen);
+  return <details className="inspector-section" open={initiallyOpen}>
+    <summary><span className="eyebrow">{kicker}</span><strong>{title}</strong><small>{status}</small></summary>
+    <div className="details-body">{children}</div>
+  </details>;
+}
+
 function CheckCard({ label, checked, onChange, compact = false }: { label: string; checked: boolean; onChange: (value: boolean) => void; compact?: boolean }) { return <label className={`check-card ${compact ? "compact" : ""} ${checked ? "checked" : ""}`}><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} /><i>{checked ? "✓" : ""}</i><span>{label}</span></label>; }
 
 export function CaveStartNationField({ values, caveStartCount, hasCaveFamilyPlane, entries, onChange }: {
@@ -2461,6 +2672,27 @@ const NON_TEXT_INPUT_TYPES = new Set(["button", "checkbox", "color", "file", "im
 function isTextEntryTarget(target: EventTarget): boolean {
   if (typeof HTMLTextAreaElement !== "undefined" && target instanceof HTMLTextAreaElement) return true;
   return typeof HTMLInputElement !== "undefined" && target instanceof HTMLInputElement && !NON_TEXT_INPUT_TYPES.has(target.type);
+}
+
+function subscribeToMediaQuery(query: string, onChange: () => void): () => void {
+  const list = window.matchMedia?.(query);
+  list?.addEventListener("change", onChange);
+  return () => list?.removeEventListener("change", onChange);
+}
+
+/** Server and hydration renders assume the wide layout; the client then follows the live media query. */
+function useMediaQuery(query: string): boolean {
+  return useSyncExternalStore(
+    useCallback((onChange: () => void) => subscribeToMediaQuery(query, onChange), [query]),
+    () => window.matchMedia?.(query)?.matches ?? false,
+    () => false,
+  );
+}
+
+/** Single-key shortcuts must never steal characters typed into a field. */
+export function isShortcutBlockedTarget(target: EventTarget | null): boolean {
+  if (!target || typeof HTMLElement === "undefined" || !(target instanceof HTMLElement)) return false;
+  return isTextEntryTarget(target) || target instanceof HTMLSelectElement || target.isContentEditable;
 }
 
 function defaultStartDistribution(players: number): StartDistribution {
