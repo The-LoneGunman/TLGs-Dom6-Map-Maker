@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createDefaultProject, addPlane, generateProject } from "../src/generator";
@@ -110,4 +111,29 @@ test("iteration workspace renders opt-in controls and previews without replacing
     if(label!=="Pending iteration")assert.ok(html.includes(label),label);
   }
   assert.doesNotMatch(html,/Apply previewed change/);
+});
+
+test("iterate lists selection-based edits first, groups rarely used tools last, and shows readable option labels",()=>{
+  const html=renderToStaticMarkup(createElement(IterationPanel,{project:baseline,planeId,catalog:BUILTIN_DOM6_CATALOG,busy:false,onCommit:()=>true,onHighlight:()=>undefined}));
+  const order=["Choose provinces / named regions","Batch edit selected provinces","Reroll content without changing geography","Protect authored fields","Layout and start safeguards","Compare generated candidates",">Tools</h3>","Settings and host-policy recipes","Inspect external native maps","Isolated guardian test scenario"];
+  const positions=order.map(label=>html.indexOf(label));
+  positions.forEach((position,index)=>assert.ok(position>=0,order[index]));
+  assert.deepEqual([...positions].sort((a,b)=>a-b),positions,"sections keep the everyday-to-rare order");
+  // Labels are readable while the option values stay the saved keys.
+  assert.match(html,/<option value="forest" selected="">Forest<\/option>/);
+  assert.match(html,/<option value="cavewall">Impassable cave wall<\/option>/);
+  assert.match(html,/<option value="terrain" selected="">Terrain<\/option>/);
+  assert.match(html,/<option value="guardians">Guardians<\/option>/);
+  assert.doesNotMatch(html,/<option value="(\w+)"(?: selected="")?>\1<\/option>/,"no raw enum text is shown as an option label");
+});
+
+test("iterate previews render beside their section, take focus, and return it after Apply or Discard",()=>{
+  const source=readFileSync(new URL("../src/IterationPanel.tsx",import.meta.url),"utf8");
+  for(const section of ["selection","batch","reroll","protect","locks","candidates","recipes"]) assert.match(source,new RegExp(`\\{feedback\\("${section}"\\)\\}`),section);
+  assert.equal((source.match(/className="iteration-preview"/g)??[]).length,1,"one Apply/Discard card implementation");
+  assert.match(source,/previewCard\.current\?\.scrollIntoView\(\{ block: "nearest" \}\)/);
+  assert.match(source,/previewHeading\.current\?\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(source,/<h3 id=\{previewHeadingId\} ref=\{previewHeading\} tabIndex=\{-1\}>/);
+  assert.match(source,/restoreFocus\.current=true;dismissPreview\(\);/,"Discard returns focus to the preview trigger");
+  assert.match(source,/onHighlight\(highlight\.ids, highlight\.label\)/,"previews highlight the affected provinces on the map");
 });

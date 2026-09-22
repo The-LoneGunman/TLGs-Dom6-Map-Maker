@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { createDefaultProject, addPlane, generateProject } from "../src/generator";
 import { cloneProject, isWaterProvince } from "../src/domain";
 import { assertPlaneGenerationOverrides, preferredDryTerrain, applyPlaneRoutePreferences } from "../src/generationControls";
@@ -9,6 +11,7 @@ import { compileMapText, encodeD6m, validateProject } from "../src/dom6";
 import { inspectNativeMap, inspectNativeRaster } from "../src/nativeInspection";
 import { captureGenerationInputs } from "../src/workbench";
 import { createSettingsRecipe, parseSettingsRecipe } from "../src/recipes";
+import { PlanePreferencesPanel } from "../src/PlanePreferencesPanel";
 
 const baseline=createDefaultProject("preferences-regression");
 test("plane preferences are strict, bounded, persisted, and tracked as pending generation",()=>{
@@ -81,4 +84,14 @@ test("host settings use the active catalog and memory estimates cover repeated r
   assert.match(host,/Selector catalog snapshot: 6\.99/);assert.doesNotMatch(host,/differs from catalog 6\.35/);
   const bytes=files.filter(f=>!f.name.endsWith(".d6m")).reduce((sum,f)=>sum+f.data.byteLength,0);
   assert.ok(estimatedTextPackageBytes(p)>=bytes,`Estimate ${estimatedTextPackageBytes(p)} must cover actual ${bytes}`);
+});
+
+test("plane preference labels are readable while saved terrain keys are unchanged",()=>{
+  const plane=cloneProject(baseline).planes[0]!;
+  plane.generationOverrides={regions:[{name:"Fields",terrain:"farm",x0:0,y0:0,x1:1,y1:.5}]};
+  const html=renderToStaticMarkup(createElement(PlanePreferencesPanel,{plane,onChange:()=>undefined}));
+  for(const label of ["Plains weight","Farmland weight","Highlands weight","Mountains weight","Fields: Farmland"])assert.ok(html.includes(label),label);
+  assert.match(html,/<option value="forest" selected="">Forest<\/option>/);
+  assert.match(html,/<option value="farm">Farmland<\/option>/);
+  assert.doesNotMatch(html,/>(plains|forest|farm|swamp|waste|highland|mountains) weight</);
 });

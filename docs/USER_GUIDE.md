@@ -130,7 +130,7 @@ The **Next generation** summary shows core, bonus, and total planned provinces. 
 
 The pending summary groups inputs changed since the last generation recorded by this editor. It deliberately excludes manual province edits, name rerolls, host options, and patch notes. “Plan matches” is not proof that the current map is unedited. Older projects have no recorded baseline and say so; generating establishes one. Resolution, wrapping, and archetype changes can also affect current display/export behavior before generation, as their scope labels indicate.
 
-**Review current starts** opens the start-region inspector described below. It analyzes the current map, not the ungenerated plan.
+**Start analysis…** opens the [start-region analysis](#start-region-analysis) described below. It analyzes the current map, not the ungenerated plan.
 
 ### Fresh-project defaults
 
@@ -476,7 +476,7 @@ Expand **Generation preferences · Next generation** on the active plane. Blank 
 | Preference | What it does |
 | --- | --- |
 | Plane water / Cave ocean (%) | Requests 0–60% water on the supported plane family. Cave ocean applies to Cave/Great Cavern. Neither removes the Underworld's edge-to-edge Styx. Starts, ocean style, and topology can override a requested share. |
-| Dry-terrain weights | Values 0–5 bias plains, forest, farm, swamp, waste, highland, and mountains. Blank or 1 retains the normal preference; 0 is not an absolute exclusion because variety and safety repairs take priority. Caves use underground equivalents; farm has no underground effect. Water and cave walls are excluded. |
+| Dry-terrain weights | Values 0–5 bias Plains, Forest, Farmland, Swamp, Waste, Highlands, and Mountains. Blank or 1 retains the normal preference; 0 is not an absolute exclusion because variety and safety repairs take priority. Caves use underground equivalents; Farmland has no underground effect. Water and cave walls are excluded. |
 | Regional plans | Assign a dry-terrain preference to the north/south/east/west half or central quarter. Up to 16 plans per plane; the first matching plan wins. Normalized bounds scale with map dimensions, and saved recipes can specify custom rectangles. These are generation plans, not saved province selections. |
 | Eligible dry-land border mix | On solid overland planes, road/river/mountain-pass shares total at most 100%. Capital access, water, impassable borders, and mountain barriers are preserved. River share budgets complete connected routes, including bridges, rather than independent border rolls; barriers and outlet access can reduce the achieved share. This overrides the topology policy only on eligible edges. |
 | Guarded share | Requests authored guardians on 0–80% of eligible provinces, outside the two-step capital buffer, using the plane's existing themed pools. |
@@ -570,13 +570,21 @@ Saved projects pin a template revision. The earlier empty v1 remains empty, and 
 
 ## Iterate tab
 
-Tools for refining the current atlas. Batch edits, field locks, regions, rerolls, recipes, and candidate replacements show a preview before **Apply previewed change**. Each application is one Undoable edit. Discarding a preview leaves the atlas unchanged; previews tied to an older project are not applied over newer edits. Continue to save JSON backups before major changes.
+Tools for refining the current atlas. Sections run from everyday edits to rarely used tools: **Choose provinces / named regions**, **Batch edit selected provinces**, **Reroll content without changing geography**, **Protect authored fields**, **Layout and start safeguards**, and **Compare generated candidates**, followed by a **Tools** group with settings recipes, read-only native-map inspection, and the isolated guardian test scenario.
+
+Batch edits, field locks, regions, rerolls, recipes, and candidate replacements show a preview before **Apply previewed change**. The preview card opens directly below the section that produced it, scrolls into view, and receives keyboard focus; errors appear in the same place. Selection-based previews also highlight in teal the provinces they would change (or, if nothing changes, the matched selection); **Clear highlight** on the map banner removes it, and applying the change ends it. Each application is one Undoable edit. **Discard preview** leaves the atlas unchanged; after either button, focus returns to the control that opened the preview. Previews tied to an older project are not applied over newer edits. Continue to save JSON backups before major changes.
 
 ### Choose provinces and save regions
 
 Work on the active plane. Select **Only the currently selected province**, or combine role, primary terrain, effective terrain flag, name/local number, and named-region filters. **Non-capitals** excludes generic, team, and nation-specific starts; it does not mean the province has no owner. The effective-flag filter includes flags supplied by primary terrain as well as additive flags.
 
 Check the match count and use **Highlight selection** before editing. Up to 64 named regions can remember selected province IDs. Removing a region removes only its bookmark. Regeneration or plane removal can trim or remove bookmarks when their province IDs disappear; bookmarks do not constrain future geography. Use [regional generation plans](#generation-preferences) for a persistent north/south/etc. terrain preference instead.
+
+### Batch editing and content rerolls
+
+Batch operations add/remove terrain flags, replace primary terrain, set population/poptype, change Many sites or climate, or clear guardian groups. Review matched/changed/skipped counts and sample provinces. Relevant locks and protected capitals are skipped; site changes also protect their direct surroundings. Clearing unlocked guardian groups remains possible to repair conflicts. A preview that introduces new export errors cannot be applied. Existing errors still need attention before export.
+
+Content-only rerolls use the **Content / candidate seed** and selected provinces. Choose generated names, population/local recruitment, site flags/affinities, or initial guardians. Geography, borders, starts, and gateways remain fixed; manual names remain intact. Economy/site rerolls exclude capital rings, and guardian rerolls use a two-step buffer. Rerolling site content does not promise a new set of named magic sites or a combat-balanced reward.
 
 ### Layout, start, and field locks
 
@@ -594,13 +602,17 @@ Check the match count and use **Highlight selection** before editing. Up to 64 n
 
 Field locks protect batch/reroll tools and compatible same-seed generation. They do not prevent intentional edits in the province inspector, and they do not lock positions. Changing the world seed changes province IDs: full generation is rejected if locked provinces would disappear. Changed sizes, terrain media, or capital safety can also conflict with locks. Use a content-only reroll or unlock explicitly; Atlas does not silently discard protected content.
 
-### Batch editing and content rerolls
+### Compare generated candidates
 
-Batch operations add/remove terrain flags, replace primary terrain, set population/poptype, change Many sites or climate, or clear guardian groups. Review matched/changed/skipped counts and sample provinces. Relevant locks and protected capitals are skipped; site changes also protect their direct surroundings. Clearing unlocked guardian groups remains possible to repair conflicts. A preview that introduces new export errors cannot be applied. Existing errors still need attention before export.
+Generate two or three alternatives in background workers using the world seed plus the content/candidate seed. The current atlas is unchanged until you review a candidate replacement and apply it. Cancel stops the run; no candidate is selected automatically by its score.
 
-Content-only rerolls use the **Content / candidate seed** and selected provinces. Choose generated names, population/local recruitment, site flags/affinities, or initial guardians. Geography, borders, starts, and gateways remain fixed; manual names remain intact. Economy/site rerolls exclude capital rings, and guardian rerolls use a two-step buffer. Rerolling site content does not promise a new set of named magic sites or a combat-balanced reward.
+Cards show structural score, smallest two-step start region, two-step spread (CV), and export blockers/warnings. A lower CV means more similar region counts, not equivalent economies or combat access. Expand a candidate's preview and select any of its planes to inspect it; maps render only when requested. No displayed score proves practical multiplayer balance. Layout lock blocks candidate generation; field/start locks can reject alternatives that conflict with them. Candidate replacement is Undoable, but save a project backup before accepting a new geography.
 
-### Settings recipes
+### Tools
+
+The last group holds tools most sessions do not need: settings recipes, read-only inspection of external native maps, and the isolated guardian test scenario. None of them edits the current atlas unless you apply a recipe preview.
+
+#### Settings recipes
 
 **Balanced FFA**, **Continental rivalry**, **Naval geography**, and **Strategic frontiers** provide starting settings, not guaranteed balanced maps. They do not choose nations or change the player/start allocation for you. Preview and apply, review the generation plan, then Generate.
 
@@ -610,19 +622,13 @@ A recipe is not a map backup: it omits authored provinces, actual gateways, fiel
 
 Including the seed lets an equivalent fresh atlas reproduce generation in the same generator revision, even when its internal plane IDs differ. Match plane order and names as well as settings; destination manual names, authored starts and locks remain intentional differences. Older recipes remain readable but run the current generator when you choose Generate, not their historical generator.
 
-### Compare generated candidates
-
-Generate two or three alternatives in background workers using the world seed plus the content/candidate seed. The current atlas is unchanged until you review a candidate replacement and apply it. Cancel stops the run; no candidate is selected automatically by its score.
-
-Cards show structural score, smallest two-step start region, two-step spread (CV), and export blockers/warnings. A lower CV means more similar region counts, not equivalent economies or combat access. Expand a candidate's preview and select any of its planes to inspect it; maps render only when requested. No displayed score proves practical multiplayer balance. Layout lock blocks candidate generation; field/start locks can reject alternatives that conflict with them. Candidate replacement is Undoable, but save a project backup before accepting a new geography.
-
-### Inspect external native maps
+#### Inspect external native maps
 
 Expand **Inspect external native maps · Read only**. Paste `.map` text, inspect the current plane's compiled native text, or choose a `.map`/`.d6m` file. `.map` input is limited to 16 MiB; `.d6m` input to 40 MiB with additional dimension/structure limits.
 
 The report inventories terrain records, names, starts, neighbors, border modifiers, gates, commanders, units, and unrecognized commands. A D6M report checks supported binary structure. Nothing is executed, followed, uploaded, or added to the atlas. Image references are shown but not opened. Recognition is not full command validation or proof of game compatibility. Lossless editable import of arbitrary native maps, TGA artwork, and custom raster ownership is not supported.
 
-### Isolated guardian test scenario
+#### Isolated guardian test scenario
 
 Choose an authored guardian province and **Prepare separate fixture**. Atlas generates a separate two-player, 48-province map in the background, in the source plane's family, with the copied encounter named **GUARDIAN TEST** outside protected capital zones. The source selection is held while generation runs; **Cancel fixture generation** stops it. Download the fixture's own JSON or ZIP; the current atlas is not replaced and no game saves are written by this tool.
 
@@ -916,7 +922,7 @@ Clicking a validation issue that identifies a plane/province navigates to it whe
 
 ### Start-region analysis
 
-Open **Review current starts** under Generate, **Inspect starts** in the footer, or **Inspect every start** in Validate. The panel separates export blockers, the legacy score (including low subscores), and limited analysis confidence. All generic, team, and nation-specific start locations are included and deduplicated. Manual map edits recalculate the current diagnostics; they do not need regeneration.
+Open **Start analysis…** under Generate, **Inspect starts** in the footer, or **Inspect every start** in Validate. The panel separates export blockers, the **Structural score** (including low subscores), and limited analysis confidence. All generic, team, and nation-specific start locations are included and deduplicated. Manual map edits recalculate the current diagnostics; they do not need regeneration.
 
 Choose an access model:
 
@@ -1078,7 +1084,7 @@ When the map has keyboard focus:
 
 For the setup and inspector tab groups, Arrow keys move between tabs and Home/End jumps to the first/last tab.
 
-In catalog fields, type a name or ID, use Up/Down to move through results, Enter to commit, and Escape to close and restore the previous value. Nation, population-type and fort fields accept numeric IDs (including `#15`) or an exact unique name on blur. An ambiguous name such as **Agartha**, which exists in several eras, keeps the previous value and asks you to choose a result. Only explicitly clearing the field removes its assignment. Unit and site fields still accept raw mod references.
+In catalog fields, type a name or ID, use Up/Down to move through results, Enter to commit, and Escape to close and restore the previous value. Tab commits the typed value and moves on to the next control; results are not separate Tab stops. Nation, population-type and fort fields accept numeric IDs (including `#15`) or an exact unique name on blur. An ambiguous name such as **Agartha**, which exists in several eras, keeps the previous value and asks you to choose a result. Only explicitly clearing the field removes its assignment. Unit and site fields still accept raw mod references.
 
 Validation, replacement-confirmation, and export dialogs trap focus. Escape closes them unless package export is busy. Export progress, autosave, start allocation, selected province/tool, armed endpoints, and balance notices are announced to assistive technology. The layout reflows on narrow screens and respects reduced-motion settings.
 

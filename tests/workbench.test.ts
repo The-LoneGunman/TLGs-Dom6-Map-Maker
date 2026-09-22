@@ -339,14 +339,14 @@ test("rendered workbench exposes scope, plan provenance, budgets, search and neu
   let markup = renderToStaticMarkup(createElement(GenerationPlanSummary, { project: p, onReview: noop }));
   assert.match(markup, /No generation baseline/);
   assert.match(markup, /Province budget by plane/);
-  assert.match(markup, /Review current starts/);
+  assert.match(markup, /aria-haspopup="dialog">Start analysis…<\/button>/);
   recordGenerationInputs(p);
   p.settings.waterPercent++;
   markup = renderToStaticMarkup(createElement(GenerationPlanSummary, { project: p, onReview: noop }));
   assert.match(markup, /Pending: Terrain/);
   const props = { project: p, fairness: calculateFairness(p), errors: 2, catalogVersion: "6.35", onContextChange: noop, onInspect: noop };
   markup = renderToStaticMarkup(createElement(StartBalancePanel, props));
-  for (const label of ["2 export blockers", "Legacy structural score", "Limited / assumptions shown", "2 unknown provinces", "difficulty unknown", "not turns", "Potential connections", "Conservative dry"]) {
+  for (const label of ["2 export blockers", "Structural score", "Limited / assumptions shown", "2 unknown provinces", "difficulty unknown", "not turns", "Potential connections", "Conservative dry"]) {
     assert.ok(markup.includes(label), label);
   }
   assert.match(markup, /<table/);

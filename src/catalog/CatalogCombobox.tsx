@@ -131,13 +131,19 @@ export function CatalogCombobox({
         </p>
       )}
       {open && (
-        <div className="catalog-results" id={listboxId} role="listbox" aria-label={`${label} catalog results`}>
+        // The list and its options are reached with the arrow keys through
+        // aria-activedescendant. Both stay out of the Tab order because the list
+        // closes when the input blurs: a tabbable option, or the scrollable list
+        // itself (browsers make overflowing scrollers focusable), would vanish and
+        // drop focus to the page body instead of reaching the next control.
+        <div className="catalog-results" id={listboxId} role="listbox" tabIndex={-1} aria-label={`${label} catalog results`}>
           {results.map((entry, index) => (
             <button
               id={`${listboxId}-${entry.id}`}
               key={entry.id}
               type="button"
               role="option"
+              tabIndex={-1}
               aria-selected={index === activeIndex}
               className={`${index === activeIndex ? "active" : ""}${getEntryStatus && !getEntryStatus(entry).compatible ? " incompatible" : ""}`}
               onMouseDown={(event) => event.preventDefault()}

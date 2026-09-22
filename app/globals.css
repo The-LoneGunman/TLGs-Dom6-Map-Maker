@@ -1013,3 +1013,32 @@ kbd { padding: 2px 4px; border: 1px solid var(--line-strong); border-radius: 3px
   font-weight: 750;
 }
 .action-error-alert button:hover { border-color: #e58b81; background: rgba(229, 139, 129, 0.09); }
+
+/* Iterate and side panels */
+/* One type scale for the newer panels: 13px body copy and 12px help text. Field labels,
+   inputs and eyebrows keep the shared 11px control size used by the core setup controls. */
+.iteration-panel,
+.generation-plan-summary,
+.province-explorer,
+.balance-panel { font-size: 13px; }
+.iteration-panel p,
+.generation-plan-summary p,
+.province-explorer p,
+.province-explorer li span,
+.balance-panel p,
+.balance-panel small { font-size: 12px; }
+.iteration-panel .eyebrow { margin: 0 0 3px; font-size: 11px; }
+.province-explorer .field input,
+.balance-panel .field > span,
+.balance-panel .field input,
+.balance-panel .field select,
+.balance-panel .field textarea { font-size: 13px; }
+/* Rarely used Iterate tools sit in one group after the everyday selection-based sections. */
+.iteration-tools { margin-top: 10px; padding-top: 14px; border-top: 1px solid var(--line-strong); }
+.iteration-tools > h3 { margin: 0 0 4px; color: var(--paper-muted); font-size: 12px; font-weight: 750; letter-spacing: 0.04em; }
+/* A pending preview renders under the section that produced it and receives focus. */
+.iteration-preview { scroll-margin: 12px; }
+.iteration-panel h2:focus-visible,
+.iteration-preview h3:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+/* Catalog pickers draw their own × clear button; hide the duplicate native search-field cancel icon beside it. */
+.catalog-input-wrap:has(> button) input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
