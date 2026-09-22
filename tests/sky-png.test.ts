@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Plane, PreviewCondition } from "../src/domain";
+import { planeGenerationKey, type Plane, type PreviewCondition } from "../src/domain";
 import { createDefaultProject } from "../src/generator";
 import { renderPlanePng, samplePlaneOwnership } from "../src/MapCanvas";
 import { renderSkyRgb, skyVariantForPreview } from "../src/skyArt";
@@ -119,7 +119,7 @@ test("Cloud and Air PNGs use canonical opaque sky artwork with unclipped semanti
         assert.deepEqual([output.width, output.height, raster.width, raster.height], [320, 256, 320, 256]);
         const rgba = raster.context.imageData!.data;
         const displayed = { ...plane, provinces: plane.provinces.map(province => ({ ...province, ...previewProvinceTerrain(province, condition) })) };
-        const expected = renderSkyRgb(displayed, samplePlaneOwnership(plane, plane.width, plane.height), skyVariantForPreview(condition), `${plane.id}:sky-art`);
+        const expected = renderSkyRgb(displayed, samplePlaneOwnership(plane, plane.width, plane.height), skyVariantForPreview(condition), `${planeGenerationKey(plane)}:sky-art`);
         for (let pixel = 0; pixel < plane.width * plane.height; pixel++) {
           assert.equal(rgba[pixel * 4], expected[pixel * 3]);
           assert.equal(rgba[pixel * 4 + 1], expected[pixel * 3 + 1]);
@@ -159,8 +159,14 @@ test("sky PNG cache responds to in-place terrain, climate, geometry and seed edi
     plane.provinces[0]!.x += .04;
     const moved = await fixture.render(plane, "winter");
     assert.notDeepEqual(moved.raster.context.imageData!.data, warmWinter.raster.context.imageData!.data);
-    plane.id += "-new-seed";
+    plane.id += "-reference-only";
+    assert.equal((await fixture.render(plane, "winter")).raster, moved.raster, "reference IDs no longer repaint generated artwork");
+    plane.generationKey += "-new-applied-seed";
     assert.notDeepEqual((await fixture.render(plane, "winter")).raster.context.imageData!.data, moved.raster.context.imageData!.data);
+    delete plane.generationKey;
+    const legacy = await fixture.render(plane, "winter");
+    plane.id += "-legacy-salt";
+    assert.notDeepEqual((await fixture.render(plane, "winter")).raster.context.imageData!.data, legacy.raster.context.imageData!.data, "old saves still use their original reference ID as the art salt");
   } finally { fixture.restore(); }
 });
 
@@ -195,7 +201,7 @@ test("all new realm PNGs preserve exact procedural pixels, terrain conditions an
         assert.deepEqual([output.width, output.height, raster.width, raster.height], [320, 256, 320, 256]);
         const rgba = raster.context.imageData!.data;
         const displayed = { ...plane, provinces: plane.provinces.map(province => ({ ...province, ...previewProvinceTerrain(province, condition) })) };
-        const expected = renderRealmRgb(displayed, samplePlaneOwnership(plane, plane.width, plane.height), `${plane.id}:realm-art`);
+        const expected = renderRealmRgb(displayed, samplePlaneOwnership(plane, plane.width, plane.height), `${planeGenerationKey(plane)}:realm-art`);
         for (let pixel = 0; pixel < plane.width * plane.height; pixel++) {
           assert.equal(rgba[pixel * 4], expected[pixel * 3]);
           assert.equal(rgba[pixel * 4 + 1], expected[pixel * 3 + 1]);

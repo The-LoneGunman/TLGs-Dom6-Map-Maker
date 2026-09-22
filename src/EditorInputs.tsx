@@ -5,7 +5,7 @@ import { MAX_IMPORTED_STRING_LENGTH } from "./export";
 
 /** Keep incomplete keystrokes local until they describe a valid number. */
 export function BoundedNumberInput({ value, min, max, describedBy, id, onChange }: {
-  value: number; min: number; max: number; describedBy?: string; id?: string; onChange: (value: number) => void;
+  value: number; min: number; max: number; describedBy?: string; id?: string; onChange: (value: number) => boolean | void;
 }) {
   const [draft, setDraft] = useState(String(value));
   const focused = useRef(false);
@@ -16,13 +16,17 @@ export function BoundedNumberInput({ value, min, max, describedBy, id, onChange 
       const text = event.target.value;
       setDraft(text);
       const next = Number(text);
-      if (text.trim() && Number.isInteger(next) && next >= min && next <= max && next !== value) onChange(next);
+      if (text.trim() && Number.isInteger(next) && next >= min && next <= max && next !== value
+        && onChange(next) === false) setDraft(String(value));
     }}
-    onBlur={() => {
+    onBlur={(event) => {
       focused.current = false;
-      const parsed = draft.trim() ? Number(draft) : value;
+      const text = event.currentTarget.value;
+      const parsed = text.trim() ? Number(text) : value;
       const next = Number.isFinite(parsed) ? Math.min(max, Math.max(min, Math.round(parsed))) : value;
-      setDraft(String(next));
+      // Reconcile to the accepted model, even when it did not change (locks or
+      // validation can reject edits). An accepted commit updates value below.
+      setDraft(String(value));
       if (next !== value) onChange(next);
     }} />;
 }

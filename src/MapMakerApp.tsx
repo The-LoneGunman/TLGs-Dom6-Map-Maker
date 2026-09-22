@@ -1336,7 +1336,7 @@ export function MapMakerApp() {
                 </select>
               </Field>
               <p className="field-note">New maps use irregular shared coastlines. Continent and island styles shape larger seas; Central inland sea creates an enclosed basin. Saved maps keep their outlines until Generate.</p>
-              {(project.settings.oceanLayout ?? "natural") === "island_chains" && <p className="field-note">Island chains use at least {ISLAND_CHAIN_MIN_WATER_PERCENT}% water so land is genuinely separated; Generate records that effective value when the slider is lower.</p>}
+              {(project.settings.oceanLayout ?? "natural") === "island_chains" && <p className="field-note">Island chains use at least {ISLAND_CHAIN_MIN_WATER_PERCENT}% water so land is genuinely separated; Generate records that effective value when the slider is lower. Narrow islands may not fit enough inland Land starts with safe exits and spacing. Allocate more Coastal starts, increase provinces per player, or choose a continental layout if generation reports missing starts.</p>}
               {(project.settings.oceanLayout ?? "natural") === "multiple_continents" && <>
                 <NumberField scope="Next generation"
                   label="Major continents"
@@ -2190,7 +2190,7 @@ function Divider() { return <div className="divider" />; }
 type ControlScope = "Next generation" | "Current Map" | "Current Map + next generation" | "Host / export" | "Preview only" | "Saved note only" | "On project open";
 function ScopeBadge({ scope = "Current Map" }: { scope?: ControlScope }) { return <small className="scope-badge">{scope}</small>; }
 function Field({ label, children, scope }: { label: string; children: ReactNode; scope?: ControlScope }) { return <label className="field"><span>{label} <ScopeBadge scope={scope} /></span>{children}</label>; }
-function NumberField({ label, value, min, max, describedBy, onChange, scope }: { label: string; value: number; min: number; max: number; describedBy?: string; onChange: (value: number) => void; scope?: ControlScope }) { return <Field label={label} scope={scope}><BoundedNumberInput value={value} min={min} max={max} describedBy={describedBy} onChange={onChange} /></Field>; }
+function NumberField({ label, value, min, max, describedBy, onChange, scope }: { label: string; value: number; min: number; max: number; describedBy?: string; onChange: (value: number) => boolean | void; scope?: ControlScope }) { return <Field label={label} scope={scope}><BoundedNumberInput value={value} min={min} max={max} describedBy={describedBy} onChange={onChange} /></Field>; }
 function OptionalNumberField({ label, value, min, max, disabled = false, onChange, scope }: { label: string; value?: number; min: number; max?: number; disabled?: boolean; onChange: (value?: number) => void; scope?: ControlScope }) { return <Field label={label} scope={scope}><input type="number" value={value ?? ""} min={min} max={max} disabled={disabled} placeholder="Auto" onChange={(event) => {
   if (!event.target.value.trim()) onChange(undefined);
   else onChange(boundedInteger(event.target.value, min, min, max ?? Number.MAX_SAFE_INTEGER));

@@ -1,6 +1,6 @@
 # Multiplayer workbench implementation
 
-Reviewed September 22, 2026 against application source merged to `main` at **`464ff03`**. Package version remains 0.1.5, but hosted Site version 13 and Windows v0.1.5 still contain the earlier `581b2b8` source. The post-release additions below are merged, not deployed. See [Versions and documentation](../README.md#versions-and-documentation) and [release verification](RELEASE_VERIFICATION_0.1.5.md) for the separate delivery records.
+Reviewed September 22, 2026, including the [audit-repair follow-up](AUDIT_REPAIRS_2026-09-22.md). Package version remains 0.1.5, but hosted Site version 13 and Windows v0.1.5 still contain the earlier `581b2b8` source. The post-release source additions below are not deployed. See [Versions and documentation](../README.md#versions-and-documentation) and [release verification](RELEASE_VERIFICATION_0.1.5.md) for the separate delivery records.
 
 This tracks the approved [comparative-research roadmap](MULTIPLAYER_MAPMAKER_RESEARCH_2026-09-06.md). Approval is not proof of delivery or measured balance. Selector catalogs are pinned to 6.37; they are not nation-strength rulesets or automatic update feeds.
 
@@ -40,10 +40,13 @@ This tracks the approved [comparative-research roadmap](MULTIPLAYER_MAPMAKER_RES
 | Terrain distribution | New-project and Balanced FFA cohesion defaults are 58%, with modest extra variation in temperate terrain below 80%. Saved settings, themed samplers and explicit preferences are preserved. |
 | Rivers | [Connected border watercourses](CONNECTED_BORDER_RIVERS_2026-09-22.md) use real shared-border junctions and safe capital/road bridges. Complete routes take priority over a precise requested share; the province-water Styx is unchanged. |
 | Terrain editing | [Cave-wall safety and mixed relief](TERRAIN_EDIT_REPAIRS_2026-09-22.md): consistent primary/additive cleanup, blocked-content export checks, submerged aquatic relief and low wooded-swamp relief. |
+| Audit repairs | [Portable seeds/seeded recipes](AUDIT_REPAIRS_2026-09-22.md) separate generation identity from saved references; older maps retain their artwork. Rejected numeric edits restore accepted values. Island Chains explains inland-start capacity limits. |
 
 ## Verification and remaining work
 
-**Latest source:** `464ff03` passed [merged-main CI](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35738115402): **1,010 automated tests (14 build/integration + 996 TypeScript)**, type checking, lint, licenses, dependency audit and Linux/Windows server/launcher checks. Real browser use covered continental, island and inland-sea generation, mixed starts, terrain editing/Undo and saved geometry. The [natural-landform record](NATURAL_LANDFORMS_2026-09-22.md#final-checks) gives the fixtures and limits.
+**Audit-repair follow-up:** **1,029 local automated tests (14 build/integration + 1,015 TypeScript)** passed, alongside type checking, lint, licenses, dependency audit and launcher/server checks. Real browser use verified rejected/accepted numeric edits, plane switching, Undo/Redo, generation, saved reload and narrow-screen layout. [The repair record](AUDIT_REPAIRS_2026-09-22.md) distinguishes compatibility evidence from remaining limits.
+
+**Natural-landform baseline:** `464ff03` passed [merged-main CI](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35738115402): **1,010 automated tests (14 build/integration + 996 TypeScript)**. Browser use covered continental, island and inland-sea generation, mixed starts, terrain editing/Undo and saved geometry. The [natural-landform record](NATURAL_LANDFORMS_2026-09-22.md#final-checks) gives the fixtures and limits.
 
 Five generation fixtures cover default, islands, continents, caves and eight planes. Their expected output intentionally changed with the new generator after before/after review; they are not promises that a seed recreates older geography. Frozen saved-map fixtures separately preserve legacy ownership checks. Keep project JSON for an exact map, not just its seed or settings recipe.
 
@@ -52,6 +55,8 @@ Five generation fixtures cover default, islands, continents, caves and eight pla
 Browser checks covered old-v2 import/pinning, explicit adoption of v3, manual Cavemen population edits, unsupported Troglodytes fallback, Undo and a 390-pixel-wide viewport without panel overflow or console errors. These do not substitute for native gameplay checks.
 
 The [September 20 structural evaluation](IMPLEMENTATION_ROUND_2026-09-20.md) ran 1,000 fixed-corpus maps with zero export-error maps or generation exceptions. **243 missed the experimental quality criteria**; the separate held-out set had **48 misses out of 200**. This corpus has not been rerun against the latest generator, so these are historical measurements, not current miss counts. The misses remain quality follow-up work, not export blockers or proof that the maps are unplayable. The criteria are proposed diagnostics, not established community standards, and the results do not certify multiplayer balance.
+
+The September 22 repair check reran the first **128** corpus cases: **14 export-blocked Island Chains configurations, zero exceptions, and 46 experimental quality misses**. These deliberately cramped island plans request several inland starts at 52% water and 16 provinces/player; they require a different start mix or larger land areas. The preceding audit had the same 14 blocked cases and 48 quality misses. This smaller rerun does not supersede the historical 1,000-map study or certify multiplayer balance.
 
 Still outstanding:
 

@@ -35,7 +35,9 @@ function frozenFixture(kind: string): MapProject {
 }
 for (const [kind, digest] of Object.entries(frozen)) test(`${kind} defaults match the reviewed generation digest`,()=>{
   const p=frozenFixture(kind);
-  assert.equal(createHash("sha256").update(JSON.stringify(p,(key,value)=>key==="createdAt"||key==="updatedAt"?undefined:value)).digest("hex"),digest);
+  // These same-seed/default-ID fixtures retain their original gameplay data;
+  // the new applied identity is separately checked by generation-identity tests.
+  assert.equal(createHash("sha256").update(JSON.stringify(p,(key,value)=>key==="createdAt"||key==="updatedAt"||key==="generationKey"?undefined:value)).digest("hex"),digest);
 });
 
 const baseline = createDefaultProject("iteration-regressions");

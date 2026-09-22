@@ -241,6 +241,7 @@ for (const [kind, digest] of [
   test(`${kind}: saved pre-natural-style maps retain the pre-change ownership snapshot`, () => {
     const plane = fixture(kind, "cloud-landforms-nonsky", 40, 256, 256);
     delete plane.landformStyle;
+    delete plane.generationKey; // A saved historical map predates portable art provenance too.
     const owners = samplePlaneOwnership(plane, plane.width, plane.height);
     // Captured before the cloud-specific refinement; text avoids host endianness.
     assert.equal(createHash("sha256").update(owners.join(",")).digest("hex"), digest);

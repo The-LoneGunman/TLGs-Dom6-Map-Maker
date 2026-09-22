@@ -4,14 +4,14 @@ import { parseProject, serializeProject } from "./export";
 import { assertProjectLocks } from "./authoringLocks";
 
 export const MAX_RECIPE_BYTES = 256 * 1024;
-export const SETTINGS_GENERATOR_REVISION = "atlas-generation-2026-09-22-natural-v1";
+export const SETTINGS_GENERATOR_REVISION = "atlas-generation-2026-09-22-portable-seed-v1";
 const PLANE_KEYS = ["id", "name", "kind", "variant", "autoSize", "noGeneratedStarts", "provinceTarget", "width", "height", "wrapX", "wrapY", "ownershipMode", "generationOverrides", "sparseLayout"] as const;
 export type RecipePlane = Pick<Plane, typeof PLANE_KEYS[number]>;
 export interface SettingsRecipe {
   kind: "pantokrator-settings";
   version: 1;
   name: string;
-  generator: "atlas-generation-2026-09-20" | typeof SETTINGS_GENERATOR_REVISION;
+  generator: "atlas-generation-2026-09-20" | "atlas-generation-2026-09-22-natural-v1" | typeof SETTINGS_GENERATOR_REVISION;
   seed?: string;
   settings: GenerationSettings;
   planes: RecipePlane[];
@@ -38,7 +38,7 @@ export function parseSettingsRecipe(text: string): SettingsRecipe {
   if (new TextEncoder().encode(text).byteLength > MAX_RECIPE_BYTES) throw new Error("Settings recipes are limited to 256 KiB.");
   const value = JSON.parse(text) as SettingsRecipe;
   if (!value || value.kind !== "pantokrator-settings" || value.version !== 1
-    || !["atlas-generation-2026-09-20", SETTINGS_GENERATOR_REVISION].includes(value.generator)) throw new Error("This is not a supported Atlas settings recipe.");
+    || !["atlas-generation-2026-09-20", "atlas-generation-2026-09-22-natural-v1", SETTINGS_GENERATOR_REVISION].includes(value.generator)) throw new Error("This is not a supported Atlas settings recipe.");
   if (Object.keys(value).some(k => !["kind", "version", "name", "generator", "seed", "settings", "planes", "assumptions", "populationDefense"].includes(k))) throw new Error("The settings recipe contains unknown fields.");
   if (typeof value.name !== "string" || !value.name.trim() || value.name.length > 120) throw new Error("Recipe names require 1–120 characters.");
   if (value.seed !== undefined && (typeof value.seed !== "string" || value.seed.length > 4096)) throw new Error("Invalid recipe seed.");

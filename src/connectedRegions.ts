@@ -1,4 +1,4 @@
-import type { Plane } from "./domain";
+import { planeGenerationKey, type Plane } from "./domain";
 import { usesConnectedRegions } from "./geometry";
 import type { BorderSegment, Point, ProvinceChamberPrimitive, ProvinceCorridorPrimitive, ProvinceOwnershipModel, SparseSilhouette } from "./geometry";
 
@@ -197,7 +197,7 @@ export function createConnectedRegionOwnership(plane: Plane): ProvinceOwnershipM
 function connectedRegionOwnershipResult(plane: Plane): RegionOwnershipResult {
   // Validation and rendering share this cache: a native-resolution safety scan
   // is paid once per geometry edit, not again for terrain, armies or each render.
-  const signature = JSON.stringify([plane.id, plane.kind, plane.landformStyle, plane.width, plane.height, plane.wrapX, plane.wrapY,
+  const signature = JSON.stringify([planeGenerationKey(plane), plane.kind, plane.landformStyle, plane.width, plane.height, plane.wrapX, plane.wrapY,
     plane.provinces.map(p => [p.id,p.index,p.x,p.y,!!p.small,!!p.large]),
     plane.edges.map(e => pairKey(e.a,e.b)).sort()]);
   const cached = ownershipResults.get(signature);
@@ -444,7 +444,7 @@ function buildNaturalRealmContours(
 ): RealmContour[] {
   const profile = naturalRealmProfile(plane.kind);
   return plane.provinces.map((province,owner) => {
-    const key=`${plane.id}:${plane.kind}:${province.id}:natural-v1`;
+    const key=`${planeGenerationKey(plane)}:${plane.kind}:${province.id}:natural-v1`;
     const passage=plan.passageOwners.has(owner);
     let aspect=profile.aspect[0]+(profile.aspect[1]-profile.aspect[0])*roll(`${key}:aspect`);
     if(passage)aspect=1+(aspect-1)*.36;
@@ -453,7 +453,7 @@ function buildNaturalRealmContours(
     const group=plan.groups[plan.groupByOwner[owner]!] ?? [owner];
     const groupAnchor=plane.provinces[group[0]!]!.id;
     const rotation=profile.groupedRotation
-      ? roll(`${plane.id}:${plane.kind}:${groupAnchor}:natural-v1-axis`)*Math.PI+(roll(`${key}:tilt`)-.5)*.58
+      ? roll(`${planeGenerationKey(plane)}:${plane.kind}:${groupAnchor}:natural-v1-axis`)*Math.PI+(roll(`${key}:tilt`)-.5)*.58
       : roll(`${key}:rotation`)*Math.PI*2;
     const organicPower=profile.power[0]+(profile.power[1]-profile.power[0])*roll(`${key}:power`);
     const phase=roll(`${key}:wave-phase`)*Math.PI*2;

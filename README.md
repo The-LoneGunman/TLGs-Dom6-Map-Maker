@@ -10,11 +10,11 @@ Projects, imported catalogs, and generated packages remain in your browser profi
 
 ## Versions and documentation
 
-Reviewed September 22, 2026 against merged application source **`464ff03`**. The package version remains **0.1.5**. **Unreleased development** means features already on `main` but not yet in the hosted app or Windows v0.1.5 release; it does not mean an unmerged branch. Merging source does not deploy or publish either edition.
+Reviewed September 22, 2026, including the [seed and numeric-edit audit repairs](docs/AUDIT_REPAIRS_2026-09-22.md). The package version remains **0.1.5**. **Unreleased development** means source features not yet in the hosted app or Windows v0.1.5 release. Merging source does not deploy or publish either edition.
 
 | Edition | Where to check the build | Availability |
 | --- | --- | --- |
-| Source checkout | Selected Git branch/commit and `package.json` | A current clone of `main` includes the additions through `464ff03`. Use the commit, not package version 0.1.5 alone, to identify the source build. |
+| Source checkout | Selected Git branch/commit and `package.json` | Includes the natural-landform additions and subsequent [audit repairs](docs/AUDIT_REPAIRS_2026-09-22.md). Use the commit, not package version 0.1.5 alone, to identify the source build. |
 | Hosted GUI | [Open app](https://pantokrator-atlas.mbatlle7.chatgpt.site) and [release verification](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/RELEASE_VERIFICATION_0.1.5.md) | Updated by a separate deployment; newer source documentation alone does not identify the deployed build. |
 | Windows installer / portable release | [Latest release and its notes](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/latest) | Contains the tagged build supplied by that release, not every later source change. |
 

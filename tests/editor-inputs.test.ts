@@ -88,13 +88,25 @@ test("unit and site catalog fields retain free-text mod references", () => {
 
 test("typing a valid multi-digit count does not commit its out-of-range prefix", () => {
   const changes: number[] = [];
-  const input = control(capture(BoundedNumberInput, { value: 6, min: 2, max: 32, onChange: (next: number) => changes.push(next) }), "input");
+  const input = control(capture(BoundedNumberInput, { value: 6, min: 2, max: 32, onChange: (next: number) => { changes.push(next); } }), "input");
   input.props.onFocus!();
   input.props.onChange!({ target: { value: "" } });
   input.props.onChange!({ target: { value: "1" } });
   assert.deepEqual(changes, [], "blank and the prefix of 16 remain local drafts");
   input.props.onChange!({ target: { value: "16" } });
   assert.deepEqual(changes, [16]);
+});
+
+test("number blur uses the visible draft, bounds it, and skips untouched values", () => {
+  const changes: number[] = [];
+  const input = control(capture(BoundedNumberInput, { value: 6, min: 2, max: 32,
+    onChange: (next: number) => { changes.push(next); return false; } }), "input");
+  input.props.onFocus!();
+  input.props.onBlur!({ currentTarget: { value: "6" } });
+  input.props.onBlur!({ currentTarget: { value: "" } });
+  assert.deepEqual(changes, []);
+  for (const value of ["1", "100", "3.4", "16"]) input.props.onBlur!({ currentTarget: { value } });
+  assert.deepEqual(changes, [2, 32, 3, 16]);
 });
 
 test("item whitespace does not create edits, and multiword items compile as separate entries", () => {

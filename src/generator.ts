@@ -206,6 +206,8 @@ export interface AddPlaneOptions {
 }
 
 interface GeneratePlaneOptions {
+  /** Project generation supplies its seed-and-slot identity; standalone generation derives its own. */
+  generationKey?: string;
   deferStrategicFeatures?: boolean;
   waterPercent?: number;
   /** Number of degree-equalized, bridge-safe start candidates this plane needs. */
@@ -521,7 +523,39 @@ export function captureGeneratedWaterProvenance(plane: Plane): void {
   plane.landformWater = groups;
 }
 
+/** Rebind typed references in a generation-only clone; saved/editor identities never change. */
+function remapGenerationPlaneIds(project: MapProject, ids: ReadonlyMap<string, string>): void {
+  const mapped = (id: string) => ids.get(id) ?? id;
+  for (const plane of project.planes) plane.id = mapped(plane.id);
+  for (const start of project.specificStarts) start.planeId = mapped(start.planeId);
+  for (const gate of project.gates) for (const endpoint of gate.endpoints) endpoint.planeId = mapped(endpoint.planeId);
+  for (const link of project.settings.planeConnections ?? []) { link.a = mapped(link.a); link.b = mapped(link.b); }
+  for (const region of project.authoring?.regions ?? []) region.planeId = mapped(region.planeId);
+}
+
 export function generateProject(project: MapProject): MapProject {
+  // All generation stages (including ID-based tie breaks) see seed/slot IDs,
+  // not the random seed that happened to create the editor's original planes.
+  // Keep the applied identity for rendering after restoring reference IDs.
+  const working = cloneProject(project);
+  const ids = new Map(project.planes.map((plane, index) => [plane.id, idFor(project.seed, "plane", index)]));
+  // Keep dangling references outside the temporary plane-ID namespace. A
+  // missing saved plane may happen to have a canonical seed/slot ID; allowing
+  // that alias would silently assign its starts or bookmarks to a real plane.
+  const references = [
+    ...project.specificStarts.map(start => start.planeId),
+    ...project.gates.flatMap(gate => gate.endpoints.map(endpoint => endpoint.planeId)),
+    ...(project.settings.planeConnections ?? []).flatMap(link => [link.a, link.b]),
+    ...(project.authoring?.regions ?? []).map(region => region.planeId),
+  ];
+  for (const id of references) if (!ids.has(id)) ids.set(id, `unresolved-generation-plane-${ids.size}`);
+  remapGenerationPlaneIds(working, ids);
+  const generated = generateProjectWithIdentities(working);
+  remapGenerationPlaneIds(generated, new Map([...ids].map(([from, to]) => [to, from])));
+  return generated;
+}
+
+function generateProjectWithIdentities(project: MapProject): MapProject {
   assertCanRebuildLayout(project);
   for (const plane of project.planes) if (plane.generationOverrides) assertPlaneGenerationOverrides(plane.generationOverrides);
   const next = cloneProject(project);
@@ -575,6 +609,7 @@ export function generateProject(project: MapProject): MapProject {
       ? Math.max(normalized.generationOverrides?.waterPercent ?? next.settings.waterPercent, Math.ceil((requestedWater * 100) / normalized.provinceTarget))
       : 0;
     return generatePlane(normalized, next.settings, `${next.seed}:plane:${index}:v1`, index, {
+      generationKey: normalized.id,
       deferStrategicFeatures: true,
       waterPercent,
     });
@@ -1086,7 +1121,9 @@ export function generatePlane(
 ): Plane {
   // Applied geometry provenance is written only by explicit generation. Old
   // imports and settings-only recipes retain their existing saved outlines.
-  source = { ...source, landformStyle: "natural-v1" };
+  const referenceId = source.id;
+  const generationKey = options.generationKey ?? idFor(stageSeed, "plane", planeIndex);
+  source = { ...source, id: generationKey, generationKey, landformStyle: "natural-v1" };
   delete source.landformWater;
   if (source.generationOverrides) assertPlaneGenerationOverrides(source.generationOverrides);
   const rng = new SeededRandom(stageSeed);
@@ -1224,6 +1261,7 @@ export function generatePlane(
     finalizeGeneratedRivers(generated, settings, `${stageSeed}:river-network`);
   }
   regenerateGeneratedProvinceNames([generated], stageSeed, settings.provinceNameSeed ?? 0);
+  generated.id = referenceId;
   return generated;
 }
 
