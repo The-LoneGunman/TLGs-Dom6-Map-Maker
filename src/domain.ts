@@ -545,7 +545,7 @@ export const MAGIC_PATH_LABELS: Record<MagicPath, string> = {
 export const RESOLUTION_PRESETS = {
   compact: { width: 1536, height: 1024, label: "Compact · 1536×1024" },
   "2k": { width: 2048, height: 1152, label: "2K · 2048×1152" },
-  "4k": { width: 3840, height: 2160, label: "ChatGPT max · 3840×2160" },
+  "4k": { width: 3840, height: 2160, label: "4K · 3840×2160" },
   "square-max": { width: 2880, height: 2880, label: "Square max · 2880×2880" },
 } as const;
 

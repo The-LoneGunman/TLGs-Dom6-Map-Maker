@@ -435,8 +435,81 @@ code { color: var(--gold-pale); font-size: 0.92em; }
 .plane-connection-row small { color: #75827c; font-size: 11px; line-height: 1.35; }
 .plane-pair-count { display: flex; flex-direction: column; gap: 3px; color: #75827c; font-size: 11px; text-align: center; }
 .plane-pair-count input { height: 30px; padding: 3px 5px; text-align: center; font-size: 11px; }
-.plane-advanced-settings { border-top: 1px solid var(--line); padding-top: 9px; }
-.plane-advanced-settings > div { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; }
+
+/* Setup tabs: collapsible sections, one-line hints, section-level scope and the pinned Generate bar. */
+.left-panel > .panel-scroll { flex: 1 1 auto; }
+.setup-form { padding-bottom: 64px; }
+.setup-form .field > span,
+.setup-form .range-field > span { font-size: 12px; }
+.setup-form .field input,
+.setup-form .field select,
+.setup-form .field textarea,
+.setup-form .toggle-row { font-size: 13px; }
+.setup-form .field-note,
+.setup-form .microcopy,
+.setup-form .warning-copy,
+.setup-form .text-button,
+.setup-form .button { font-size: 12px; }
+.section-heading > .scope-badge { margin-top: 6px; }
+.field > span > label { cursor: pointer; }
+.field > span > .scope-badge { margin-left: 2px; font-size: 11px; }
+.scoped-control { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.scoped-control > .scope-badge { font-size: 11px; }
+.setup-section { min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: rgba(255, 255, 255, 0.014); }
+.setup-section[open] { background: rgba(255, 255, 255, 0.022); }
+.setup-section > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 8px;
+  min-height: 44px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  color: var(--paper);
+  cursor: pointer;
+  font: 600 15px/1.25 Georgia, serif;
+  list-style: none;
+}
+.setup-section > summary::-webkit-details-marker { display: none; }
+.setup-section > summary::before { content: "▸"; flex: 0 0 12px; color: var(--gold); text-align: center; font: 700 12px/1 Inter, ui-sans-serif, sans-serif; transition: transform 120ms ease; }
+.setup-section[open] > summary::before { transform: rotate(90deg); }
+.setup-section > summary:hover { background: rgba(255, 255, 255, 0.025); }
+.setup-section > summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.setup-section-title { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+/* A long scope wraps to its own right-aligned line instead of squeezing the title. */
+.setup-section > summary > .scope-badge { flex: 0 0 auto; margin-left: auto; font-size: 11px; }
+.setup-section-note { flex: 1 1 100%; min-width: 0; padding-left: 20px; overflow: hidden; color: #8c9a92; font: 400 12px/1.35 Inter, ui-sans-serif, sans-serif; text-overflow: ellipsis; white-space: nowrap; }
+.setup-section[open] > summary > .setup-section-note { display: none; }
+.setup-section-body { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 4px 12px 14px; }
+.setup-subsection { border-color: rgba(94, 168, 157, 0.2); background: rgba(94, 168, 157, 0.03); }
+.setup-subsection[open] { background: rgba(94, 168, 157, 0.04); }
+.setup-subsection > summary { min-height: 40px; font: 650 13px/1.3 Inter, ui-sans-serif, sans-serif; }
+.setup-subsection .cave-start-nation-config { padding: 0; border: 0; background: transparent; }
+.setup-hint { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; margin-top: -5px; color: #8a978f; font-size: 12px; line-height: 1.45; }
+.setup-hint > p { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.more-help > summary { color: var(--gold); font-size: 12px; white-space: nowrap; }
+.more-help[open] { flex-basis: 100%; }
+.more-help > div { display: flex; flex-direction: column; gap: 6px; margin-top: 5px; padding-left: 9px; border-left: 2px solid rgba(216, 179, 94, 0.28); }
+.more-help p { margin: 0; }
+.setup-reset { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; border-top: 1px dashed var(--line); }
+.setup-reset .setup-hint { margin-top: 0; }
+.plane-info-card { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 10px 11px; border: 1px solid rgba(94, 168, 157, 0.2); border-radius: 7px; background: rgba(94, 168, 157, 0.055); }
+.plane-info-card > span { color: var(--teal-bright); font-size: 11px; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; }
+.plane-info-card strong { color: var(--paper); font-size: 13px; font-weight: 650; line-height: 1.3; }
+.plane-info-card small { color: #8a9c94; font-size: 12px; line-height: 1.45; }
+.setup-action-bar { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; max-height: 45vh; overflow-y: auto; padding: 11px 18px 6px; border-top: 1px solid var(--line-strong); background: var(--ink-850); box-shadow: 0 -10px 22px rgba(0, 0, 0, 0.28); }
+.setup-action-bar .allocation-summary,
+.setup-action-bar .allocation-summary button,
+.setup-action-bar .start-plan-errors { font-size: 12px; }
+.setup-action-bar .generate-button { width: 100%; font-size: 13px; }
+/* The left padding keeps the fixed "Open project" button from covering the Generate button. */
+.setup-action-foot { display: flex; align-items: center; justify-content: flex-end; min-height: 38px; padding-left: 118px; color: #7f8d85; font-size: 12px; text-align: right; }
+.setup-action-foot .text-button { align-self: center; font-size: 12px; }
+@media (max-width: 979px) {
+  /* The page scrolls on narrow screens; keep Generate reachable while the setup panel is in view. */
+  .setup-action-bar { position: sticky; bottom: 0; z-index: 6; max-height: 60vh; }
+  .setup-action-foot { min-height: 48px; padding-left: 128px; }
+}
 
 .existing-gateway-list { display: flex; flex-direction: column; gap: 9px; }
 .existing-gateway-card { display: flex; flex-direction: column; gap: 10px; padding: 11px; border: 1px solid rgba(216, 179, 94, 0.2); border-radius: 8px; background: rgba(216, 179, 94, 0.035); }
