@@ -4,6 +4,7 @@ import {
   isBlockedProvince,
   isCaveProvince,
   isWaterProvince,
+  landformWaterError,
   nationSpecificStartFeatureConflicts,
   planeFileSuffix,
   sanitizeMapName,
@@ -35,6 +36,7 @@ import { buildInitialDefensePlan, type VerifiedPopulationDefenseProfile } from "
 import { VERIFIED_POPULATION_DEFENSE_PROFILES } from "./populationDefenseProfiles";
 import { protectedStartProvinceKeys } from "./authoringLocks";
 import { connectedRegionLayoutNotice } from "./connectedRegions";
+import { blockedTerrainContentConflicts, hasRawIndependentDefenderDirectives } from "./terrainSafety";
 
 export const D6M_MAGIC = 898933;
 export const D6M_VERSION = 3;
@@ -703,6 +705,11 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
     if (plane.ownershipMode !== undefined && plane.ownershipMode !== "solid" && plane.ownershipMode !== "sparse") {
       add("error", `${plane.name} ownership mode must be solid or sparse.`, plane.id);
     }
+    const waterProvenanceError = landformWaterError(plane);
+    if (waterProvenanceError) add("error", `${plane.name}: ${waterProvenanceError}`, plane.id);
+    if (plane.landformStyle !== undefined && plane.landformStyle !== "natural-v1") {
+      add("error", `${plane.name} has an unsupported natural landform style.`, plane.id);
+    }
     if (plane.sparseLayout !== undefined && plane.sparseLayout !== "chambers" && plane.sparseLayout !== "regions") {
       add("error", `${plane.name} province layout must be chambers or regions.`, plane.id);
     }
@@ -714,6 +721,13 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
     if (plane.width > 32767 || plane.height > 32767) add("error", `${plane.name} exceeds signed-short D6M coordinates.`, plane.id);
     if (plane.width > 3840 || plane.height > 3840 || plane.width * plane.height > MAX_D6M_PIXELS) {
       add("error", `${plane.name} exceeds the supported 8.29-megapixel export envelope. Choose 3840x2160, 2880x2880, or a smaller custom size.`, plane.id);
+    }
+    if (resolvePlaneOwnershipMode(plane) === "solid" && plane.provinces.length > 0
+      && Number.isInteger(plane.width) && Number.isInteger(plane.height)
+      && plane.width >= 256 && plane.height >= 256 && plane.width <= 3840 && plane.height <= 3840
+      && plane.width * plane.height <= MAX_D6M_PIXELS
+      && plane.width * plane.height / plane.provinces.length < 512) {
+      add("warning", `${plane.name} has fewer than 512 native pixels per province. Very short borders can collapse below one pixel or merge visually at this resolution. Increase the output resolution or reduce the province count for clearer contacts; this is a raster-resolution caution, not a shape-generation failure.`, plane.id);
     }
     if (plane.mapTextColor && !validColorTuple(plane.mapTextColor, 4, 0, 1, false)) {
       add("error", `${plane.name}: province-name color needs four decimal values from 0 to 1.`, plane.id);
@@ -844,6 +858,9 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
       if (province.small && province.large) add("warning", `${province.name} is marked both small and large.`, plane.id, province.id);
       if (province.warmer && province.colder) add("warning", `${province.name} is marked both warmer and colder.`, plane.id, province.id);
       const terrainFlags = effectiveProvinceTerrainFlags(province);
+      const blockedContent = blockedTerrainContentConflicts(province, catalog);
+      if (blockedContent.length) add("error", `${province.name}: blocked Cave Wall cannot contain ${blockedContent.join(", ")}. Remove that content or the Cave Wall flag.`, plane.id, province.id);
+      if (terrainFlags.has("sea") && terrainFlags.has("cavewall")) add("warning", `${province.name}: Sea + Cave Wall retains both flags and remains blocked, with submerged native relief. This combination's in-game appearance has not been verified; remove Cave Wall for traversable water.`, plane.id, province.id);
       if (terrainFlags.has("deep") && !terrainFlags.has("sea")) add("warning", `${province.name}: the deep-sea flag has no effect without the sea flag.`, plane.id, province.id);
       const adverseTerrainCount = ["forest", "swamp", "waste", "highland", "mountains"]
         .filter((flag) => terrainFlags.has(flag as "forest" | "swamp" | "waste" | "highland" | "mountains")).length;
@@ -1445,10 +1462,6 @@ function powerfulGuardianForce(province: Province): boolean {
     || province.defenders.some((group) => (group.experience ?? 0) > 0
       || (group.randomEquipment ?? 0) > 0
       || Object.values(group.magic ?? {}).some((level) => (level ?? 0) > 0));
-}
-
-function hasRawIndependentDefenderDirectives(raw: string): boolean {
-  return raw.split(/\r?\n/).some((line) => /^\s*#(?:commander|comname|bodyguards|units|xp|randomequip|additem|clearmagic|mag_[a-z_]+)\b/i.test(line));
 }
 
 function blocksReliableStartMovement(edge: Edge): boolean {

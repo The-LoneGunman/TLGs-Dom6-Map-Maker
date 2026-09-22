@@ -45,7 +45,7 @@ export function changedLockedGroups(previous: Province, next: Province): Provinc
 }
 
 function layout(project: MapProject) {
-  return JSON.stringify([project.planes.map(p => [p.id, p.kind, p.ownershipMode, p.width, p.height, p.wrapX, p.wrapY,
+  return JSON.stringify([project.planes.map(p => [p.id, p.kind, p.ownershipMode, p.landformStyle, p.landformWater, p.width, p.height, p.wrapX, p.wrapY,
     p.provinces.map(v => [v.id, v.index, v.x, v.y, v.gridX, v.gridY]), p.edges,
     ...(usesConnectedRegions(p) ? [{ topology: "connected-regions" }] : [])]), project.gates]);
 }

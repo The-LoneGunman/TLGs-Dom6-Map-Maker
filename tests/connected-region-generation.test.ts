@@ -54,9 +54,11 @@ test("all non-Underworld sparse archetypes generate connected regions regardless
 
 test("Underworld regions settings leave Styx generation and native commands unchanged", () => {
   const { project, source, seed } = legacySource("underworld");
+  project.settings.biomeCohesion = 68; // Historical fixture's explicit setting, not the evolving new-map default.
   const oldPlane = generatePlane(source, project.settings, seed, 1, { deferStrategicFeatures: true });
   const opted = generatePlane({ ...source, sparseLayout: "regions" }, project.settings, seed, 1, { deferStrategicFeatures: true });
-  assert.equal(createHash("sha256").update(JSON.stringify(oldPlane)).digest("hex"), "9a1132ae0e2f4cec4408ce543e35ae1f9698e390058d8b42a7d0dad7e11d9ef0");
+  // New generation records provenance; no Underworld content or geometry changes.
+  assert.equal(createHash("sha256").update(JSON.stringify(oldPlane, (key, value) => key === "landformStyle" ? undefined : value)).digest("hex"), "9a1132ae0e2f4cec4408ce543e35ae1f9698e390058d8b42a7d0dad7e11d9ef0");
   assert.equal(usesConnectedRegions(oldPlane), false);
   assert.deepEqual(withoutLayout(opted), oldPlane);
   assert.ok(oldPlane.provinces.some(isWaterProvince));

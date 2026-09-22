@@ -166,6 +166,7 @@ test("recipe imports reject silently normalized seeds, cave IDs and duplicate co
 function requirementFixture(): MapProject {
   const p = cloneProject(baseline), plane = p.planes[0]!;
   plane.provinces = plane.provinces.slice(0, 4);
+  delete plane.landformWater; // This synthetic graph replaces the generated water-body membership.
   const [start, forest, rival, blocked] = plane.provinces;
   for (const v of plane.provinces) { v.start = false; delete v.teamStart; v.terrain = "forest"; v.terrainFlags = undefined; }
   blocked!.terrain = "cavewall";

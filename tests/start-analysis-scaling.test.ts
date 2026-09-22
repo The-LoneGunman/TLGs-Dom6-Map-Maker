@@ -36,6 +36,7 @@ function manyStartsProject() {
   project.specificStarts = [];
   project.planes = Array.from({ length: 8 }, (_, pi) => ({
     ...structuredClone(template), id: `p${pi}`, kind: "custom" as const, ownershipMode: "sparse" as const,
+    landformWater: undefined, // Synthetic IDs below deliberately replace the generated province collection.
     name: `Plane ${pi}`, width: 1024, height: 1024, wrapX: false, wrapY: false,
     provinces: Array.from({ length: 800 }, (_, i) => ({
       ...structuredClone(province), id: `n${i}`, index: i + 1, name: `Province ${pi}-${i}`,

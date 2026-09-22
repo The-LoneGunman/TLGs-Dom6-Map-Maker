@@ -6,6 +6,34 @@ interface RegionPair { a: number; b: number; key: string }
 interface TreePair { a: number; b: number; distance: number }
 interface Vertex extends Point { incoming?: number }
 interface Contact { neighbour: number; from: Point; to: Point; nx: number; ny: number; limit: number }
+interface RealmContour {
+  radiusX: number;
+  radiusY: number;
+  rotation: number;
+  cos: number;
+  sin: number;
+  organicPower: number;
+  outlineWaves: readonly [number, number, number, number];
+  warpX: number;
+  warpY: number;
+  lobeX: number;
+  lobeY: number;
+  lobeScale: number;
+  outerRadius: number;
+}
+
+interface RealmContourProfile {
+  aspect: readonly [number, number];
+  power: readonly [number, number];
+  primaryWave: readonly [number, number];
+  secondaryWaveRatio: readonly [number, number];
+  warp: number;
+  lobeChance: number;
+  lobeScale: readonly [number, number];
+  lobeDistance: readonly [number, number];
+  /** Group-coherent orientation with bounded local variation. */
+  groupedRotation: boolean;
+}
 
 export interface ConnectedRegionPlan {
   groups: readonly (readonly number[])[];
@@ -28,10 +56,17 @@ const pairKey = (a: string, b: string) => a < b ? `${a}|${b}` : `${b}|${a}`;
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const periodic = (v: number, wrap: boolean) => wrap ? v - Math.round(v) : v;
 const unit = (v: number, wrap: boolean) => wrap ? ((v % 1) + 1) % 1 : v;
+const naturalRealmKinds = new Set<Plane["kind"]>(["cave","cavern","hell","abyss","dream","elemental"]);
 function roll(key: string) {
   let h = 2166136261;
   for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 16777619);
   return (h >>> 0) / 4294967296;
+}
+
+function usesNaturalRealmContours(plane: Plane): boolean {
+  // Keep old saved maps byte-for-byte compatible when the opt-in metadata is absent.
+  return plane.landformStyle === "natural-v1"
+    && naturalRealmKinds.has(plane.kind);
 }
 
 /** Geometry-only planning: edits to armies, starts, terrain or edges cannot move the groups. */
@@ -162,7 +197,7 @@ export function createConnectedRegionOwnership(plane: Plane): ProvinceOwnershipM
 function connectedRegionOwnershipResult(plane: Plane): RegionOwnershipResult {
   // Validation and rendering share this cache: a native-resolution safety scan
   // is paid once per geometry edit, not again for terrain, armies or each render.
-  const signature = JSON.stringify([plane.id, plane.kind, plane.width, plane.height, plane.wrapX, plane.wrapY,
+  const signature = JSON.stringify([plane.id, plane.kind, plane.landformStyle, plane.width, plane.height, plane.wrapX, plane.wrapY,
     plane.provinces.map(p => [p.id,p.index,p.x,p.y,!!p.small,!!p.large]),
     plane.edges.map(e => pairKey(e.a,e.b)).sort()]);
   const cached = ownershipResults.get(signature);
@@ -227,18 +262,25 @@ function buildRegionalModel(source: Plane, plan: ConnectedRegionPlan): RegionOwn
     return { radiusX:radii[owner]!*Math.sqrt(stretch), radiusY:radii[owner]!/Math.sqrt(stretch),
       rotation, cos:Math.cos(rotation), sin:Math.sin(rotation) };
   }) : undefined;
+  const realmContours = usesNaturalRealmContours(plane)
+    ? buildNaturalRealmContours(plane,plan,radii,pixel)
+    : undefined;
   const silhouette: SparseSilhouette = plane.kind === "cloud" ? "cloud-island" : plane.kind === "air" ? "air-stream"
     : plane.kind === "cavern" ? "cavern-vault" : plane.kind === "hell" ? "infernal-fracture"
       : plane.kind === "abyss" ? "abyss-pocket" : plane.kind === "dream" ? "dream-lobe"
         : plane.kind === "elemental" ? "elemental-shard" : "cave-chamber";
   const chambers: ProvinceChamberPrimitive[] = plane.provinces.map((p,i) => {
-    const contour = skyContours?.[i];
+    const contour = skyContours?.[i], realm = realmContours?.[i];
     return {
-      kind:"chamber",owner:i,center:{x:p.x,y:p.y},radius:contour ? contour.radiusX*1.23 : radii[i]!*1.12,
-      radiusX:contour?.radiusX ?? radii[i]!,radiusY:contour?.radiusY ?? radii[i]!,
-      rotation:contour?.rotation ?? 0,rotationCos:contour?.cos ?? 1,rotationSin:contour?.sin ?? 0,
-      contourPower:2,organicPower:2,warpX:0,warpY:0,
-      lobeX:0,lobeY:0,lobeScale:0,hub:!plan.passageOwners.has(i),silhouette,
+      kind:"chamber",owner:i,center:{x:p.x,y:p.y},radius:realm?.outerRadius ?? (contour ? contour.radiusX*1.23 : radii[i]!*1.12),
+      radiusX:realm?.radiusX ?? contour?.radiusX ?? radii[i]!,radiusY:realm?.radiusY ?? contour?.radiusY ?? radii[i]!,
+      rotation:realm?.rotation ?? contour?.rotation ?? 0,rotationCos:realm?.cos ?? contour?.cos ?? 1,
+      rotationSin:realm?.sin ?? contour?.sin ?? 0,
+      contourPower:realm ? realm.organicPower < 1.98 ? 1 : realm.organicPower > 2.55 ? 4 : 2 : 2,
+      organicPower:realm?.organicPower ?? 2,outlineWaves:realm?.outlineWaves,
+      warpX:realm?.warpX ?? 0,warpY:realm?.warpY ?? 0,
+      lobeX:realm?.lobeX ?? 0,lobeY:realm?.lobeY ?? 0,lobeScale:realm?.lobeScale ?? 0,
+      hub:!plan.passageOwners.has(i),silhouette,
     };
   });
   const frontierDistance=(owner:number,c:Contact)=>c.limit-c.nx*centres[owner]!.x-c.ny*centres[owner]!.y;
@@ -288,13 +330,15 @@ function buildRegionalModel(source: Plane, plan: ConnectedRegionPlan): RegionOwn
       if (wall.limit-wall.nx*point.x-wall.ny*point.y < shore-EPS) return false;
     }
     const dx=point.x-centre.x,dy=point.y-centre.y;
-    const phase=phases[owner]!,contour=skyContours?.[owner];
+    const phase=phases[owner]!,contour=skyContours?.[owner],realm=realmContours?.[owner];
     if (contour) {
       const u=(dx*contour.cos+dy*contour.sin)/contour.radiusX;
       const v=(-dx*contour.sin+dy*contour.cos)/contour.radiusY;
       const angle=Math.atan2(v,u);
       const coast=1+.11*Math.sin(angle*2+phase)+.075*Math.sin(angle*3-phase)+.04*Math.sin(angle*5+phase);
       if(u*u+v*v<=coast*coast)return true;
+    } else if (realm) {
+      if(insideRealmContour(dx,dy,realm))return true;
     } else {
       const angle=Math.atan2(dy,dx);
       const radius=radii[owner]!*(1+.065*Math.sin(angle*3+phase)+.035*Math.sin(angle*5-phase));
@@ -363,6 +407,119 @@ function buildRegionalModel(source: Plane, plan: ConnectedRegionPlan): RegionOwn
     }
   }
   return { model:{mode:"sparse",metricAspect:aspect,columns,rows,primitives:[...chambers,...corridors],ownerAt,regionBorders} };
+}
+
+function naturalRealmProfile(kind: Plane["kind"]): RealmContourProfile {
+  if (kind === "cavern") return {
+    aspect:[1.32,1.92],power:[2.12,2.78],primaryWave:[.085,.145],secondaryWaveRatio:[.28,.43],
+    warp:.085,lobeChance:.58,lobeScale:[.27,.42],lobeDistance:[.38,.51],groupedRotation:true,
+  };
+  if (kind === "hell") return {
+    aspect:[1.08,1.48],power:[1.64,1.92],primaryWave:[.07,.125],secondaryWaveRatio:[.34,.52],
+    warp:.1,lobeChance:.18,lobeScale:[.22,.34],lobeDistance:[.42,.52],groupedRotation:false,
+  };
+  if (kind === "abyss") return {
+    aspect:[1.14,1.7],power:[1.78,2.2],primaryWave:[.13,.2],secondaryWaveRatio:[.36,.55],
+    warp:.115,lobeChance:.46,lobeScale:[.25,.4],lobeDistance:[.39,.53],groupedRotation:false,
+  };
+  if (kind === "dream") return {
+    aspect:[1.1,1.52],power:[2.06,2.56],primaryWave:[.12,.19],secondaryWaveRatio:[.28,.47],
+    warp:.105,lobeChance:.82,lobeScale:[.34,.5],lobeDistance:[.34,.48],groupedRotation:false,
+  };
+  if (kind === "elemental") return {
+    aspect:[1.08,1.52],power:[2.62,3.28],primaryWave:[.08,.145],secondaryWaveRatio:[.35,.54],
+    warp:.08,lobeChance:.16,lobeScale:[.21,.32],lobeDistance:[.42,.51],groupedRotation:false,
+  };
+  return {
+    aspect:[1.08,1.46],power:[1.86,2.34],primaryWave:[.1,.165],secondaryWaveRatio:[.27,.43],
+    warp:.075,lobeChance:.34,lobeScale:[.24,.37],lobeDistance:[.4,.53],groupedRotation:false,
+  };
+}
+
+function buildNaturalRealmContours(
+  plane: Plane,
+  plan: ConnectedRegionPlan,
+  radii: readonly number[],
+  pixel: number,
+): RealmContour[] {
+  const profile = naturalRealmProfile(plane.kind);
+  return plane.provinces.map((province,owner) => {
+    const key=`${plane.id}:${plane.kind}:${province.id}:natural-v1`;
+    const passage=plan.passageOwners.has(owner);
+    let aspect=profile.aspect[0]+(profile.aspect[1]-profile.aspect[0])*roll(`${key}:aspect`);
+    if(passage)aspect=1+(aspect-1)*.36;
+    const root=Math.sqrt(aspect);
+    let radiusX=radii[owner]!*root,radiusY=radii[owner]!/root;
+    const group=plan.groups[plan.groupByOwner[owner]!] ?? [owner];
+    const groupAnchor=plane.provinces[group[0]!]!.id;
+    const rotation=profile.groupedRotation
+      ? roll(`${plane.id}:${plane.kind}:${groupAnchor}:natural-v1-axis`)*Math.PI+(roll(`${key}:tilt`)-.5)*.58
+      : roll(`${key}:rotation`)*Math.PI*2;
+    const organicPower=profile.power[0]+(profile.power[1]-profile.power[0])*roll(`${key}:power`);
+    const phase=roll(`${key}:wave-phase`)*Math.PI*2;
+    const secondary=roll(`${key}:wave-secondary`)*Math.PI*2;
+    const amplitude=profile.primaryWave[0]+(profile.primaryWave[1]-profile.primaryWave[0])
+      * roll(`${key}:wave-amplitude`);
+    const secondaryRatio=profile.secondaryWaveRatio[0]+(profile.secondaryWaveRatio[1]-profile.secondaryWaveRatio[0])
+      * roll(`${key}:wave-ratio`);
+    const outlineWaves:[number,number,number,number]=[
+      Math.cos(phase)*amplitude,Math.sin(phase)*amplitude,
+      Math.cos(secondary)*amplitude*secondaryRatio,Math.sin(secondary)*amplitude*secondaryRatio,
+    ];
+    const warpX=(roll(`${key}:warp-x`)*2-1)*profile.warp;
+    const warpY=(roll(`${key}:warp-y`)*2-1)*profile.warp;
+    const hasLobe=!passage&&roll(`${key}:lobe`) < profile.lobeChance;
+    const lobeAngle=roll(`${key}:lobe-angle`)*Math.PI*2;
+    const lobeDistance=hasLobe
+      ? profile.lobeDistance[0]+(profile.lobeDistance[1]-profile.lobeDistance[0])*roll(`${key}:lobe-distance`)
+      : 0;
+    const lobeX=Math.cos(lobeAngle)*lobeDistance,lobeY=Math.sin(lobeAngle)*lobeDistance;
+    const lobeScale=hasLobe
+      ? profile.lobeScale[0]+(profile.lobeScale[1]-profile.lobeScale[0])*roll(`${key}:lobe-scale`)
+      : 0;
+    const contourLimit=1+Math.abs(warpX)+Math.abs(warpY)+outlineWaves.reduce((sum,wave)=>sum+Math.abs(wave),0);
+    const squircleFactor=organicPower>2 ? Math.pow(2,.5-1/organicPower) : 1;
+    const contourOuterFactor=Math.pow(contourLimit,1/organicPower)*squircleFactor;
+    const lobeOuterFactor=lobeScale>0?lobeDistance+lobeScale:1;
+    const outerFactor=Math.max(contourOuterFactor,lobeOuterFactor);
+    // Preserve broad rooms without allowing an irregular tip to reach a
+    // non-neighbour before the Voronoi wall guard can clip it.
+    const safeFraction=passage
+      ? .385+roll(`${key}:outer-bound`)*.045
+      : .615+roll(`${key}:outer-bound`)*.085;
+    const safeOuterRadius=Math.max(pixel*2.05,plan.localSpacings[owner]!*safeFraction);
+    const rawOuterRadius=Math.max(radiusX,radiusY)*outerFactor;
+    if(rawOuterRadius>safeOuterRadius) {
+      const shrink=safeOuterRadius/rawOuterRadius;
+      radiusX*=shrink;radiusY*=shrink;
+    }
+    radiusX=Math.max(pixel*1.6,radiusX);radiusY=Math.max(pixel*1.6,radiusY);
+    return {
+      radiusX,radiusY,rotation,cos:Math.cos(rotation),sin:Math.sin(rotation),organicPower,outlineWaves,
+      warpX,warpY,lobeX,lobeY,lobeScale,outerRadius:Math.max(radiusX,radiusY)*outerFactor,
+    };
+  });
+}
+
+function insideRealmContour(dx:number,dy:number,contour:RealmContour):boolean {
+  if(dx*dx+dy*dy>contour.outerRadius*contour.outerRadius+EPS)return false;
+  const x=(dx*contour.cos+dy*contour.sin)/contour.radiusX;
+  const y=(-dx*contour.sin+dy*contour.cos)/contour.radiusY;
+  const bias=contour.warpX*x/(1+Math.abs(x))+contour.warpY*y/(1+Math.abs(y));
+  const measure=Math.pow(Math.abs(x),contour.organicPower)+Math.pow(Math.abs(y),contour.organicPower);
+  if(measure<=1+bias+angularContourWave(x,y,contour.outlineWaves)+EPS)return true;
+  if(contour.lobeScale<=0)return false;
+  const lx=(x-contour.lobeX)/contour.lobeScale,ly=(y-contour.lobeY)/contour.lobeScale;
+  return lx*lx+ly*ly<=1+EPS;
+}
+
+/** Polynomial third/fifth harmonics keep owner sampling deterministic and cheap. */
+function angularContourWave(x:number,y:number,waves:readonly[number,number,number,number]):number {
+  const length=Math.hypot(x,y);
+  if(length<=EPS)return 0;
+  const ux=x/length,uy=y/length,x2=ux*ux,y2=uy*uy;
+  return waves[0]*ux*(4*x2-3)+waves[1]*uy*(3-4*y2)
+    +waves[2]*ux*(16*x2*x2-20*x2+5)+waves[3]*uy*(16*y2*y2-20*y2+5);
 }
 
 function nativePixel(plane: Plane, x: number, y: number): number {

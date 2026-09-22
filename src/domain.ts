@@ -238,6 +238,11 @@ export interface Province {
   rawDirectives: string;
 }
 
+export interface LandformWaterGroup {
+  provinceIds: string[];
+  enclosed: boolean;
+}
+
 export interface Plane {
   id: string;
   name: string;
@@ -256,6 +261,10 @@ export interface Plane {
   wrapY: boolean;
   /** Missing defaults to solid for surface/custom planes and sparse otherwise. */
   ownershipMode?: PlaneOwnershipMode;
+  /** Applied on generation only; absence preserves the saved legacy ownership outlines. */
+  landformStyle?: "natural-v1";
+  /** Generated water-body shape provenance; later terrain/content edits do not rebuild it. */
+  landformWater?: LandformWaterGroup[];
   /** @deprecated Parsed and serialized verbatim for old projects; topology is derived from kind and ownershipMode. */
   sparseLayout?: PlaneSparseLayout;
   /** Optional per-plane overrides; missing inherits the project-level flag. */
@@ -267,6 +276,31 @@ export interface Plane {
   provinces: Province[];
   edges: Edge[];
   rawDirectives: string;
+}
+
+/** Shared strict-import and editor validation for immutable water-shape provenance. */
+export function landformWaterError(plane: Pick<Plane, "landformStyle" | "landformWater" | "provinces">): string | undefined {
+  const groups: unknown = plane.landformWater;
+  if (groups === undefined) return undefined;
+  if (plane.landformStyle !== "natural-v1") return "landformWater requires landformStyle natural-v1.";
+  if (!Array.isArray(groups) || groups.length > 800) return "landformWater must be an array of at most 800 water groups.";
+  const existing = new Set(plane.provinces.map(province => province.id)), used = new Set<string>();
+  for (const group of groups) {
+    if (!group || typeof group !== "object" || Array.isArray(group)
+      || Object.keys(group).sort().join(",") !== "enclosed,provinceIds") {
+      return "Each landformWater group requires only provinceIds and enclosed fields.";
+    }
+    if (typeof group.enclosed !== "boolean") return "landformWater enclosed must be a boolean.";
+    if (!Array.isArray(group.provinceIds) || !group.provinceIds.length || group.provinceIds.length + used.size > 800) {
+      return "landformWater groups require nonempty provinceIds arrays totaling at most 800 provinces.";
+    }
+    for (const id of group.provinceIds) {
+      if (typeof id !== "string" || !existing.has(id)) return "landformWater references an unknown province ID.";
+      if (used.has(id)) return "landformWater province IDs must be unique across all groups.";
+      used.add(id);
+    }
+  }
+  return undefined;
 }
 
 export interface GateEndpoint {

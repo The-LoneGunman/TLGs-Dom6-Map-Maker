@@ -5,6 +5,7 @@ import type { Plane } from "../src/domain";
 import { createDefaultProject } from "../src/generator";
 import { computeProvinceTopology, connectionKey, createProvinceOwnershipModel, type ProvinceChamberPrimitive, type ProvinceCorridorPrimitive } from "../src/geometry";
 import { connectedRegionLayoutNotice } from "../src/connectedRegions";
+import savedOwnershipPlane from "./fixtures/legacy-ownership-plane.json";
 
 const undergroundKinds = ["cave", "cavern", "underworld", "hell", "abyss"] as const;
 const source = createDefaultProject("organic-underground-regression").planes[0]!;
@@ -180,7 +181,9 @@ const unaffectedDigests: Partial<Record<Plane["kind"], string>> = {
 };
 test("solid and incompatible authored-map compatibility geometry retain their frozen digests", () => {
   for (const [kind, expected] of Object.entries(unaffectedDigests)) {
-    const plane = createDefaultProject("underground-isolation-baseline").planes[0]!;
+    // Frozen pre-natural input, not regenerated through the newer biome sampler.
+    // Its original ownership hashes below must remain unchanged.
+    const plane = structuredClone(savedOwnershipPlane) as Plane;
     plane.kind = kind as Plane["kind"];
     plane.id = `unaffected-${kind}`;
     if (kind !== "surface" && kind !== "custom") {

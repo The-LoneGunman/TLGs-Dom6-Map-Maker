@@ -13,7 +13,9 @@ export function borderStyles(edge?: Pick<Edge, "kind" | "special">): BorderStyle
   const bits = edge ? edgeSpecial(edge as Edge) : 0;
   const styles: BorderStyle[] = [];
   if (bits & 32) styles.push({ color: "rgba(195, 129, 82, .82)", width: 4.5, dash: [2, 2] });
-  if (bits & 2) styles.push({ color: "rgba(83, 174, 213, .9)", width: 3.5, dash: [] });
+  // A bridge keeps the same visible watercourse without adding native river
+  // bit 2, which would make the crossing condition-dependent again.
+  if (bits & (2 | 16)) styles.push({ color: "rgba(83, 174, 213, .9)", width: 3.5, dash: [] });
   if (bits & 8) styles.push({ color: "rgba(223, 196, 122, .9)", width: 2, dash: [5, 3] });
   if (bits & 16) styles.push({ color: "rgba(213, 188, 126, .95)", width: 2.2, dash: [5, 2] });
   if (bits & 1) styles.push({ color: "rgba(220, 158, 91, .95)", width: 2.2, dash: [6, 2] });

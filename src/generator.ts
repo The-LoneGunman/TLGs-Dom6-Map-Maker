@@ -40,6 +40,7 @@ import { buildConnectedRegionPlan } from "./connectedRegions";
 import { regenerateGeneratedProvinceNames } from "./naming";
 import { assertCanRebuildLayout, pruneAuthoringRegions, restoreGenerationLocks } from "./authoringLocks";
 import { applyPlaneContentPreferences, applyPlaneRoutePreferences, assertPlaneGenerationOverrides, preferredDryTerrain } from "./generationControls";
+import { generateBorderRivers } from "./borderRivers";
 
 const TAU = Math.PI * 2;
 
@@ -336,7 +337,7 @@ export function createDefaultProject(seed = "pantokrator-001", options: { genera
     continentCount: 3,
     specialPlaneSizePercent: 30,
     provinceNameSeed: 0,
-    biomeCohesion: 68,
+    biomeCohesion: 58,
     throneCount: 8,
     economyBalance: "hard",
     overlandTopology: "competitive",
@@ -493,6 +494,33 @@ export function previewProvinceBudget(project: MapProject) {
     total: rows.reduce((sum, r) => sum + r.target, 0), referenceCore, usesFallbackCore: actualCore === 0 };
 }
 
+/** Explicit-generation provenance only; content/terrain edits must never call this. */
+export function captureGeneratedWaterProvenance(plane: Plane): void {
+  // Recompute against the common base partition, never a previous body's
+  // coast treatment. Frame contact is preserved by the bounded shape warp.
+  delete plane.landformWater;
+  if (plane.landformStyle !== "natural-v1" || resolvePlaneOwnershipMode(plane) !== "solid") return;
+  const topology = computeProvinceTopology(plane);
+  const water = new Map(plane.provinces.filter(isWaterProvince).map(province => [province.id, [] as string[]]));
+  for (const pair of topology.pairs) if (water.has(pair.a) && water.has(pair.b)) {
+    water.get(pair.a)!.push(pair.b); water.get(pair.b)!.push(pair.a);
+  }
+  const frame = new Set(topology.cells.filter(cell => water.has(cell.provinceId)
+    && cell.polygons.some(polygon => polygon.some(point => Math.min(point.x, 1 - point.x, point.y, 1 - point.y) <= 1e-8)))
+    .map(cell => cell.provinceId));
+  const order = new Map(plane.provinces.map((province, index) => [province.id, index]));
+  const unseen = new Set(water.keys()), groups: NonNullable<Plane["landformWater"]> = [];
+  while (unseen.size) {
+    const first = unseen.values().next().value!, queue = [first]; unseen.delete(first);
+    for (let cursor = 0; cursor < queue.length; cursor++) for (const next of water.get(queue[cursor]!)!) {
+      if (unseen.delete(next)) queue.push(next);
+    }
+    groups.push({ provinceIds: queue.sort((a, b) => order.get(a)! - order.get(b)!),
+      enclosed: !queue.some(id => frame.has(id)) });
+  }
+  plane.landformWater = groups;
+}
+
 export function generateProject(project: MapProject): MapProject {
   assertCanRebuildLayout(project);
   for (const plane of project.planes) if (plane.generationOverrides) assertPlaneGenerationOverrides(plane.generationOverrides);
@@ -597,6 +625,11 @@ export function generateProject(project: MapProject): MapProject {
     guardianFor(plane.kind, plane.variant ?? ARCHETYPE_PROFILES[plane.kind].defaultVariant, province, new SeededRandom(seed), seed));
   appendGuardianCapacityWarnings(next);
   restoreGenerationLocks(project, next);
+  for (const plane of next.planes) {
+    captureGeneratedWaterProvenance(plane);
+    finalizeGeneratedRivers(plane, next.settings, `${next.seed}:river-network:${plane.id}`,
+      next.specificStarts.filter(start => start.planeId === plane.id).map(start => start.provinceId), next.generationWarnings);
+  }
   pruneAuthoringRegions(next);
   regenerateGeneratedProvinceNames(next.planes, next.seed, next.settings.provinceNameSeed);
   next.updatedAt = new Date().toISOString();
@@ -659,7 +692,10 @@ function prepareSparseStartBasins(
   const naturalOverland = normalizeOceanLayout(project.settings.oceanLayout) === "natural";
   const scaleAwareNatural = naturalOverland && project.settings.players <= 12;
   const highLoadAtlas = naturalOverland && project.settings.players > 12;
-  const preparedStartAnchors = (scaleAwareNatural || highLoadAtlas || !basinPlan.feasible || !separatedOverlandPlan.feasible)
+  // Explicit ocean presets promise a particular land/water topology. Their
+  // real terrain must constrain starts, not be repainted into scattered seas
+  // by the generic category repair. The downstream allocator reports limits.
+  const preparedStartAnchors = naturalOverland && (scaleAwareNatural || highLoadAtlas || !basinPlan.feasible || !separatedOverlandPlan.feasible)
     ? ensureOverlandStartCategories(project, requested)
     : undefined;
   if (preparedStartAnchors) {
@@ -1048,6 +1084,10 @@ export function generatePlane(
   planeIndex: number,
   options: GeneratePlaneOptions = {},
 ): Plane {
+  // Applied geometry provenance is written only by explicit generation. Old
+  // imports and settings-only recipes retain their existing saved outlines.
+  source = { ...source, landformStyle: "natural-v1" };
+  delete source.landformWater;
   if (source.generationOverrides) assertPlaneGenerationOverrides(source.generationOverrides);
   const rng = new SeededRandom(stageSeed);
   const authoredNames = new Map(source.provinces
@@ -1179,6 +1219,10 @@ export function generatePlane(
     applyGeneratedOverlandTopology(generated, "open", `${stageSeed}:overland-topology`);
   }
   markProvinceSizes(generated);
+  if (!options.deferStrategicFeatures) {
+    captureGeneratedWaterProvenance(generated);
+    finalizeGeneratedRivers(generated, settings, `${stageSeed}:river-network`);
+  }
   regenerateGeneratedProvinceNames([generated], stageSeed, settings.provinceNameSeed ?? 0);
   return generated;
 }
@@ -1187,6 +1231,10 @@ function climateAt(x: number, y: number, salt: number) {
   return {
     elevation: clamp(field(x, y, salt % 17) * 0.72 + field(x, y, (salt % 23) + 7) * 0.28, 0, 1),
     moisture: clamp(field(x, y, (salt % 29) + 11) * 0.65 + field(x, y, (salt % 31) + 3) * 0.35, 0, 1),
+    biomeElevation: clamp(field(x * 1.8 + 0.17, y * 1.8 - 0.11, salt % 17) * 0.72
+      + field(x * 1.8 - 0.13, y * 1.8 + 0.19, (salt % 23) + 7) * 0.28, 0, 1),
+    biomeMoisture: clamp(field(x * 1.8 + 0.17, y * 1.8 - 0.11, (salt % 29) + 11) * 0.65
+      + field(x * 1.8 - 0.13, y * 1.8 + 0.19, (salt % 31) + 3) * 0.35, 0, 1),
     temperature: clamp(0.58 - Math.abs(y - 0.52) * 0.7 + (field(x, y, (salt % 13) + 19) - 0.5) * 0.5, 0, 1),
     water: clamp(field(x, y, (salt % 37) + 5) * 0.75 + field(x, y, (salt % 41) + 17) * 0.25, 0, 1),
   };
@@ -1203,6 +1251,20 @@ function chooseTerrain(
 ): { terrain: TerrainKey; biome: BiomeKey } {
   const activeVariant = variant ?? ARCHETYPE_PROFILES[kind].defaultVariant;
   const cohesion = settings.biomeCohesion / 100;
+  // A restrained regional scale supplies nearby alternatives without equal
+  // terrain quotas or per-province checkerboarding. Deliberately cohesive and
+  // themed worlds retain their original climate rules.
+  const regionalBlend = (kind === "surface" || kind === "custom") && activeVariant === "temperate"
+    ? clamp((0.8 - cohesion) * 1.2, 0, 0.38) : 0;
+  if (regionalBlend > 0) {
+    // Preserve climate contrast: a plain average would erase wetter forest
+    // regions and high ground by squeezing both fields toward 0.5.
+    const contrast = Math.hypot(1 - regionalBlend, regionalBlend);
+    const mix = (broad: number, regional: number) => clamp(0.5
+      + ((broad - 0.5) * (1 - regionalBlend) + (regional - 0.5) * regionalBlend) / contrast, 0, 1);
+    climate = { ...climate, elevation: mix(climate.elevation, climate.biomeElevation),
+      moisture: mix(climate.moisture, climate.biomeMoisture) };
+  }
   const fine = field(x * 6.7 + 0.13, y * 5.9 - 0.17, 53) * 0.62
     + field(x * 11.3 - 0.29, y * 9.7 + 0.23, 79) * 0.38;
   const local = (fine - 0.5) * (1 - cohesion) * 1.2;
@@ -1263,9 +1325,51 @@ function chooseTerrain(
   return { terrain: "plains", biome: "heartland" };
 }
 
+type WaterShapePlane = Pick<Plane, "kind" | "ownershipMode" | "landformStyle" | "wrapX" | "wrapY" | "width" | "height">;
+
+function usesNaturalWaterShapes(plane: WaterShapePlane): boolean {
+  return plane.landformStyle === "natural-v1" && resolvePlaneOwnershipMode(plane) === "solid"
+    && !ARCHETYPE_PROFILES[plane.kind].caveFamily;
+}
+
+/** Broad, periodic bends alter a water body's outline without scattering its cells. */
+function waterShapePoint(point: Pick<Province, "x" | "y">, seed: string, strength = 1) {
+  const phase = hashString(`${seed}:coast-phase`) / 4_294_967_296 * TAU;
+  const phase2 = hashString(`${seed}:coast-phase-2`) / 4_294_967_296 * TAU;
+  const amplitude = 0.065 * strength;
+  return {
+    x: point.x + Math.sin(point.x * TAU) * amplitude
+      * (Math.sin(point.y * TAU + phase) * 0.72 + Math.sin(point.y * TAU * 2 + phase2) * 0.28),
+    y: point.y + Math.sin(point.y * TAU) * amplitude
+      * (Math.sin(point.x * TAU + phase2) * 0.72 + Math.sin(point.x * TAU * 2 + phase) * 0.28),
+  };
+}
+
+/** One coherent basin with asymmetric bays, rather than radius-sorted circles. */
+function naturalBasinScore(plane: WaterShapePlane, seed: string, centerX: number, centerY: number, inland: boolean) {
+  const phase = hashString(`${seed}:basin-phase`) / 4_294_967_296 * TAU;
+  const rotation = hashString(`${seed}:basin-angle`) / 4_294_967_296 * TAU;
+  const stretch = 1.06 + (hashString(`${seed}:basin-stretch`) % 101) / 1000;
+  const cos = Math.cos(rotation), sin = Math.sin(rotation);
+  return (province: Pick<Province, "x" | "y">) => {
+    const point = waterShapePoint(province, seed);
+    let dx = point.x - centerX, dy = point.y - centerY;
+    if (plane.wrapX) dx -= Math.round(dx);
+    if (plane.wrapY) dy -= Math.round(dy);
+    const x = (dx * cos + dy * sin) / stretch, y = (-dx * sin + dy * cos) * stretch;
+    const angle = Math.atan2(y, x);
+    const lobes = 1 + Math.sin(angle * 2 + phase) * 0.09 + Math.sin(angle * 3 - phase * 0.7) * 0.055;
+    // Keep ordinary inland-sea quotas enclosed. Extreme quotas may still use
+    // the margin when there are too few interior provinces to meet the quota.
+    const margin = Math.min(plane.wrapX ? 1 : Math.min(province.x, 1 - province.x),
+      plane.wrapY ? 1 : Math.min(province.y, 1 - province.y));
+    return Math.hypot(x, y) / lobes + (inland ? Math.max(0, 0.12 - margin) * 8 : 0);
+  };
+}
+
 function enforceWaterQuota(
   provinces: Province[],
-  plane: Pick<Plane, "kind" | "variant" | "wrapX" | "wrapY" | "width" | "height">,
+  plane: WaterShapePlane & Pick<Plane, "variant">,
   percent: number,
   seed: string,
   biomeCohesion: number,
@@ -1299,7 +1403,7 @@ function enforceWaterQuota(
 
 function oceanLayoutWaterScore(
   province: Pick<Province, "x" | "y">,
-  plane: Pick<Plane, "wrapX" | "wrapY" | "width" | "height">,
+  plane: WaterShapePlane,
   layout: OceanLayout,
   continentCount: number,
   salt: number,
@@ -1312,6 +1416,11 @@ function oceanLayoutWaterScore(
     return coarse * cohesion + fine * (1 - cohesion);
   };
   if (layout === "natural") return natural();
+
+  if (usesNaturalWaterShapes(plane) && layout === "inland_sea") {
+    return naturalBasinScore(plane, `${salt}:inland`, 0.5 + ((salt % 17) - 8) / 250,
+      0.5 + ((salt % 23) - 11) / 280, true)(province);
+  }
 
   const aspect = plane.height > 0 ? clamp(plane.width / plane.height, 0.35, 3) : 1;
   const distance = (x: number, y: number) => periodicProvinceDistance(province, { x, y }, plane, aspect);
@@ -1390,7 +1499,10 @@ function selectSingleContinentWater(
   const water = new Set<string>();
   const centerX = 0.5 + ((hashString(`${seed}:single-x`) % 17) - 8) / 500;
   const centerY = 0.5 + ((hashString(`${seed}:single-y`) % 17) - 8) / 500;
+  const organic = usesNaturalWaterShapes(plane);
+  const basin = organic ? naturalBasinScore(plane, `${seed}:continent`, centerX, centerY, false) : undefined;
   const peripheralScore = (province: Province) => {
+    if (basin) return basin(province);
     if (!plane.wrapX || !plane.wrapY) {
       const edgeX = plane.wrapX ? 1 : Math.min(province.x, 1 - province.x);
       const edgeY = plane.wrapY ? 1 : Math.min(province.y, 1 - province.y);
@@ -1403,7 +1515,7 @@ function selectSingleContinentWater(
     const frontier = water.size
       ? dry.filter((province) => (adjacency.get(province.id) ?? []).some((id) => water.has(id)))
       : dry;
-    const ranked = [...frontier, ...dry.filter((province) => !frontier.includes(province))]
+    const ranked = (organic ? frontier : [...frontier, ...dry.filter((province) => !frontier.includes(province))])
       .sort((a, b) => peripheralScore(b) - peripheralScore(a)
         || (hashString(`${seed}:single-grow:${a.id}`) % 1000) - (hashString(`${seed}:single-grow:${b.id}`) % 1000)
         || a.index - b.index);
@@ -1512,6 +1624,10 @@ function selectMultipleContinentWater(
 ): Set<string> | undefined {
   const axes: Array<"x" | "y"> = plane.width >= plane.height ? ["x", "y"] : ["y", "x"];
   for (let achieved = Math.min(requested, plane.provinces.length - target); achieved >= 2; achieved -= 1) {
+    if (usesNaturalWaterShapes(plane)) {
+      const shaped = selectShapedContinentWater(plane, adjacency, target, achieved, seed);
+      if (shaped) return shaped;
+    }
     if (achieved === 6) {
       for (const [columns, rows] of [[2, 3], [3, 2]] as const) {
         for (const offsetX of [-0.04, 0, 0.04]) {
@@ -1564,6 +1680,37 @@ function selectMultipleContinentWater(
   return undefined;
 }
 
+/** Try broad sinuous separators before the unchanged capacity-safe layouts. */
+function selectShapedContinentWater(
+  plane: Plane,
+  adjacency: Map<string, string[]>,
+  target: number,
+  componentCount: number,
+  seed: string,
+): Set<string> | undefined {
+  const accept = (initial: Set<string> | undefined, suffix: string) => initial && initial.size <= target
+    ? fillWaterPreservingContinents(plane, adjacency, initial, target, componentCount, `${seed}:shaped:${suffix}`)
+    : undefined;
+  if (componentCount === 6) {
+    for (const [columns, rows] of [[2, 3], [3, 2]] as const) {
+      for (const offset of [0, 0.04, -0.04]) {
+        const filled = accept(topologyGridSectorWater(plane, adjacency, columns, rows, offset, -offset,
+          `${seed}:shaped-grid`, 0.8), `grid-${columns}-${rows}-${offset}`);
+        if (filled) return filled;
+      }
+    }
+  }
+  const axes: Array<"x" | "y"> = plane.width >= plane.height ? ["x", "y"] : ["y", "x"];
+  for (const axis of axes) {
+    for (const offset of [0, 0.04, -0.04, 0.08, -0.08]) {
+      const filled = accept(topologySectorWater(plane, adjacency, axis, componentCount, offset,
+        `${seed}:shaped-sectors`, 1), `${axis}-${offset}`);
+      if (filled) return filled;
+    }
+  }
+  return undefined;
+}
+
 function topologySectorWater(
   plane: Plane,
   adjacency: Map<string, string[]>,
@@ -1571,10 +1718,12 @@ function topologySectorWater(
   componentCount: number,
   offset: number,
   seed: string,
+  shapeStrength = 0,
 ): Set<string> | undefined {
   const wrap = axis === "x" ? plane.wrapX : plane.wrapY;
   const sectorById = new Map(plane.provinces.map((province) => {
-    const raw = (axis === "x" ? province.x : province.y) + offset;
+    const point = shapeStrength ? waterShapePoint(province, seed, shapeStrength) : province;
+    const raw = (axis === "x" ? point.x : point.y) + offset;
     const coordinate = wrap ? ((raw % 1) + 1) % 1 : clamp(raw, 0, 1 - Number.EPSILON);
     return [province.id, Math.min(componentCount - 1, Math.floor(coordinate * componentCount))];
   }));
@@ -1648,13 +1797,15 @@ function topologyGridSectorWater(
   offsetX: number,
   offsetY: number,
   seed: string,
+  shapeStrength = 0,
 ): Set<string> | undefined {
   const normalized = (value: number, wrap: boolean) => wrap
     ? ((value % 1) + 1) % 1
     : clamp(value, 0, 1 - Number.EPSILON);
   const sectorById = new Map(plane.provinces.map((province) => {
-    const x = Math.min(columns - 1, Math.floor(normalized(province.x + offsetX, plane.wrapX) * columns));
-    const y = Math.min(rows - 1, Math.floor(normalized(province.y + offsetY, plane.wrapY) * rows));
+    const point = shapeStrength ? waterShapePoint(province, seed, shapeStrength) : province;
+    const x = Math.min(columns - 1, Math.floor(normalized(point.x + offsetX, plane.wrapX) * columns));
+    const y = Math.min(rows - 1, Math.floor(normalized(point.y + offsetY, plane.wrapY) * rows));
     return [province.id, y * columns + x];
   }));
   return coverSectorBoundaries(plane, adjacency, sectorById, columns * rows, seed);
@@ -1685,6 +1836,17 @@ function selectIslandChainWater(
   seed: string,
 ): Set<string> | undefined {
   const axis: "x" | "y" = plane.width >= plane.height ? "x" : "y";
+  if (usesNaturalWaterShapes(plane)) {
+    for (const chains of [4, 3]) {
+      for (const offset of [0, 0.04, -0.04]) {
+        const initial = topologyGridSectorWater(plane, adjacency, axis === "x" ? chains : 2,
+          axis === "x" ? 2 : chains, offset, -offset, `${seed}:island-bends`, 1);
+        if (!initial || initial.size > target || !connectedSelection(adjacency, initial)) continue;
+        const filled = fillIslandChainWater(plane, adjacency, initial, target, seed, true);
+        if (filled) return filled;
+      }
+    }
+  }
   const groups = gridAxisGroups(plane, axis);
   const crossGroups = gridAxisGroups(plane, axis === "x" ? "y" : "x");
   const wrap = axis === "x" ? plane.wrapX : plane.wrapY;
@@ -1697,36 +1859,51 @@ function selectIslandChainWater(
           ...crossGroups[crossIndex]!.map((province) => province.id),
         ]);
         if (initial.size > target || !connectedSelection(adjacency, initial)) continue;
-        const initialLandComponents = provinceComponents(adjacency, plane.provinces, initial).length;
-        if (initialLandComponents < 3) continue;
-        const water = new Set(initial);
-        while (water.size < target) {
-          const land = provinceComponents(adjacency, plane.provinces, water);
-          const componentById = new Map<string, number>();
-          land.forEach((component, index) => component.forEach((id) => componentById.set(id, index)));
-          const candidate = plane.provinces.filter((province) => !water.has(province.id)
-            && (adjacency.get(province.id) ?? []).some((id) => water.has(id))
-            && land[componentById.get(province.id)!]!.length > 3)
-            .sort((a, b) => {
-              const sizeA = land[componentById.get(a.id)!]!.length;
-              const sizeB = land[componentById.get(b.id)!]!.length;
-              const contactsA = (adjacency.get(a.id) ?? []).filter((id) => water.has(id)).length;
-              const contactsB = (adjacency.get(b.id) ?? []).filter((id) => water.has(id)).length;
-              return sizeB - sizeA || contactsB - contactsA
-                || (hashString(`${seed}:island-fill:${a.id}`) % 1000) - (hashString(`${seed}:island-fill:${b.id}`) % 1000)
-                || a.index - b.index;
-            }).find((province) => {
-              const trial = new Set(water).add(province.id);
-              return provinceComponents(adjacency, plane.provinces, trial).length >= initialLandComponents;
-            });
-          if (!candidate) break;
-          water.add(candidate.id);
-        }
-        if (water.size === target && connectedSelection(adjacency, water)) return water;
+        const filled = fillIslandChainWater(plane, adjacency, initial, target, seed);
+        if (filled) return filled;
       }
     }
   }
   return undefined;
+}
+
+function fillIslandChainWater(
+  plane: Plane,
+  adjacency: Map<string, string[]>,
+  initial: ReadonlySet<string>,
+  target: number,
+  seed: string,
+  requireSubstantialIslands = false,
+): Set<string> | undefined {
+  const initialLand = provinceComponents(adjacency, plane.provinces, initial);
+  const initialLandComponents = initialLand.length;
+  if (initialLandComponents < 3 || requireSubstantialIslands && initialLand.some(component => component.length < 3)) return undefined;
+  const water = new Set(initial);
+  while (water.size < target) {
+    const land = provinceComponents(adjacency, plane.provinces, water);
+    const componentById = new Map<string, number>();
+    land.forEach((component, index) => component.forEach((id) => componentById.set(id, index)));
+    const candidate = plane.provinces.filter((province) => !water.has(province.id)
+      && (adjacency.get(province.id) ?? []).some((id) => water.has(id))
+      && land[componentById.get(province.id)!]!.length > 3)
+      .sort((a, b) => {
+        const sizeA = land[componentById.get(a.id)!]!.length;
+        const sizeB = land[componentById.get(b.id)!]!.length;
+        const contactsA = (adjacency.get(a.id) ?? []).filter((id) => water.has(id)).length;
+        const contactsB = (adjacency.get(b.id) ?? []).filter((id) => water.has(id)).length;
+        return sizeB - sizeA || contactsB - contactsA
+          || (hashString(`${seed}:island-fill:${a.id}`) % 1000) - (hashString(`${seed}:island-fill:${b.id}`) % 1000)
+          || a.index - b.index;
+      }).find((province) => {
+        const trial = new Set(water).add(province.id);
+        const components = provinceComponents(adjacency, plane.provinces, trial);
+        return components.length >= initialLandComponents
+          && (!requireSubstantialIslands || components.every(component => component.length >= 3));
+      });
+    if (!candidate) break;
+    water.add(candidate.id);
+  }
+  return water.size === target && connectedSelection(adjacency, water) ? water : undefined;
 }
 
 function selectInlandSeaWater(
@@ -1737,7 +1914,9 @@ function selectInlandSeaWater(
 ): Set<string> | undefined {
   const centerX = 0.5 + ((hashString(`${seed}:inland-x`) % 17) - 8) / 400;
   const centerY = 0.5 + ((hashString(`${seed}:inland-y`) % 17) - 8) / 400;
-  const distance = (province: Province) => Math.hypot(province.x - centerX, province.y - centerY);
+  const distance = usesNaturalWaterShapes(plane)
+    ? naturalBasinScore(plane, `${seed}:inland`, centerX, centerY, true)
+    : (province: Province) => Math.hypot(province.x - centerX, province.y - centerY);
   const start = [...plane.provinces].sort((a, b) => distance(a) - distance(b) || a.index - b.index)[0];
   if (!start) return undefined;
   const water = new Set<string>([start.id]);
@@ -2906,6 +3085,19 @@ function borderKind(a: Province, b: Province, rng: SeededRandom): EdgeKind {
   if (wet && rng.chance(0.23)) return rng.chance(0.2) ? "bridge" : "river";
   if (!isWaterProvince(a) && !isWaterProvince(b) && rng.chance(0.055)) return "road";
   return "standard";
+}
+
+function finalizeGeneratedRivers(plane: Plane, settings: GenerationSettings, seed: string, protectedStartIds: readonly string[] = [], warnings?: string[]) {
+  const controls = plane.generationOverrides;
+  const hasRouteMix = controls && [controls.roadPercent, controls.riverPercent, controls.passPercent].some(value => value !== undefined);
+  const result = generateBorderRivers(plane, seed, {
+    riverPercent: hasRouteMix ? controls.riverPercent ?? 0 : undefined,
+    bridgeAll: normalizeOverlandTopologyMode(settings.overlandTopology) === "open" && !hasRouteMix,
+    protectedStartIds,
+  });
+  if (result.limited && hasRouteMix && (controls.riverPercent ?? 0) > 0) {
+    warnings?.push(`${plane.name}: connected river routes used ${result.riverBorders} of approximately ${result.requestedBorders} requested borders. Complete outlet paths and existing barriers take priority over an exact river share.`);
+  }
 }
 
 function placeStarts(plane: Plane, count: number, seed: string, degreeTarget: number, startType: StartType) {
