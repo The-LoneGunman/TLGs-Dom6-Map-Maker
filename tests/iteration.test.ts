@@ -18,12 +18,15 @@ const frozen: Record<string,string> = {
   // water-shape provenance and routing are also now applied. Explicit ocean
   // presets retain their water mask during start placement. All five fixtures
   // retain their requested province/start totals; old saved ownership is tested
-  // independently from these explicit new-generation snapshots.
-  default:"36d54b2af29f629c04f810d45cb7b14ad696fbd0a5477c5d6cf6e62b0c4b66d9",
+  // independently from these explicit new-generation snapshots. The natural
+  // layout's start-category repair now keeps generated Sea/Deep Sea/Kelp and
+  // only rewrites provinces whose land/water status changes (default, caves,
+  // eight); totals, starts and validation results are unchanged.
+  default:"a2b57a22e35c15e2203b00f7dea5f9144fb24e8d84c91e7825fb8c7cc4354482",
   islands:"5d647f1d3ebb385cbcb068d21e4135e95315cb7b5fc871623def835b5b353d07",
   continents:"2912f015787b08746f286060621250d77079e8828bb1877a66fdb7c4312e47dc",
-  caves:"ba79749f126f067b5a80135b46d00d0bbebf80bae2da24958c859f09b8b61dde",
-  eight:"56db7137496d27fb0549f8c056c9b1ea66cd46be30f139d5e2f6bf3b76a0d59b",
+  caves:"9d124324c25670d469b52ba3fc1a0ae2fcade864109b4de277348f9dc77abb1f",
+  eight:"482488d8aae480226ead711014fa3426571b83eacc5dde29139a3ab9c903de7a",
 };
 function frozenFixture(kind: string): MapProject {
   let p = createDefaultProject(`round-baseline-${kind}`);

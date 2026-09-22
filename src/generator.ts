@@ -988,7 +988,9 @@ function ensureOverlandStartCategoriesOnPlane(
         .filter((province): province is Province => Boolean(province)
           && !dry.has(province!.id)
           && !coastalWater.has(province!.id))
-        .sort((a, b) => a.index - b.index)[0];
+        // Reuse generated water that already borders the coastal capital
+        // before converting a dry neighbour.
+        .sort((a, b) => Number(isWaterProvince(b)) - Number(isWaterProvince(a)) || a.index - b.index)[0];
       if (!neighbour) {
         coastFeasible = false;
         break;
@@ -997,7 +999,12 @@ function ensureOverlandStartCategoriesOnPlane(
     }
     if (!coastFeasible) continue;
     const forcedWater = new Set([...coastalWater, ...water.map((province) => province.id)]);
-    const waterTarget = Math.max(forcedWater.size, Math.round(plane.provinces.length * (plane.generationOverrides?.waterPercent ?? project.settings.waterPercent) / 100));
+    // This plane was generated moments ago, so its water count is exactly the
+    // effective quota enforceWaterQuota applied: the start-driven increase,
+    // the Oceanic floor and the 60% clamp are already included. Re-deriving
+    // the target from settings would silently discard those adjustments.
+    const generatedWater = plane.provinces.filter(isWaterProvince).length;
+    const waterTarget = Math.max(forcedWater.size, generatedWater);
     const waterRank = plane.provinces.filter((province) => !dry.has(province.id))
       .sort((a, b) => Number(isWaterProvince(b)) - Number(isWaterProvince(a))
         || field(a.x * 2.1, a.y * 2.3, hashString(`${project.seed}:category-water`) % 97)
@@ -1007,23 +1014,14 @@ function ensureOverlandStartCategoriesOnPlane(
       .filter((province) => !forcedWater.has(province.id))
       .slice(0, Math.max(0, waterTarget - forcedWater.size))
       .map((province) => province.id)]);
-    for (const province of plane.provinces) {
-      const shouldBeWater = waterIds.has(province.id);
-      if (shouldBeWater) {
-        province.terrain = "sea";
-        province.terrainFlags = province.terrainFlags?.filter((flag) => flag !== "deep");
-        province.biome = "archipelago";
-        province.population = Math.round(TERRAIN_POPULATION.sea * ARCHETYPE_PROFILES[plane.kind].populationScale);
-        province.siteBias = mergePaths(["water"], ARCHETYPE_PROFILES[plane.kind].sitePaths, 3);
-      } else if (isWaterProvince(province)) {
-        province.terrain = "plains";
-        province.terrainFlags = province.terrainFlags?.filter((flag) => flag !== "sea" && flag !== "deep");
-        province.biome = "heartland";
-        province.population = Math.round(TERRAIN_POPULATION.plains * ARCHETYPE_PROFILES[plane.kind].populationScale);
-        province.siteBias = mergePaths([], ARCHETYPE_PROFILES[plane.kind].sitePaths, 3);
-      }
-    }
-    assignArchetypeDetails(plane.provinces, plane.kind, plane.variant, `${project.seed}:category-repair:${planeIndex}`);
+    // Only provinces whose land/water status must change are rewritten. Water
+    // that stays water keeps its generated Sea/Deep Sea/Kelp terrain, biome,
+    // population and site bias. Conversions in either direction use the same
+    // terrain rules as the other ocean layouts, applied to the changed subset.
+    const converted = plane.provinces.filter((province) => waterIds.has(province.id) !== isWaterProvince(province));
+    const repairSeed = `${project.seed}:category-repair:${planeIndex}`;
+    applyOverlandWaterSelection({ ...plane, provinces: converted }, waterIds, repairSeed);
+    assignArchetypeDetails(converted, plane.kind, plane.variant, repairSeed);
     return [
       ...land.map((province) => ({ planeId: plane.id, provinceId: province.id, type: "land" as const })),
       ...coastal.map((province) => ({ planeId: plane.id, provinceId: province.id, type: "coastal" as const })),
