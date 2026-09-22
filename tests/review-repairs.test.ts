@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { adjacencyFor, createDefaultProject, generateProject } from "../src/generator";
+import { addPlane, adjacencyFor, createDefaultProject, generateProject, synchronizePlaneEdges } from "../src/generator";
+import { isWaterProvince } from "../src/domain";
 import { compileMapText, validateProject } from "../src/dom6";
 import { inspectNativeMap } from "../src/nativeInspection";
 import { hasRawIndependentDefenderDirectives } from "../src/terrainSafety";
@@ -88,4 +89,51 @@ test("a province used by two gate groups is reported", () => {
   const issues = validateProject(project).filter((issue) => issue.provinceId === a && /endpoint of gates 1, 2/.test(issue.message));
   assert.equal(issues.length, 1);
   assert.equal(issues[0]!.severity, "warning");
+});
+
+test("regenerating an Underworld keeps authored names on River Styx provinces", () => {
+  const first = generateProject(addPlane(createDefaultProject("review-styx-names"), "underworld"));
+  const underworld = first.planes.find((plane) => plane.kind === "underworld")!;
+  const styx = underworld.provinces.filter((province) => isWaterProvince(province));
+  assert.ok(styx.length > 0);
+  for (const province of underworld.provinces) {
+    province.name = `Authored ${province.index}`;
+    province.nameSource = "authored";
+  }
+
+  const regenerated = generateProject(first).planes.find((plane) => plane.kind === "underworld")!;
+  for (const province of regenerated.provinces) {
+    assert.equal(province.name, `Authored ${province.index}`);
+    assert.equal(province.nameSource, "authored");
+  }
+});
+
+test("border synchronization never leaves two borders with the same ID", () => {
+  const project = generateProject(createDefaultProject("beta"));
+  let plane = project.planes[0]!;
+  const seed = `${project.seed}:plane:0:wrap-sync`;
+  plane = synchronizePlaneEdges({ ...plane, wrapX: false, wrapY: false }, seed);
+  plane = synchronizePlaneEdges({ ...plane, wrapX: true, wrapY: true }, seed);
+  assert.equal(new Set(plane.edges.map((edge) => edge.id)).size, plane.edges.length);
+
+  const duplicated = { ...plane, edges: plane.edges.map((edge, index) => index === 1 ? { ...edge, id: plane.edges[0]!.id } : edge) };
+  project.planes[0] = duplicated;
+  assert.ok(validateProject(project).some((issue) => issue.severity === "warning" && /sharing another border's ID/.test(issue.message)));
+  const repaired = synchronizePlaneEdges(duplicated, seed);
+  assert.equal(new Set(repaired.edges.map((edge) => edge.id)).size, repaired.edges.length);
+  assert.equal(repaired.edges[0]!.id, plane.edges[0]!.id);
+});
+
+test("re-synchronized borders around a start stay open for movement", () => {
+  for (const seed of ["review-wrap-6", "review-wrap-0"]) {
+    const project = generateProject(createDefaultProject(seed));
+    let plane = project.planes[0]!;
+    const syncSeed = `${project.seed}:plane:0:wrap-sync`;
+    plane = synchronizePlaneEdges({ ...plane, wrapX: false }, syncSeed);
+    plane = synchronizePlaneEdges({ ...plane, wrapX: true }, syncSeed);
+    const starts = new Set(plane.provinces.filter((province) => province.start).map((province) => province.id));
+    const blocked = plane.edges.filter((edge) => (starts.has(edge.a) || starts.has(edge.b))
+      && ["river", "mountain_pass", "mountain_border"].includes(edge.kind));
+    assert.deepEqual(blocked, [], seed);
+  }
 });

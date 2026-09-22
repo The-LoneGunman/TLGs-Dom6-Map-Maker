@@ -494,9 +494,11 @@ export function MapMakerApp() {
   const topologyAudits = useMemo(() => project.planes.map((plane) => ({
     planeId: plane.id,
     audit: auditPlaneTopology(plane),
+    // Border edits look edges up by ID; synchronizing repairs repeated IDs.
+    duplicateEdgeIds: plane.edges.length - new Set(plane.edges.map((edge) => edge.id)).size,
   })), [project.planes]);
   const projectTopologyIssueCount = topologyAudits.reduce((sum, item) =>
-    sum + item.audit.missing.length + item.audit.extra.length, 0);
+    sum + item.audit.missing.length + item.audit.extra.length + item.duplicateEdgeIds, 0);
   const errorCount = issues.filter((issue) => issue.severity === "error").length;
   const warningCount = issues.filter((issue) => issue.severity === "warning").length;
   const currentAnalysis = analysisSelection?.project === project ? analysisSelection : undefined;
@@ -1917,7 +1919,7 @@ export function SitesDefenseInspector({ catalog, plane, province, protectedStart
           <Field label="Commander display name"><input maxLength={MAX_IMPORTED_STRING_LENGTH} value={defense.commanderName ?? ""} onChange={(event) => update((item) => { item.defenders[defenseIndex]!.commanderName = event.target.value || undefined; })} /></Field>
           {defense.squads.map((squad, squadIndex) => (
             <div className="squad-row" key={squad.id}>
-              <input type="number" min={1} max={1000} value={squad.count} aria-label={`Guardian group ${defenseIndex + 1}, squad ${squadIndex + 1} count`} onChange={(event) => update((item) => { item.defenders[defenseIndex]!.squads[squadIndex]!.count = boundedInteger(event.target.value, 1, 1, 1000); })} />
+              <BoundedNumberInput min={1} max={1000} value={squad.count} aria-label={`Guardian group ${defenseIndex + 1}, squad ${squadIndex + 1} count`} onChange={(value) => update((item) => { item.defenders[defenseIndex]!.squads[squadIndex]!.count = value; })} />
               <CatalogCombobox compact label={`Squad ${squadIndex + 1} unit`} value={squad.unit} entries={includeSelectedEntry(troopChoices, catalog.units, squad.unit)} placeholder={`Search ${troopChoices.length.toLocaleString()} ${showAllGuardianUnits ? "gameplay units" : "known troops"} by name or ID`} onCommit={(value) => update((item) => { item.defenders[defenseIndex]!.squads[squadIndex]!.unit = value; })} />
               <button type="button" onClick={() => update((item) => { item.defenders[defenseIndex]!.squads.splice(squadIndex, 1); })} aria-label={`Remove guardian group ${defenseIndex + 1}, squad ${squadIndex + 1}`}>×</button>
             </div>

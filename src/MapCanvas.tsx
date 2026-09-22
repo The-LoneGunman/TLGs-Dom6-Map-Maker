@@ -174,6 +174,25 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
 
   useEffect(() => { onZoomChange?.(1); }, [onZoomChange]);
 
+  const wheelStateRef = useRef({ zoom: view.zoom, onZoomChange });
+  useEffect(() => { wheelStateRef.current = { zoom: view.zoom, onZoomChange }; }, [onZoomChange, view.zoom]);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    // React attaches wheel listeners as passive, where preventDefault is
+    // ignored and the page scrolls or pinch-zooms along with the map.
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const state = wheelStateRef.current;
+      const nextZoom = clamp(state.zoom * Math.exp(-event.deltaY * 0.001), 0.78, 4);
+      state.zoom = nextZoom;
+      setView((current) => ({ ...current, zoom: nextZoom }));
+      state.onZoomChange?.(nextZoom);
+    };
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", handleWheel);
+  }, []);
+
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     const wrapper = wrapperRef.current;
@@ -262,13 +281,6 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
     if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
   };
 
-  const handleWheel = (event: React.WheelEvent<HTMLCanvasElement>) => {
-    event.preventDefault();
-    const nextZoom = clamp(view.zoom * Math.exp(-event.deltaY * 0.001), 0.78, 4);
-    setView((current) => ({ ...current, zoom: nextZoom }));
-    onZoomChange?.(nextZoom);
-  };
-
   return (
     <>
       <div
@@ -307,7 +319,6 @@ export function MapCanvas({ plane, selectedId, previewCondition, markerAnnotatio
           onPointerUp={handlePointerUp}
           onPointerCancel={cancelPointer}
           onLostPointerCapture={cancelPointer}
-          onWheel={handleWheel}
           title={readableProvince ? `${readableProvince.index}. ${readableProvince.name}${readableBadges.length ? ` — ${readableBadges.map(badge => badge.label).join("; ")}` : ""}` : undefined}
         />
         {readableProvince && <div className="map-province-summary" aria-hidden="true">

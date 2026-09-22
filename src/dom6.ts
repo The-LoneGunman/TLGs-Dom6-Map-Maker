@@ -804,7 +804,11 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
       );
     }
     const edgeKeys = new Set<string>();
+    const edgeIds = new Set<string>();
+    let duplicateEdgeIds = 0;
     for (const edge of plane.edges) {
+      if (edgeIds.has(edge.id)) duplicateEdgeIds += 1;
+      edgeIds.add(edge.id);
       if (!provinceIds.has(edge.a) || !provinceIds.has(edge.b)) add("error", "A connection references a missing province.", plane.id);
       if (edge.a === edge.b) add("error", "A province cannot neighbor itself.", plane.id, edge.a);
       const key = [edge.a, edge.b].sort().join("|");
@@ -817,6 +821,10 @@ export function validateProject(project: MapProject, catalog: Dom6CatalogBundle 
       if (edge.kind === "custom" && (edge.special === undefined || !integerInRange(edge.special, 0, 255))) {
         add("error", "A custom connection requires a safe whole-number bitmask from 0 to 255.", plane.id, edge.a);
       }
+    }
+
+    if (duplicateEdgeIds) {
+      add("warning", `${plane.name} has ${duplicateEdgeIds} border${duplicateEdgeIds === 1 ? "" : "s"} sharing another border's ID, so border edits may change the wrong border. Use Synchronize borders to repair the IDs.`, plane.id);
     }
 
     for (const province of plane.provinces) {

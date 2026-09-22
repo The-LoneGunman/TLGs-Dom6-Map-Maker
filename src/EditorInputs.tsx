@@ -4,15 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import { MAX_IMPORTED_STRING_LENGTH } from "./export";
 
 /** Keep incomplete keystrokes local until they describe a valid number. */
-export function BoundedNumberInput({ value, min, max, describedBy, id, onChange, onEditStart, onEditEnd }: {
+export function BoundedNumberInput({ value, min, max, describedBy, id, onChange, onEditStart, onEditEnd, "aria-label": ariaLabel }: {
   value: number; min: number; max: number; describedBy?: string; id?: string; onChange: (value: number) => boolean | void;
+  "aria-label"?: string;
   /** Called on focus and after the final blur commit, bracketing one typing session. */
   onEditStart?: () => void; onEditEnd?: () => void;
 }) {
   const [draft, setDraft] = useState(String(value));
   const focused = useRef(false);
   useEffect(() => { if (!focused.current) setDraft(String(value)); }, [value]);
-  return <input id={id} type="number" value={draft} min={min} max={max} aria-describedby={describedBy}
+  return <input id={id} type="number" value={draft} min={min} max={max} aria-label={ariaLabel} aria-describedby={describedBy}
     onFocus={() => { focused.current = true; onEditStart?.(); }}
     onChange={(event) => {
       const text = event.target.value;

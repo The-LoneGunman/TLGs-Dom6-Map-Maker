@@ -46,7 +46,7 @@ export interface ProvinceChamberPrimitive {
   kind: "chamber";
   owner: number;
   center: Point;
-  /** Conservative outer radius in units of the plane's shorter pixel axis. */
+  /** Conservative outer radius in metric units: (dx * width / height, dy), i.e. plane-height pixels. */
   radius: number;
   /** Oriented contour radii in the same metric; their product controls chamber area. */
   radiusX: number;

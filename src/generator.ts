@@ -2133,7 +2133,8 @@ function applyRiverStyx(plane: Plane, seed: string) {
   [...selected].sort((a, b) => byId.get(a)!.index - byId.get(b)!.index).forEach((id, index) => {
     const province = byId.get(id)!;
     floodCaveProvince(province, "underworld", index % 4 === 1);
-    province.name = `${STYX_NAMES[index % STYX_NAMES.length]} ${index + 1}`;
+    // Authored (and legacy unmarked) names survive regeneration.
+    if (province.nameSource === "generated") province.name = `${STYX_NAMES[index % STYX_NAMES.length]} ${index + 1}`;
   });
 }
 
@@ -3098,16 +3099,33 @@ export function synchronizePlaneEdges(plane: Plane, seed: string, preserveExisti
   }
   const provinceById = new Map(plane.provinces.map((province) => [province.id, province]));
   const rng = new SeededRandom(`${seed}:borders`);
+  // Editors find borders by ID, so IDs must stay unique. Kept borders reserve
+  // theirs first (a repeated one is suffixed); new borders avoid all of them,
+  // since a reused seed can reproduce an ID already on the plane.
+  const usedIds = new Set<string>();
+  const uniqueId = (candidate: string) => {
+    let id = candidate;
+    for (let suffix = 2; usedIds.has(id); suffix += 1) id = `${candidate}-${suffix}`;
+    usedIds.add(id);
+    return id;
+  };
+  const kept = topology.pairs.map((pair) => existing.get(pair.key));
+  const keptIds = kept.map((edge) => edge && uniqueId(edge.id));
   const edges = topology.pairs.map((pair, index) => {
-    const current = existing.get(pair.key);
-    if (current) return { ...current, a: pair.a, b: pair.b };
+    const current = kept[index];
+    if (current) return { ...current, id: keptIds[index]!, a: pair.a, b: pair.b };
     const a = provinceById.get(pair.a)!;
     const b = provinceById.get(pair.b)!;
+    // Roll first so the random sequence for later borders is unchanged, then
+    // keep new start borders open as generation does; a random river, pass or
+    // mountain border there would make the capital fail export validation.
+    const rolled = borderKind(a, b, rng);
+    const startBorder = [a, b].some((province) => province.start || province.teamStart !== undefined);
     return {
-      id: idFor(seed, "edge", index),
+      id: uniqueId(idFor(seed, "edge", index)),
       a: pair.a,
       b: pair.b,
-      kind: borderKind(a, b, rng),
+      kind: startBorder && (rolled === "river" || rolled === "mountain_pass" || rolled === "mountain_border") ? "standard" : rolled,
     } satisfies Edge;
   });
   return { ...plane, edges };
@@ -4035,13 +4053,26 @@ function chooseStartCandidate(
   return best;
 }
 
+// Start scoring asks this for every candidate many times per pass; rebuilding
+// the lookup on each call dominated generation time on large atlases.
+const provinceLookupCache = new WeakMap<readonly Province[], Map<string, Province>>();
+
+function provinceLookup(plane: Pick<Plane, "provinces">): Map<string, Province> {
+  let lookup = provinceLookupCache.get(plane.provinces);
+  if (!lookup || lookup.size !== plane.provinces.length) {
+    lookup = new Map(plane.provinces.map((item) => [item.id, item]));
+    provinceLookupCache.set(plane.provinces, lookup);
+  }
+  return lookup;
+}
+
 function matchesStartType(ref: ProvinceRef, type: StartType, adjacency: Map<string, string[]>): boolean {
   const { plane, province } = ref;
   const overland = isSurfaceCorePlaneForSizing(plane);
   if (type === "water") return overland && isWaterProvince(province);
   if (type === "coastal") {
     if (!overland || isWaterProvince(province)) return false;
-    const byId = new Map(plane.provinces.map((item) => [item.id, item]));
+    const byId = provinceLookup(plane);
     return (adjacency.get(province.id) ?? []).some((id) => {
       const neighbour = byId.get(id);
       return neighbour ? isWaterProvince(neighbour) : false;
@@ -4051,7 +4082,7 @@ function matchesStartType(ref: ProvinceRef, type: StartType, adjacency: Map<stri
     && (ARCHETYPE_PROFILES[plane.kind].caveFamily || (overland && isCaveProvince(province)));
   if (type === "other") return !overland && !ARCHETYPE_PROFILES[plane.kind].caveFamily && !isWaterProvince(province);
   if (!overland || isWaterProvince(province) || isCaveProvince(province)) return false;
-  const byId = new Map(plane.provinces.map((item) => [item.id, item]));
+  const byId = provinceLookup(plane);
   return !(adjacency.get(province.id) ?? []).some((id) => {
     const neighbour = byId.get(id);
     return neighbour ? isWaterProvince(neighbour) : false;
@@ -4678,17 +4709,25 @@ export function generateGates(project: MapProject): GateLink[] {
         // aquatic. Never repair a scarce endpoint by silently crossing types;
         // omitting that pair is safer than exporting a misleading entrance.
         const candidates = safeTyped.length ? safeTyped : fallbackTyped;
-        const adjacency = adjacencyFor(plane, { traversableOnly: true });
-        const startIds = [...(protectedStarts.get(plane.id) ?? [])];
-        const distanceFromStarts = (province: Province) => startIds.length
-          ? Math.min(...startIds.map((startId) => shortestDistances(adjacency, startId).get(province.id) ?? 0))
-          : 99;
+        // Compute each candidate's sort key once. Start distances matter only
+        // for the fallback pool, and one BFS per start replaces a BFS per
+        // comparison.
+        let distanceFromStarts: ((province: Province) => number) | undefined;
+        if (usedFallback) {
+          const adjacency = adjacencyFor(plane, { traversableOnly: true });
+          const startDistances = [...(protectedStarts.get(plane.id) ?? [])].map((startId) => shortestDistances(adjacency, startId));
+          distanceFromStarts = (province) => startDistances.length
+            ? Math.min(...startDistances.map((distances) => distances.get(province.id) ?? 0))
+            : 99;
+        }
+        const sortKeys = new Map(candidates.map((province) => [province, {
+          distance: distanceFromStarts?.(province) ?? 0,
+          score: gateEndpointThemeScore(province, plane, otherPlane, desiredWater) * 3 + field(province.x, province.y, salt),
+        }]));
         candidates.sort((a, b) => {
-          const distanceA = distanceFromStarts(a);
-          const distanceB = distanceFromStarts(b);
-          const scoreA = gateEndpointThemeScore(a, plane, otherPlane, desiredWater) * 3 + field(a.x, a.y, salt);
-          const scoreB = gateEndpointThemeScore(b, plane, otherPlane, desiredWater) * 3 + field(b.x, b.y, salt);
-          return (usedFallback ? distanceB - distanceA : 0) || scoreB - scoreA || a.index - b.index;
+          const keyA = sortKeys.get(a)!;
+          const keyB = sortKeys.get(b)!;
+          return keyB.distance - keyA.distance || keyB.score - keyA.score || a.index - b.index;
         });
         return { candidates, usedFallback };
       };
