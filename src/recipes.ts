@@ -4,7 +4,7 @@ import { parseProject, serializeProject } from "./export";
 import { assertProjectLocks } from "./authoringLocks";
 
 export const MAX_RECIPE_BYTES = 256 * 1024;
-const PLANE_KEYS = ["id", "name", "kind", "variant", "autoSize", "noGeneratedStarts", "provinceTarget", "width", "height", "wrapX", "wrapY", "ownershipMode", "generationOverrides"] as const;
+const PLANE_KEYS = ["id", "name", "kind", "variant", "autoSize", "noGeneratedStarts", "provinceTarget", "width", "height", "wrapX", "wrapY", "ownershipMode", "generationOverrides", "sparseLayout"] as const;
 export type RecipePlane = Pick<Plane, typeof PLANE_KEYS[number]>;
 export interface SettingsRecipe {
   kind: "pantokrator-settings";
@@ -101,6 +101,8 @@ export function applySettingsRecipe(project: MapProject, recipe: SettingsRecipe)
   if (verified.seed !== undefined) next.seed = verified.seed;
   next.planes.forEach((p,i) => {
     const settings = verified.planes[i]!;
+    // Deprecated sparseLayout metadata remains round-trippable but has no
+    // geometry effect. Real geometry changes still synchronize the graph.
     const beforeGeometry = JSON.stringify([p.kind,p.ownershipMode,p.width,p.height,p.wrapX,p.wrapY]);
     for (const key of PLANE_KEYS) if (key !== "id" && key !== "name") {
       if (settings[key] === undefined) delete p[key]; else Object.assign(p, { [key]: settings[key] });

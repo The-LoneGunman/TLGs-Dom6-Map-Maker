@@ -16,8 +16,10 @@ const frozen: Record<string,string> = {
   default:"bb6c7ae62970a8d44f42f82d6db7916b0984e3341dd82327b0aba120c2389da9",
   islands:"f6e25c37740bd78b4fc803bffb89b75d7d925a36319fba56253e85543a092448",
   continents:"e50ec3e83bef10a045f420b3405b59cf6e688ca4b7f5214221d2d3530b1cda4e",
-  caves:"0dc98413c68b84b539b1f15a607aecb25e9e15ff99ac0d52b8d12c8ab1e3b207",
-  eight:"6641d34face10d4c505b6456589cc6fcbfffff6fa76609eda139255eac34eacf",
+  // Sparse generation intentionally changed when connected regions became
+  // mandatory. Keep reviewed new baselines while solid-only hashes stay frozen.
+  caves:"cc1ced9a0757c0c539660b603bd87dc9c4617b27aac73e0f9b10ceb16a838da2",
+  eight:"48abe5e004a6caf6dfae5624cbfdbfd6cd121956ea39b15e868a359d9d8a88cc",
 };
 function frozenFixture(kind: string): MapProject {
   let p = createDefaultProject(`round-baseline-${kind}`);
@@ -27,7 +29,7 @@ function frozenFixture(kind: string): MapProject {
   if(kind==="eight") {p.settings.players=4;p.settings.startDistribution={land:4,coastal:0,water:0,cave:0,other:0};p.settings.throneCount=4;for(const kind of ["cave","underworld","hell","abyss","dream","cloud","elemental"] as const)p=addPlane(p,kind,{generate:false});}
   return generateProject(p);
 }
-for (const [kind, digest] of Object.entries(frozen)) test(`unchanged ${kind} defaults match the pre-round generation digest`,()=>{
+for (const [kind, digest] of Object.entries(frozen)) test(`${kind} defaults match the reviewed generation digest`,()=>{
   const p=frozenFixture(kind);
   assert.equal(createHash("sha256").update(JSON.stringify(p,(key,value)=>key==="createdAt"||key==="updatedAt"?undefined:value)).digest("hex"),digest);
 });

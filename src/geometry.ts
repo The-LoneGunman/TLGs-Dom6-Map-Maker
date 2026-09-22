@@ -1,4 +1,5 @@
 import { isCaveProvince, isWaterProvince, type Plane, type PlaneOwnershipMode, type Province } from "./domain";
+import { createConnectedRegionOwnership } from "./connectedRegions";
 
 export interface Point {
   x: number;
@@ -120,6 +121,8 @@ export interface ProvinceOwnershipModel extends ProvinceOwnerResolver {
   metricAspect: number;
   /** Declarative analytic shapes used by both owner sampling and future preview clipping. */
   primitives: readonly ProvinceOwnershipPrimitive[];
+  /** Actual two-sided clipped regional frontiers, rather than tube midpoints. */
+  regionBorders?: Map<string, BorderSegment[]>;
 }
 
 interface TaggedPoint extends Point {
@@ -158,7 +161,7 @@ export function computeProvinceTopology(plane: Plane): ProvinceTopology {
   const pairs = intentionalPairs(plane);
   const pairKeys = new Set(pairs.map((pair) => pair.key));
   const ownership = createProvinceOwnershipModel(plane, pairs);
-  const sharedBorders = sparseSharedBorders(plane, ownership, pairKeys);
+  const sharedBorders = ownership.regionBorders ?? sparseSharedBorders(plane, ownership, pairKeys);
   return cacheTopology(signature, { cells: solid.cells, pairs, pairKeys, sharedBorders });
 }
 
@@ -280,6 +283,11 @@ export function resolvePlaneOwnershipMode(plane: Pick<Plane, "kind" | "ownership
   return plane.kind === "surface" || plane.kind === "custom" ? "solid" : "sparse";
 }
 
+/** Sparse realms use adjoining regions; the Styx retains its dedicated layout. */
+export function usesConnectedRegions(plane: Pick<Plane, "kind" | "ownershipMode">): boolean {
+  return resolvePlaneOwnershipMode(plane) === "sparse" && plane.kind !== "underworld";
+}
+
 /**
  * Whether the editor may author a new same-plane movement edge. Solid planes
  * must already have a positive-length shared Voronoi border. On sparse planes
@@ -331,6 +339,10 @@ export function createProvinceOwnershipModel(
     });
   }
 
+  if (usesConnectedRegions(plane)) {
+    const regions = createConnectedRegionOwnership(plane);
+    if (regions) return cacheOwnership(signature, regions);
+  }
   const solidPairs = knownPairs ?? intentionalPairs(plane);
   const nearestSpacings = nearestProvinceSpacings(plane, metricAspect);
   const spacing = medianSpacing(nearestSpacings);
@@ -1496,7 +1508,7 @@ function geometrySignature(plane: Plane): string {
   const edgePart = ownership === "sparse"
     ? plane.edges.map((edge) => `${connectionKey(edge.a, edge.b)}${plane.kind === "underworld" && isExplicitBridge(edge) ? ":bridge" : ""}`).sort().join(",")
     : "";
-  return `${ownership}:${plane.id}:${plane.kind}:${plane.width}x${plane.height}:${plane.wrapX ? 1 : 0}${plane.wrapY ? 1 : 0}:${plane.provinces
+  return `${ownership}${usesConnectedRegions(plane) ? ":regions" : ""}:${plane.id}:${plane.kind}:${plane.width}x${plane.height}:${plane.wrapX ? 1 : 0}${plane.wrapY ? 1 : 0}:${plane.provinces
     .map((province) => `${province.id}:${province.index}:${province.x}:${province.y}:${province.small ? 1 : 0}${province.large ? 1 : 0}:${province.terrain}:${province.freshwater ? 1 : 0}:${[...(province.terrainFlags ?? [])].sort().join("+")}`)
     .join(";")}:${edgePart}`;
 }

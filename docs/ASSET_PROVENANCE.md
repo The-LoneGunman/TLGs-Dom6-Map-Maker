@@ -44,8 +44,15 @@ terrain combination.
 
 ## Where the artwork appears
 
-Both material textures and backdrops are presentation assets for the Atlas editor and its high-resolution PNG previews. Backdrops give sparse planes a theme behind areas that no province owns.
+The September 21 development source additionally draws Cloud/Air cloud banks,
+floating cliff faces, shadows, and terrain motifs procedurally in `src/skyArt.ts`.
+These are original code-generated pixels under the project license, not new
+ImageGen assets or copied community-map images. They replace the normal sky
+preview painter at supported dimensions; the bundled backdrop remains available
+to the fallback renderer. No extra downloads or third-party assets are required.
 
-Neither is embedded in native `.d6m` exports. Atlas's `#imagefile` references the native D6M geography recipe, not a raster illustration. D6M v3 has no separate raster-underlay field behind owner-zero pixels; Dominions uses its own scenery for the exported geography and terrain.
+The material textures, backdrops, and procedural sky pixels are presentation assets for the Atlas editor and its high-resolution PNG previews. Backdrops give sparse planes a theme behind areas that no province owns.
+
+None is embedded in the current native `.d6m` export. Atlas's `#imagefile` references the D6M geography recipe, not a raster illustration, so Dominions uses its own scenery for exported geography and terrain. A registered-image loading experiment is documented separately and is not production export behavior; see [sky-realm rendering options](research/SKY_RENDERING_OPTIONS_2026-09-21.md).
 
 These original project assets use the root [0BSD license](../LICENSE). This does not apply to the separately licensed Dominions selector catalog. See the [illustrated asset specification](ILLUSTRATED_ASSET_SPEC.md) for the shipped implementation and future pack requirements.

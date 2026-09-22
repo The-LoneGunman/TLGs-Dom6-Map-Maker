@@ -317,6 +317,7 @@ const PLANE_VARIANTS = new Set([
   "temperate", "wild", "frozen", "arid", "oceanic", "fungal", "crystal", "volcanic", "storm", "infernal", "void",
 ]);
 const OWNERSHIP_MODES = new Set(["solid", "sparse"]);
+const SPARSE_LAYOUTS = new Set(["chambers", "regions"]);
 const TERRAIN_KEYS = new Set([
   "plains", "forest", "farm", "swamp", "waste", "highland", "mountains", "freshwater", "sea", "deepsea", "kelp",
   "cave", "caveforest", "caveswamp", "cavewaste", "cavehighland", "cavewall",
@@ -362,7 +363,7 @@ const PLANE_CONNECTION_FIELDS = new Set(["a", "b", "pairs", "enabled"]);
 const PLANE_FIELDS = new Set([
   "id", "name", "kind", "variant", "autoSize", "noGeneratedStarts", "provinceTarget", "width", "height", "wrapX",
   "wrapY", "ownershipMode", "mapNoHide", "noDeepCaves", "mapTextColor", "mapDominionColor", "provinces", "edges",
-  "rawDirectives", "generationOverrides",
+  "rawDirectives", "generationOverrides", "sparseLayout",
 ]);
 const EDGE_FIELDS = new Set(["id", "a", "b", "kind", "special"]);
 const PROVINCE_FIELDS = new Set([
@@ -555,6 +556,7 @@ function assertPlane(plane: Record<string, unknown>, index: number): void {
   booleanAt(plane.wrapX, `${path}.wrapX`);
   booleanAt(plane.wrapY, `${path}.wrapY`);
   optionalEnumAt(plane.ownershipMode, OWNERSHIP_MODES, `${path}.ownershipMode`);
+  optionalEnumAt(plane.sparseLayout, SPARSE_LAYOUTS, `${path}.sparseLayout`);
   optionalBooleanAt(plane.mapNoHide, `${path}.mapNoHide`);
   optionalBooleanAt(plane.noDeepCaves, `${path}.noDeepCaves`);
   optionalStringAt(plane.mapTextColor, `${path}.mapTextColor`);

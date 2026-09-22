@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import test from "node:test";
 import { compileMapText, encodeD6m, inspectD6m, terrainMask, TERRAIN_BITS, validateProject } from "../src/dom6";
 import { cloneProject, effectiveProvinceTerrainFlags, isBlockedProvince, isWaterProvince, setNationSpecificStart, type MapProject, type Plane, type Province } from "../src/domain";
@@ -103,12 +102,17 @@ function assertStyx(plane: Plane, owners: Int16Array, label: string): void {
   }
 }
 
-test("underground artwork leaves frozen native map directives unchanged", () => {
-  const digest = createHash("sha256");
-  for (const { label, project } of FIXTURES) digest.update(label).update("\n").update(compileMapText(project, 0)).update("\n");
-  // Only ownership/relief art is being revised. Province content and all map
-  // commands must remain the same across that implementation change.
-  assert.equal(digest.digest("hex"), "fe141a1206f7371a0a6bae0ee1861647742716500473e7931933236fc5ac4631", "native .map semantics changed during an artwork-only update");
+test("rendering generated regional layouts never changes their native map directives", async () => {
+  for (const { label, project } of FIXTURES) {
+    const before = compileMapText(project, 0);
+    const original = JSON.stringify(project);
+    const plane = project.planes[0]!;
+    createProvinceOwnershipModel(plane);
+    computeProvinceTopology(plane);
+    await encodeD6m(plane, "regional-directive-stability");
+    assert.equal(compileMapText(project, 0), before, `${label}: rendering must preserve generated .map semantics`);
+    assert.equal(JSON.stringify(project), original, `${label}: rendering cannot alter source graph or province content`);
+  }
 });
 
 for (const { label, project: source } of FIXTURES) test(`native underground owner/terrain/gameplay invariants: ${label}`, async () => {

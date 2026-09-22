@@ -1,5 +1,6 @@
 import { clearAllPlayerStartFeatures, cloneProject, isBlockedProvince, isCaveProvince, isWaterProvince, type MapProject, type Province, type ProvinceLockGroup } from "./domain";
 import { BUILTIN_DOM6_CATALOG, findCatalogEntry } from "./catalog";
+import { usesConnectedRegions } from "./geometry";
 
 export const PROVINCE_LOCK_GROUPS: readonly ProvinceLockGroup[] = ["name", "terrain", "economy", "sites", "guardians"];
 export const LOCK_FIELDS: Record<ProvinceLockGroup, readonly (keyof Province)[]> = {
@@ -45,7 +46,8 @@ export function changedLockedGroups(previous: Province, next: Province): Provinc
 
 function layout(project: MapProject) {
   return JSON.stringify([project.planes.map(p => [p.id, p.kind, p.ownershipMode, p.width, p.height, p.wrapX, p.wrapY,
-    p.provinces.map(v => [v.id, v.index, v.x, v.y, v.gridX, v.gridY]), p.edges]), project.gates]);
+    p.provinces.map(v => [v.id, v.index, v.x, v.y, v.gridX, v.gridY]), p.edges,
+    ...(usesConnectedRegions(p) ? [{ topology: "connected-regions" }] : [])]), project.gates]);
 }
 function starts(project: MapProject) {
   return JSON.stringify([project.specificStarts, project.planes.map(p => [p.id,

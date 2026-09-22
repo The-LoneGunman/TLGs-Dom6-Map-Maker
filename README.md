@@ -10,17 +10,19 @@ Projects, imported catalogs, and generated packages remain in your browser profi
 
 ## Versions and documentation
 
-This README and the user guide describe the **0.1.5 source**. The hosted app and downloadable releases can lag behind source development; a source merge does not publish either of them.
+The package version remains **0.1.5**. Sections explicitly marked **Unreleased development** describe later source work that is not in the published hosted app or Windows v0.1.5 release; merging source does not deploy or publish either edition.
 
 | Edition | Where to check the build | Availability |
 | --- | --- | --- |
-| Source checkout | Selected Git branch/commit and `package.json` | Includes the features documented here when using the 0.1.5 source. A normal clone selects the repository's default branch, not an unmerged development branch. |
+| Source checkout | Selected Git branch/commit and `package.json` | The package version is still 0.1.5; the selected commit determines whether unreleased features are present. A normal clone selects the default branch, not an unmerged development branch. |
 | Hosted GUI | [Open app](https://pantokrator-atlas.mbatlle7.chatgpt.site) and [release verification](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/RELEASE_VERIFICATION_0.1.5.md) | Updated by a separate deployment; newer source documentation alone does not identify the deployed build. |
 | Windows installer / portable release | [Latest release and its notes](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/latest) | Contains the tagged build supplied by that release, not every later source change. |
 
 The [release verification record](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/RELEASE_VERIFICATION_0.1.5.md) tracks 0.1.5 testing and delivery separately. Check the hosted deployment or release notes for the edition you use. Keep a pre-upgrade JSON backup: older builds may reject newer optional project fields.
 
 **Published September 21, 2026:** the hosted GUI (Site version 13) and [Windows v0.1.5](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/releases/tag/v0.1.5) both use the tested `581b2b8` application source. Later documentation-only commits do not change that release build.
+
+**Unreleased development:** sparse realms now automatically use [Connected regions & passages](docs/USER_GUIDE.md#province-layout): adjoining cave/realm provinces grouped into larger landforms, joined by substantial passage provinces. The classic selector has been removed. The Underworld retains its dedicated Styx geometry; incompatible authored maps retain explicitly identified compatibility geometry without losing their links. Cloud and Air realms also receive procedural floating-island and cloud artwork in the editor and high-resolution PNG preview, including terrain-condition and winter views. These changes are not included in the published 0.1.5 app or installer.
 
 The 0.1.5 source includes smoother underground shapes and relief, the pinned 6.37 selector catalog, and opt-in population-matched initial defenders. The current v3 templates cover **76 population types in unmodded 6.37 Middle Age**, within their declared terrain scope; unsupported contexts retain native armies. See the [population-defender instructions](docs/USER_GUIDE.md#population-matched-initial-defenders) and [native acceptance evidence](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md).
 
@@ -45,7 +47,7 @@ Where browser folder access is supported, use **Install directly**; otherwise us
 - Automatic or manually edited gate networks, scale-aware starts, per-plane start blocking, cave-start nations, throne recommendations, and fairness warnings.
 - Fresh random seeds for new atlases, contextual province names with optional generated-name shuffling on reopen, themed populations/recruitment, random-site affinities, and powerful special-plane guardians.
 - Searchable game-content catalogs and scenario editing for nations, commanders, squads, sites, buildings, battle settings, and advanced directives.
-- Combined terrain-flag artwork in the editor and PNG previews: adding Farm, Forest, Cave, and other flags changes the province's appearance immediately.
+- Combined terrain-flag artwork in the editor and PNG previews: adding Farm, Forest, Cave, and other flags changes the province's appearance immediately. Development Cloud/Air previews render those provinces as procedural floating islands over clouds.
 - Editable custom border bitmasks with layered border styles, aspect-correct map framing, readable province details, and realm-aware illustrative condition previews.
 - Browser autosave, Undo/Redo, editable JSON backups, direct folder installation, ZIP export, and structural/gameplay validation.
 - Planned-versus-current province budgets, control-scope labels, cross-plane province search, and a per-start structural inspector with temporary region highlights.
@@ -82,8 +84,8 @@ Generated maps use native game content. Keep these distinctions in mind:
 - Provinces sharing a `#gate` number are connected in both directions; native map gates are not one-way.
 - A map can define initial independent guardians and an owned province's numeric defence level. A new replenishing post-capture province-defence roster requires a nation or poptype supplied by a `.dm` mod.
 - `#poptype` controls vanilla local recruitment but does not replace the independent army Dominions initially generates.
-- Atlas's textures, terrain symbols, and realm backdrops appear in the editor and PNG previews. Playable exports carry the current terrain flags and geography; Dominions draws its own native scenery.
-- Condition previews are illustrations, not game-event or temperature simulations. Winter cover skips water, caves, and outer realms; native seasonal appearance must be checked in Dominions.
+- Atlas's textures, terrain symbols, realm backdrops, and procedural Cloud/Air islands appear in the editor and PNG previews. Playable exports remain native `.map`/`.d6m`: they carry the current terrain flags and geography, while Dominions draws its own scenery. A registered custom-image plane loaded with correct ranges in a headless research fixture, but its helper-map entry, ownership, reference remapping, variants, and in-game GUI behavior are not accepted. No illustrated native export is offered; see the [dated rendering investigation](docs/research/SKY_RENDERING_OPTIONS_2026-09-21.md).
+- Condition previews are illustrations, not game-event or temperature simulations. Winter cover skips water and caves; development Cloud/Air previews include eligible dry islands, while other special realms retain their normal palette. Native seasonal appearance must be checked in Dominions.
 - Custom catalog imports supply editor metadata, not game content. Custom IDs may require a matching mod in Dominions.
 - Referenced custom battle maps and skyboxes must be copied into the exported map folder separately.
 - Steam Workshop publishing remains a Steam/Dominions workflow outside Pantokrator Atlas.

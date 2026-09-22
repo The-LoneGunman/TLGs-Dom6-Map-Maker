@@ -1,6 +1,7 @@
 import { GAME_ERA_LABELS, isBlockedProvince, isWaterProvince, type GenerationInputSnapshot, type MapProject, type Province } from "./domain";
 import { globalMovementAdjacency, isImpassableEdge, shortestDistances } from "./generator";
 import { requirementReportLines } from "./nationRequirements";
+import { usesConnectedRegions } from "./geometry";
 
 export const ANALYSIS_MODEL_VERSION = "structural-inspector-2";
 export const MAX_ANALYSIS_STARTS = 64;
@@ -22,7 +23,8 @@ export function captureGenerationInputs(project: MapProject): GenerationInputSna
       s.economyBalance ?? "hard", s.overlandTopology ?? "competitive", s.specialPlaneSizePercent ?? 30, s.throneCount]),
     planes: JSON.stringify(project.planes.map((p, i) => [p.id, p.kind, p.variant, p.autoSize ?? (i === 0),
       (p.autoSize ?? (i === 0)) ? null : p.provinceTarget, p.noGeneratedStarts ?? false, p.ownershipMode, p.width, p.height, p.wrapX, p.wrapY,
-      ...(p.generationOverrides ? [p.generationOverrides] : [])])),
+      ...(p.generationOverrides ? [p.generationOverrides] : []),
+      ...(usesConnectedRegions(p) ? [{ topology: "connected-regions" }] : [])])),
     links: JSON.stringify([s.gateLayout ?? "hub", s.gatePairsPerConnection ?? 1, s.planeConnections ?? null]),
   };
 }

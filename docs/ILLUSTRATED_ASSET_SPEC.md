@@ -4,9 +4,11 @@ This document separates the shipped artwork from the authoring contract for futu
 
 ## Current source implementation
 
-Reviewed September 20, 2026. The v0.1.4 release already includes the four materials, but renderer fixes below are newer than that installer and the September 19 hosted build. See [Versions and documentation](../README.md#versions-and-documentation).
+Reviewed September 21, 2026. The package version remains 0.1.5. Its published build includes the four material textures; the connected-region renderer and procedural sky painter described below are unreleased development work. See [Versions and documentation](../README.md#versions-and-documentation).
 
 The editor and high-resolution PNG preview use four bundled grayscale materials, seven realm backdrops, and procedural terrain marks. The renderer selects and combines materials from the effective terrain flags in code, repeats them in map-relative coordinates, and clips them to canonical province ownership. Missing images leave the underlying terrain or realm color intact. Optional procedural marks use safe interior footprints and can be reduced or omitted on constrained shapes.
+
+Cloud/Air planes in the September 21 development source use `src/skyArt.ts`: a deterministic, asset-free RGB renderer for cloud banks, floating-island edges/shadows, and owner-clipped terrain motifs. The editor samples canonical ownership at display density; PNGs use native dimensions. Winter honors Warmer/Colder on dry islands while excluding cave and water, and Cave Wall remains sealed rock. This remains editor/PNG artwork. A separately registered image plane loaded correctly in a native headless diagnostic, but the helper entry, ownership, numbering/remapping, variants, packaging, and GUI behavior are not accepted. Neither a production hybrid nor an all-image exporter is implemented; see [native-format evidence](research/SKY_RENDERING_OPTIONS_2026-09-21.md).
 
 The `earth.png`, `foliage.png`, `stone.png`, and `water.png` materials are opaque, periodic 1024 x 1024 tiles in `public/map-art/materials/`. They repeat rather than stretching to match a province. See [artwork provenance](ASSET_PROVENANCE.md) for the inventory and source history.
 
