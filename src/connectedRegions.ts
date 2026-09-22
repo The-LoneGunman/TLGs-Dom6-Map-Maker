@@ -308,14 +308,14 @@ function buildRegionalModel(source: Plane, plan: ConnectedRegionPlan): RegionOwn
   const walls = plan.contacts.map((contacts,owner) => contacts.filter(c => !keys.has(pairKey(plane.provinces[owner]!.id,plane.provinces[c.neighbour]!.id)))
     .map(c => ({...c,shoreLimit:Math.min(...outlets[owner]!.map(outlet =>
       (c.limit-c.nx*outlet.portal.x-c.ny*outlet.portal.y)*.5))})));
-  const toOwnerFrame = (x:number,y:number,owner:number) => ({
-    x:centres[owner]!.x + periodic(x-plane.provinces[owner]!.x,plane.wrapX)*aspect,
-    y:centres[owner]!.y + periodic(y-plane.provinces[owner]!.y,plane.wrapY),
-  });
   let removedPixels: ReadonlySet<number> | undefined;
   const contains = (owner:number,x:number,y:number) => {
     if (removedPixels?.has(nativePixel(plane,x,y))) return false;
-    const point = toOwnerFrame(x,y,owner), centre = centres[owner]!;
+    // PERF: the owner-frame point is inlined as scalars; this runs once per
+    // sampled pixel, so it must not allocate. Same arithmetic as before.
+    const centre = centres[owner]!, source = plane.provinces[owner]!;
+    const pointX = centre.x + periodic(x-source.x,plane.wrapX)*aspect;
+    const pointY = centre.y + periodic(y-source.y,plane.wrapY);
     // Two-sided rock seams at omitted contacts preserve an edited movement
     // graph. A bounded margin keeps even small/high-density centres intact.
     const margin = Math.min(plan.localSpacings[owner]!* .18,Math.max(pixel*1.1,plan.spacing*.025));
@@ -325,11 +325,11 @@ function buildRegionalModel(source: Plane, plan: ConnectedRegionPlan): RegionOwn
       // doorway clearance so a short, valid frontier cannot be swallowed.
       const shore = sky ? Math.max(margin,Math.min(wall.shoreLimit,plan.localSpacings[owner]!*.22,
         Math.max(pixel*1.1,plan.spacing*.045)*(1+.35*Math.sin(
-        (-wall.ny*point.x+wall.nx*point.y)/plan.spacing*4+phases[owner]!,
+        (-wall.ny*pointX+wall.nx*pointY)/plan.spacing*4+phases[owner]!,
       )))) : margin;
-      if (wall.limit-wall.nx*point.x-wall.ny*point.y < shore-EPS) return false;
+      if (wall.limit-wall.nx*pointX-wall.ny*pointY < shore-EPS) return false;
     }
-    const dx=point.x-centre.x,dy=point.y-centre.y;
+    const dx=pointX-centre.x,dy=pointY-centre.y;
     const phase=phases[owner]!,contour=skyContours?.[owner],realm=realmContours?.[owner];
     if (contour) {
       const u=(dx*contour.cos+dy*contour.sin)/contour.radiusX;
@@ -345,18 +345,24 @@ function buildRegionalModel(source: Plane, plan: ConnectedRegionPlan): RegionOwn
       if(dx*dx+dy*dy<=radius*radius)return true;
     }
     for(const outlet of outlets[owner]!) {
-      if(outlet.route ? insideSkyPassage(point,outlet.route)
-        : segmentDistanceSquared(point,centre,outlet.portal)<=outlet.width*outlet.width)return true;
+      if(outlet.route ? insideSkyPassage(pointX,pointY,outlet.route)
+        : segmentDistanceSquared(pointX,pointY,centre,outlet.portal)<=outlet.width*outlet.width)return true;
     }
     return false;
   };
-  const candidateBuckets = exactCandidateBuckets(plane,columns,rows,aspect);
+  const {offsets:candidateOffsets,owners:candidateOwners} = refineCandidateBuckets(
+    plane,exactCandidateBuckets(plane,columns,rows,aspect),columns,rows,aspect);
+  const fineColumns = columns*CANDIDATE_REFINEMENT, fineRows = rows*CANDIDATE_REFINEMENT;
   const ownerAt = (x:number,y:number) => {
     if(!Number.isFinite(x)||!Number.isFinite(y)||(!plane.wrapX&&(x<0||x>1))||(!plane.wrapY&&(y<0||y>1)))return -1;
     x=unit(x,plane.wrapX);y=unit(y,plane.wrapY);
-    const bx=clamp(Math.floor(x*columns),0,columns-1),by=clamp(Math.floor(y*rows),0,rows-1);
+    // Scaling by a power of two is exact, so each fine cell lies inside the
+    // coarse cell the former Math.floor(x*columns) lookup selected.
+    const bx=clamp(Math.floor(x*fineColumns),0,fineColumns-1),by=clamp(Math.floor(y*fineRows),0,fineRows-1);
+    const bucket=by*fineColumns+bx,end=candidateOffsets[bucket+1]!;
     let owner=-1,distance=Infinity;
-    for(const i of candidateBuckets[by*columns+bx]!) {
+    for(let k=candidateOffsets[bucket]!;k<end;k++) {
+      const i=candidateOwners[k]!;
       const p=plane.provinces[i]!,dx=periodic(x-p.x,plane.wrapX)*aspect,dy=periodic(y-p.y,plane.wrapY);
       const d=dx*dx+dy*dy;
       if(d<distance-EPS||(Math.abs(d-distance)<=EPS&&(owner<0||p.index<plane.provinces[owner]!.index))) {owner=i;distance=d;}
@@ -644,10 +650,50 @@ function exactCandidateBuckets(plane:Plane,columns:number,rows:number,aspect:num
   });
 }
 
-function segmentDistanceSquared(p:Point,a:Point,b:Point):number {
+/** Fine lookup cells per coarse candidate-bucket axis. */
+const CANDIDATE_REFINEMENT = 4;
+
+/**
+ * PERF: split each exact candidate bucket into 4×4 finer lookup cells, stored
+ * flat (offsets/owners) so a lookup allocates nothing. A fine cell keeps, in
+ * the same ascending order, every candidate of its enclosing coarse bucket
+ * that could come within ownerAt's tie tolerance of the nearest centre
+ * anywhere in the cell. Farther candidates can never change ownerAt's
+ * sequential nearest/EPS-tie scan (a tie chain from the minimum grows by at
+ * most EPS per candidate), so lookups return exactly the former owner while
+ * testing far fewer centres per sample.
+ */
+function refineCandidateBuckets(plane:Plane,coarse:readonly (readonly number[])[],columns:number,rows:number,aspect:number)
+  :{offsets:Int32Array;owners:Int32Array} {
+  const fineColumns=columns*CANDIDATE_REFINEMENT,fineRows=rows*CANDIDATE_REFINEMENT;
+  const radius=Math.hypot(aspect/fineColumns,1/fineRows)/2;
+  // Squared-distance slack: one EPS per possible chained tie plus a rounding margin.
+  const tolerance=(plane.provinces.length+1)*EPS+1e-12;
+  const offsets=new Int32Array(fineColumns*fineRows+1),owners:number[]=[];
+  for(let bucket=0;bucket<fineColumns*fineRows;bucket++) {
+    const column=bucket%fineColumns,row=Math.floor(bucket/fineColumns);
+    const x=(column+.5)/fineColumns,y=(row+.5)/fineRows;
+    const parent=coarse[Math.floor(row/CANDIDATE_REFINEMENT)*columns+Math.floor(column/CANDIDATE_REFINEMENT)]!;
+    const distances=parent.map(i=>{
+      const p=plane.provinces[i]!;
+      return Math.hypot(periodic(x-p.x,plane.wrapX)*aspect,periodic(y-p.y,plane.wrapY));
+    });
+    // Triangle inequality: any sample in this cell is within `radius` of its centre.
+    const reach=(Math.min(...distances)+radius)**2+tolerance;
+    parent.forEach((owner,k)=>{
+      const nearest=Math.max(0,distances[k]!-radius);
+      if(nearest*nearest<=reach)owners.push(owner);
+    });
+    offsets[bucket+1]=owners.length;
+  }
+  return {offsets,owners:Int32Array.from(owners)};
+}
+
+/** Scalar point arguments keep per-pixel ownership tests allocation-free. */
+function segmentDistanceSquared(px:number,py:number,a:Point,b:Point):number {
   const dx=b.x-a.x,dy=b.y-a.y,length=dx*dx+dy*dy;
-  const t=length>EPS?clamp(((p.x-a.x)*dx+(p.y-a.y)*dy)/length,0,1):0;
-  return (p.x-a.x-dx*t)**2+(p.y-a.y-dy*t)**2;
+  const t=length>EPS?clamp(((px-a.x)*dx+(py-a.y)*dy)/length,0,1):0;
+  return (px-a.x-dx*t)**2+(py-a.y-dy*t)**2;
 }
 
 interface SkyPassagePoint extends Point { width: number }
@@ -665,12 +711,12 @@ function skyPassage(from:Point,to:Point,width:number,pixel:number,key:string,reg
   });
 }
 
-function insideSkyPassage(point:Point,route:readonly SkyPassagePoint[]):boolean {
+function insideSkyPassage(px:number,py:number,route:readonly SkyPassagePoint[]):boolean {
   for(let i=1;i<route.length;i++) {
     const a=route[i-1]!,b=route[i]!,dx=b.x-a.x,dy=b.y-a.y,length=dx*dx+dy*dy;
-    const t=length>EPS ? clamp(((point.x-a.x)*dx+(point.y-a.y)*dy)/length,0,1) : 0;
+    const t=length>EPS ? clamp(((px-a.x)*dx+(py-a.y)*dy)/length,0,1) : 0;
     const width=a.width+(b.width-a.width)*t;
-    if((point.x-a.x-dx*t)**2+(point.y-a.y-dy*t)**2<=width*width)return true;
+    if((px-a.x-dx*t)**2+(py-a.y-dy*t)**2<=width*width)return true;
   }
   return false;
 }

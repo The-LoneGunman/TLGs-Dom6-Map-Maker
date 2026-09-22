@@ -106,13 +106,19 @@ export function compileImageOwnership(plane: Plane, owners: Int16Array, numbers 
   return `${rows.join("\r\n")}\r\n`;
 }
 
-/** Lossless 24-bit RLE Targa. Input is top-down RGB; disk rows are bottom-up BGR. */
-export function encodeTga24(width: number, height: number, rgb: Uint8Array): Uint8Array {
+/**
+ * Lossless 24-bit RLE Targa. Input is top-down RGB; disk rows are bottom-up BGR.
+ * `scratch` optionally supplies reusable worst-case working storage; the result
+ * is always a fresh, exactly sized copy, so the scratch buffer never escapes.
+ */
+export function encodeTga24(width: number, height: number, rgb: Uint8Array, scratch?: Uint8Array): Uint8Array {
   if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1
     || width > 65535 || height > 65535 || rgb.length !== width * height * 3) throw new RangeError("Invalid RGB image dimensions.");
   // Each row's RLE packet stream is bounded by four bytes per pixel.
-  const output = new Uint8Array(18 + width * height * 4);
-  const view = new DataView(output.buffer);
+  const capacity = tgaScratchBytes(width, height);
+  const output = scratch && scratch.length >= capacity ? scratch : new Uint8Array(capacity);
+  output.fill(0, 0, 18);
+  const view = new DataView(output.buffer, output.byteOffset, 18);
   output[2] = 10;
   view.setUint16(12, width, true); view.setUint16(14, height, true);
   output[16] = 24; output[17] = 0;
@@ -145,6 +151,11 @@ export function encodeTga24(width: number, height: number, rgb: Uint8Array): Uin
   return output.slice(0, offset);
 }
 
+/** Worst-case encodeTga24 working storage for one image. */
+export function tgaScratchBytes(width: number, height: number): number {
+  return 18 + width * height * 4;
+}
+
 /** Native sheets replace cover but keep cave walls, water, relief and climate. */
 export function imageTerrain(province: Province, variant: SkyArtVariant): Province {
   if (variant === "default" || variant === "winter") return province;
@@ -162,6 +173,8 @@ export function imageTerrain(province: Province, variant: SkyArtVariant): Provin
 export async function* encodeIllustratedImages(plane: Plane, owners?: Int16Array): AsyncGenerator<{ suffix: string; data: Uint8Array }> {
   const mask = owners ?? await sampleIllustratedOwnership(plane);
   const centers = imageCenters(plane);
+  // One worst-case RLE buffer serves all variants; each yielded image is its own copy.
+  const scratch = new Uint8Array(tgaScratchBytes(plane.width, plane.height));
   for (let i = 0; i < SKY_ART_VARIANTS.length; i++) {
     const variant = SKY_ART_VARIANTS[i]!;
     const displayed = { ...plane, provinces: plane.provinces.map(province => imageTerrain(province, variant)) };
@@ -174,7 +187,7 @@ export async function* encodeIllustratedImages(plane: Plane, owners?: Int16Array
       if (rgb[at] === 255 && rgb[at + 1] === 255 && rgb[at + 2] === 255) rgb[at] = 254;
     }
     for (const center of centers) rgb.fill(255, center.pixel * 3, center.pixel * 3 + 3);
-    yield { suffix: IMAGE_SUFFIXES[i]!, data: encodeTga24(plane.width, plane.height, rgb) };
+    yield { suffix: IMAGE_SUFFIXES[i]!, data: encodeTga24(plane.width, plane.height, rgb, scratch) };
     await yieldFrame();
   }
 }
@@ -193,17 +206,31 @@ export function createIllustratedExport(project: MapProject) {
   // One plane at a time. A fresh mask is released once its map and images are
   // consumed; never retain all atlas rasters in a package/compiler object.
   const isIllustrated = (index: number) => hasIllustratedArtwork(project.planes[index]!);
+  /** Map directives without an illustrated plane's #pb ownership runs. */
+  const baseMapText = (index: number, catalog: Dom6CatalogBundle, profiles: readonly VerifiedPopulationDefenseProfile[]): string => {
+    const stem = imageFileStem(project, index);
+    return compileMapText(project, index, catalog, profiles, { numbering,
+      ...(isIllustrated(index) ? { imageFile: `${stem}.tga`, winterImageFile: `${stem}_winter.tga` }
+        : { imageFile: `${nativeFileStem(project, index, "illustrated")}.d6m` }) });
+  };
   return {
-    numbering, isIllustrated,
+    numbering, isIllustrated, baseMapText,
     async mapText(index: number, catalog: Dom6CatalogBundle, profiles: readonly VerifiedPopulationDefenseProfile[]): Promise<string> {
       const plane = project.planes[index]!;
-      const stem = imageFileStem(project, index);
-      const text = compileMapText(project, index, catalog, profiles, { numbering,
-        ...(isIllustrated(index) ? { imageFile: `${stem}.tga`, winterImageFile: `${stem}_winter.tga` }
-          : { imageFile: `${nativeFileStem(project, index, "illustrated")}.d6m` }) });
+      const text = baseMapText(index, catalog, profiles);
       return isIllustrated(index) ? text + compileImageOwnership(plane, await sampleIllustratedOwnership(plane), numbering.get(plane.id)) : text;
     },
     images(index: number) { return encodeIllustratedImages(project.planes[index]!); },
+    /**
+     * Sample an illustrated plane's native ownership once for both its #pb runs
+     * (baseMapText + ownershipText is exactly mapText) and every image variant.
+     * The mask is released once the returned images have been consumed.
+     */
+    async artwork(index: number): Promise<{ ownershipText: string; images: AsyncGenerator<{ suffix: string; data: Uint8Array }> }> {
+      const plane = project.planes[index]!;
+      const owners = await sampleIllustratedOwnership(plane);
+      return { ownershipText: compileImageOwnership(plane, owners, numbering.get(plane.id)), images: encodeIllustratedImages(plane, owners) };
+    },
   };
 }
 
