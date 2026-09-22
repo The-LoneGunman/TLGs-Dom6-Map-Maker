@@ -48,10 +48,27 @@ export interface ConnectedRegionPlan {
   aspect: number;
 }
 
+/**
+ * The native-pixel stabilization of one connected-region layout, in a form
+ * that crosses a worker boundary (the pixel list is transferable). It is a
+ * pure function of `signature`, the plane's full connected-region ownership
+ * signature, and is only ever reused for a plane with that exact signature.
+ */
+export interface ConnectedRegionStabilization {
+  signature: string;
+  /** Ascending native pixel indexes cleared from detached owner fragments. */
+  removedPixels: Uint32Array;
+  notice?: string;
+}
+
+interface StabilizationResult { removed: ReadonlySet<number>; notice?: string }
+
 const EPS = 1e-10;
 const plans = new Map<string, ConnectedRegionPlan>();
-interface RegionOwnershipResult { model?: ProvinceOwnershipModel; notice?: string }
+interface RegionOwnershipResult { model?: ProvinceOwnershipModel; notice?: string; stabilization?: StabilizationResult }
 const ownershipResults = new Map<string, RegionOwnershipResult>();
+/** Worker-computed stabilizations, keyed by the full signature they were computed for. */
+const primedStabilizations = new Map<string, StabilizationResult>();
 const pairKey = (a: string, b: string) => a < b ? `${a}|${b}` : `${b}|${a}`;
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const periodic = (v: number, wrap: boolean) => wrap ? v - Math.round(v) : v;
@@ -194,21 +211,73 @@ export function createConnectedRegionOwnership(plane: Plane): ProvinceOwnershipM
   return connectedRegionOwnershipResult(plane).model;
 }
 
-function connectedRegionOwnershipResult(plane: Plane): RegionOwnershipResult {
-  // Validation and rendering share this cache: a native-resolution safety scan
-  // is paid once per geometry edit, not again for terrain, armies or each render.
-  const signature = JSON.stringify([planeGenerationKey(plane), plane.kind, plane.landformStyle, plane.width, plane.height, plane.wrapX, plane.wrapY,
+/** Everything the regional layout and its native stabilization read. */
+function connectedRegionSignature(plane: Plane): string {
+  return JSON.stringify([planeGenerationKey(plane), plane.kind, plane.landformStyle, plane.width, plane.height, plane.wrapX, plane.wrapY,
     plane.provinces.map(p => [p.id,p.index,p.x,p.y,!!p.small,!!p.large]),
     plane.edges.map(e => pairKey(e.a,e.b)).sort()]);
+}
+
+function connectedRegionOwnershipResult(plane: Plane, signature = connectedRegionSignature(plane)): RegionOwnershipResult {
+  // Validation and rendering share this cache: a native-resolution safety scan
+  // is paid once per geometry edit, not again for terrain, armies or each render.
   const cached = ownershipResults.get(signature);
   if (cached) return cached;
-  const result = buildConnectedRegionOwnership(plane);
+  const result = buildConnectedRegionOwnership(plane,signature);
   if (ownershipResults.size >= 16) ownershipResults.delete(ownershipResults.keys().next().value!);
   ownershipResults.set(signature,result);
   return result;
 }
 
-function buildConnectedRegionOwnership(plane: Plane): RegionOwnershipResult {
+/**
+ * Compute (or reuse) a plane's native stabilization for transfer to another
+ * thread. Undefined for planes that do not use connected regions or whose
+ * layout is rejected before the native scan.
+ */
+export function connectedRegionStabilization(plane: Plane): ConnectedRegionStabilization | undefined {
+  if (!usesConnectedRegions(plane)) return undefined;
+  const signature = connectedRegionSignature(plane);
+  const stabilization = connectedRegionOwnershipResult(plane,signature).stabilization;
+  if (!stabilization) return undefined;
+  return {
+    signature,
+    removedPixels: Uint32Array.from(stabilization.removed),
+    ...(stabilization.notice ? { notice:stabilization.notice } : {}),
+  };
+}
+
+/** Whether this plane's regional ownership can be built without a native scan. */
+export function hasConnectedRegionStabilization(plane: Plane): boolean {
+  if (!usesConnectedRegions(plane)) return true;
+  const signature = connectedRegionSignature(plane);
+  return ownershipResults.has(signature) || primedStabilizations.has(signature);
+}
+
+/**
+ * Seed this thread with a stabilization computed elsewhere, typically by the
+ * generation worker, so the first validation or render skips the native scan.
+ * A result is accepted only when its full signature equals this plane's
+ * current signature; a stale or foreign result is ignored and the scan runs
+ * on demand as before.
+ */
+export function primeConnectedRegionStabilization(plane: Plane, result: ConnectedRegionStabilization): boolean {
+  if (!usesConnectedRegions(plane) || !result || typeof result.signature !== "string"
+    || !(result.removedPixels instanceof Uint32Array)
+    || (result.notice !== undefined && (typeof result.notice !== "string" || !result.notice))) return false;
+  const signature = connectedRegionSignature(plane);
+  if (result.signature !== signature) return false;
+  if (ownershipResults.has(signature) || primedStabilizations.has(signature)) return true;
+  const pixels = plane.width * plane.height;
+  for (const pixel of result.removedPixels) if (pixel >= pixels) return false;
+  if (primedStabilizations.size >= 16) primedStabilizations.delete(primedStabilizations.keys().next().value!);
+  primedStabilizations.set(signature, {
+    removed: new Set(result.removedPixels),
+    ...(result.notice ? { notice:result.notice } : {}),
+  });
+  return true;
+}
+
+function buildConnectedRegionOwnership(plane: Plane, signature: string): RegionOwnershipResult {
   if (plane.provinces.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y) || p.x<0 || p.x>1 || p.y<0 || p.y>1)) {
     return { notice:"Connected regions require valid province positions; compatibility geometry is retained without changing the map's links." };
   }
@@ -225,10 +294,10 @@ function buildConnectedRegionOwnership(plane: Plane): RegionOwnershipResult {
   if (plane.edges.some(e => ids.has(e.a) && ids.has(e.b) && e.a !== e.b && !keys.has(pairKey(e.a,e.b)))) {
     return { notice:"Compatibility geometry is retained because this map has nonlocal authored links or very short frontiers that cannot share regional borders safely. Back up the project and Generate to create a connected-region layout, or keep the existing authored map. Existing links and provinces have not been changed." };
   }
-  return buildRegionalModel(plane,plan);
+  return buildRegionalModel(plane,plan,signature);
 }
 
-function buildRegionalModel(source: Plane, plan: ConnectedRegionPlan): RegionOwnershipResult {
+function buildRegionalModel(source: Plane, plan: ConnectedRegionPlan, signature: string): RegionOwnershipResult {
   // Cached ownership must describe the geometry captured by its cache key.
   // Draft helpers can mutate their input in place; retaining that object in
   // ownerAt would otherwise combine moved centres/wrapping with old contours
@@ -369,8 +438,10 @@ function buildRegionalModel(source: Plane, plan: ConnectedRegionPlan): RegionOwn
     }
     return owner>=0&&contains(owner,x,y)?owner:-1;
   };
-  const safety = stabilizeNativeOwnership(plane,ownerAt);
-  if (safety.notice) return { notice:safety.notice };
+  // PERF: a worker may already have scanned this exact signature (see
+  // primeConnectedRegionStabilization); its result is the scan's own output.
+  const safety: StabilizationResult = primedStabilizations.get(signature) ?? stabilizeNativeOwnership(plane,ownerAt);
+  if (safety.notice) return { notice:safety.notice, stabilization:safety };
   if (safety.removed.size) removedPixels = safety.removed;
   const regionBorders = new Map<string,BorderSegment[]>();
   const corridors: ProvinceCorridorPrimitive[] = [];
@@ -412,7 +483,7 @@ function buildRegionalModel(source: Plane, plan: ConnectedRegionPlan): RegionOwn
       }
     }
   }
-  return { model:{mode:"sparse",metricAspect:aspect,columns,rows,primitives:[...chambers,...corridors],ownerAt,regionBorders} };
+  return { model:{mode:"sparse",metricAspect:aspect,columns,rows,primitives:[...chambers,...corridors],ownerAt,regionBorders}, stabilization:safety };
 }
 
 function naturalRealmProfile(kind: Plane["kind"]): RealmContourProfile {

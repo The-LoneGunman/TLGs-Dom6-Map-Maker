@@ -131,8 +131,21 @@ interface TaggedPoint extends Point {
   incoming?: string;
 }
 
+/** The only province fields the periodic Voronoi partition reads. */
+type VoronoiSite = Pick<Province, "id" | "index" | "x" | "y">;
+interface VoronoiInput extends Pick<Plane, "wrapX" | "wrapY"> {
+  provinces: readonly VoronoiSite[];
+}
+
 const EPSILON = 1e-9;
 const topologyCache = new Map<string, ProvinceTopology>();
+/**
+ * PERF: the base Voronoi partition keyed only by what it reads (site order,
+ * identity, position and wrapping). Terrain, flags, edges and landform
+ * provenance change the full topology signature but never this partition, so
+ * content edits reuse it instead of re-clipping every cell.
+ */
+const voronoiCache = new Map<string, ProvinceTopology>();
 const ownershipCache = new Map<string, ProvinceOwnershipModel>();
 const rasterAuditCache = new Map<string, TopologyAudit | undefined>();
 
@@ -157,8 +170,8 @@ export function computeProvinceTopology(plane: Plane): ProvinceTopology {
     return cacheTopology(signature, { cells: [], pairs: [], pairKeys: new Set(), sharedBorders: new Map() });
   }
 
-  const solid = computeSolidProvinceTopology(plane);
   if (resolvePlaneOwnershipMode(plane) === "solid") {
+    const solid = baseVoronoiTopology(plane);
     const warp = createNaturalLandformWarp(plane);
     if (!warp) return cacheTopology(signature, solid);
     return cacheTopology(signature, {
@@ -173,10 +186,43 @@ export function computeProvinceTopology(plane: Plane): ProvinceTopology {
   const pairKeys = new Set(pairs.map((pair) => pair.key));
   const ownership = createProvinceOwnershipModel(plane, pairs);
   const sharedBorders = ownership.regionBorders ?? sparseSharedBorders(plane, ownership, pairKeys);
-  return cacheTopology(signature, { cells: solid.cells, pairs, pairKeys, sharedBorders });
+  // Sparse previews, exports and topology never read these legacy Voronoi
+  // cells, so build them on first access. The snapshot pins the geometry this
+  // topology was cached for; the enumerable getter keeps `.cells`, spreads,
+  // JSON and deep equality returning the same polygons as an eager field.
+  const sites: VoronoiInput = {
+    wrapX: plane.wrapX,
+    wrapY: plane.wrapY,
+    provinces: plane.provinces.map(({ id, index, x, y }) => ({ id, index, x, y })),
+  };
+  let cells: Cell[] | undefined;
+  return cacheTopology(signature, {
+    get cells() { return cells ??= baseVoronoiTopology(sites).cells; },
+    pairs,
+    pairKeys,
+    sharedBorders,
+  });
 }
 
-function computeSolidProvinceTopology(plane: Plane): ProvinceTopology {
+function baseVoronoiTopology(plane: VoronoiInput): ProvinceTopology {
+  const signature = voronoiSignature(plane);
+  const cached = voronoiCache.get(signature);
+  if (cached) return cached;
+  const topology = computeSolidProvinceTopology(plane);
+  if (voronoiCache.size >= 12) voronoiCache.delete(voronoiCache.keys().next().value!);
+  voronoiCache.set(signature, topology);
+  return topology;
+}
+
+function voronoiSignature(plane: VoronoiInput): string {
+  // Quoted IDs and exact number spellings (including -0) keep the key unambiguous.
+  const number = (value: number) => Object.is(value, -0) ? "-0" : String(value);
+  return `${plane.wrapX ? 1 : 0}${plane.wrapY ? 1 : 0}|${plane.provinces
+    .map((province) => `${JSON.stringify(province.id)}:${number(province.index)}:${number(province.x)}:${number(province.y)}`)
+    .join(";")}`;
+}
+
+function computeSolidProvinceTopology(plane: VoronoiInput): ProvinceTopology {
   const xImages = plane.wrapX ? [-1, 0, 1] : [0];
   const yImages = plane.wrapY ? [-1, 0, 1] : [0];
   const provinceIndex = new Map(plane.provinces.map((province, index) => [province.id, index]));
@@ -247,7 +293,7 @@ function computeSolidProvinceTopology(plane: Plane): ProvinceTopology {
   return { cells, pairs, pairKeys, sharedBorders };
 }
 
-function clippingCandidates(province: Province, plane: Plane): Province[] {
+function clippingCandidates(province: VoronoiSite, plane: VoronoiInput): VoronoiSite[] {
   const others = plane.provinces.filter((other) => other.id !== province.id);
   if (others.length <= 128) return others;
   const ranked = others.map((other) => {
@@ -265,7 +311,7 @@ function clippingCandidates(province: Province, plane: Plane): Province[] {
     const sector = Math.min(15, Math.floor(((angle + Math.PI) / (Math.PI * 2)) * 16));
     return { province: other, distance: dx * dx + dy * dy, sector };
   }).sort((left, right) => left.distance - right.distance || left.province.index - right.province.index);
-  const selected = new Map<string, Province>();
+  const selected = new Map<string, VoronoiSite>();
   for (const item of ranked.slice(0, 64)) selected.set(item.province.id, item.province);
   const sectorCounts = new Array<number>(16).fill(0);
   for (const item of ranked) {
@@ -617,7 +663,9 @@ export function createProvinceOwnershipModel(
   }
 
   const primitiveCopies = buildSparsePrimitiveCopies(primitives, plane, metricAspect);
-  const buckets = bucketSparsePrimitiveCopies(primitiveCopies, columns, rows);
+  const copies = packSparsePrimitiveCopies(primitiveCopies, metricAspect);
+  const lookup = refineSparseBuckets(bucketSparsePrimitiveCopies(primitiveCopies, columns, rows), copies, columns, rows);
+  const { fineColumns, fineRows, offsets: lookupOffsets, entries: lookupEntries } = lookup;
   const styxEdgeInsetX = 1 / Math.max(1, Math.round(plane.width));
   const styxEdgeInsetY = 1 / Math.max(1, Math.round(plane.height));
   // An explicit Styx crossing is drawn over the river it crosses: its straight
@@ -626,8 +674,21 @@ export function createProvinceOwnershipModel(
   const crossingKeys = plane.kind === "underworld"
     ? new Set(plane.edges.filter(isExplicitBridge).map((edge) => connectionKey(edge.a, edge.b)))
     : new Set<string>();
-  const crossings = new Set(primitives.flatMap((primitive, index) =>
-    primitive.kind === "corridor" && !primitive.path && crossingKeys.has(primitive.key) ? [index] : []));
+  const crossings = new Uint8Array(primitives.length);
+  primitives.forEach((primitive, index) => {
+    if (primitive.kind === "corridor" && !primitive.path && crossingKeys.has(primitive.key)) crossings[index] = 1;
+  });
+  // PERF: per-sample scratch, reused instead of two Sets per call. Linear
+  // de-duplication keeps the Sets' first-insertion order, which the nearest
+  // owner's EPSILON tie scan depends on. A bucket copy adds at most two owners.
+  const scratchSize = 2 * Math.max(1, lookup.longest);
+  const candidates = new Int32Array(scratchSize);
+  const crossingOwners = new Int32Array(scratchSize);
+  const addOwner = (list: Int32Array, count: number, owner: number): number => {
+    for (let index = 0; index < count; index += 1) if (list[index] === owner) return count;
+    list[count] = owner;
+    return count + 1;
+  };
   return cacheOwnership(signature, {
     mode,
     metricAspect,
@@ -645,52 +706,63 @@ export function createProvinceOwnershipModel(
         if (styxBoundary.axis === "x" ? ySide : xSide) return -1;
         restrictedStyxSide = styxBoundary.axis === "x" ? xSide : ySide;
       }
-      const bucketX = Math.max(0, Math.min(columns - 1, Math.floor(nx * columns)));
-      const bucketY = Math.max(0, Math.min(rows - 1, Math.floor(ny * rows)));
-      const candidates = new Set<number>();
-      let crossingOwners: Set<number> | undefined;
-      for (const copy of buckets[bucketY * columns + bucketX]!) {
-        const primitive = primitives[copy.primitiveIndex]!;
+      // Scaling by a power of two is exact, so this fine cell lies inside the
+      // coarse bucket floor(n * columns/rows) the lookup has always used.
+      const bucketX = Math.max(0, Math.min(fineColumns - 1, Math.floor(nx * fineColumns)));
+      const bucketY = Math.max(0, Math.min(fineRows - 1, Math.floor(ny * fineRows)));
+      const bucket = bucketY * fineColumns + bucketX;
+      // A non-finite coordinate has no bucket; keep the former lookup failure.
+      if (Number.isNaN(bucket)) throw new TypeError("Sparse ownership cannot sample a non-finite coordinate.");
+      let candidateCount = 0;
+      let crossingCount = 0;
+      for (let slot = lookupOffsets[bucket]!, end = lookupOffsets[bucket + 1]!; slot < end; slot += 1) {
+        const copy = lookupEntries[slot]!;
+        // PERF: every shape test below is false outside its copy's padded
+        // bounding box, so skipping those copies cannot change the owner.
+        if (nx < copies.minX[copy]! || nx > copies.maxX[copy]! || ny < copies.minY[copy]! || ny > copies.maxY[copy]!) continue;
+        const primitiveIndex = copies.primitiveIndex[copy]!;
+        const offsetX = copies.offsetX[copy]!, offsetY = copies.offsetY[copy]!;
+        const primitive = primitives[primitiveIndex]!;
         if (restrictedStyxSide
           && (primitive.kind !== "boundary"
             || primitive.axis !== styxBoundary?.axis
             || primitive.side !== restrictedStyxSide)) continue;
         if (primitive.kind === "chamber") {
-          const dx = (nx - (primitive.center.x + copy.offsetX)) * metricAspect;
-          const dy = ny - (primitive.center.y + copy.offsetY);
-          if (pointInsideChamber(dx, dy, primitive)) candidates.add(primitive.owner);
+          const dx = (nx - (primitive.center.x + offsetX)) * metricAspect;
+          const dy = ny - (primitive.center.y + offsetY);
+          if (pointInsideChamber(dx, dy, primitive)) candidateCount = addOwner(candidates, candidateCount, primitive.owner);
           continue;
         }
-        if (primitive.kind === "corridor" && primitive.path && copy.segmentIndex !== undefined) {
-          if (pointInsideCorridorSegment(nx - copy.offsetX, ny - copy.offsetY, primitive, copy.segmentIndex, metricAspect)) {
-            candidates.add(primitive.owners[0]);
-            candidates.add(primitive.owners[1]);
+        const segmentIndex = copies.segmentIndex[copy]!;
+        if (primitive.kind === "corridor" && primitive.path && segmentIndex >= 0) {
+          if (pointInsideCorridorSegment(nx - offsetX, ny - offsetY, primitive, segmentIndex, metricAspect)) {
+            candidateCount = addOwner(candidates, candidateCount, primitive.owners[0]);
+            candidateCount = addOwner(candidates, candidateCount, primitive.owners[1]);
           }
           continue;
         }
         const distance = pointSegmentDistanceSquared(
           nx * metricAspect,
           ny,
-          (primitive.from.x + copy.offsetX) * metricAspect,
-          primitive.from.y + copy.offsetY,
-          (primitive.to.x + copy.offsetX) * metricAspect,
-          primitive.to.y + copy.offsetY,
+          (primitive.from.x + offsetX) * metricAspect,
+          primitive.from.y + offsetY,
+          (primitive.to.x + offsetX) * metricAspect,
+          primitive.to.y + offsetY,
         );
         if (distance <= primitive.halfWidth * primitive.halfWidth + EPSILON) {
-          if (primitive.kind === "boundary") candidates.add(primitive.owner);
+          if (primitive.kind === "boundary") candidateCount = addOwner(candidates, candidateCount, primitive.owner);
           else {
-            candidates.add(primitive.owners[0]);
-            candidates.add(primitive.owners[1]);
-            if (crossings.has(copy.primitiveIndex)) {
-              crossingOwners ??= new Set<number>();
-              crossingOwners.add(primitive.owners[0]);
-              crossingOwners.add(primitive.owners[1]);
+            candidateCount = addOwner(candidates, candidateCount, primitive.owners[0]);
+            candidateCount = addOwner(candidates, candidateCount, primitive.owners[1]);
+            if (crossings[primitiveIndex]) {
+              crossingCount = addOwner(crossingOwners, crossingCount, primitive.owners[0]);
+              crossingCount = addOwner(crossingOwners, crossingCount, primitive.owners[1]);
             }
           }
         }
       }
-      if (crossingOwners) return nearestMetricOwner(nx, ny, [...crossingOwners], plane, metricAspect);
-      return candidates.size ? nearestMetricOwner(nx, ny, [...candidates], plane, metricAspect) : -1;
+      if (crossingCount) return nearestMetricOwner(nx, ny, crossingOwners, crossingCount, plane, metricAspect);
+      return candidateCount ? nearestMetricOwner(nx, ny, candidates, candidateCount, plane, metricAspect) : -1;
     },
   });
 }
@@ -1681,18 +1753,115 @@ function buildSparsePrimitiveCopies(
   return copies;
 }
 
-function bucketSparsePrimitiveCopies(copies: readonly SparsePrimitiveCopy[], columns: number, rows: number): SparsePrimitiveCopy[][] {
-  const buckets = Array.from({ length: columns * rows }, () => [] as SparsePrimitiveCopy[]);
-  for (const copy of copies) {
+/** Copy indexes per bucket, each list in ascending copy order. */
+function bucketSparsePrimitiveCopies(copies: readonly SparsePrimitiveCopy[], columns: number, rows: number): Int32Array[] {
+  const buckets = Array.from({ length: columns * rows }, () => [] as number[]);
+  copies.forEach((copy, index) => {
     const left = Math.max(0, Math.min(columns - 1, Math.floor(copy.minX * columns)));
     const right = Math.max(0, Math.min(columns - 1, Math.floor(Math.min(1 - Number.EPSILON, copy.maxX) * columns)));
     const top = Math.max(0, Math.min(rows - 1, Math.floor(copy.minY * rows)));
     const bottom = Math.max(0, Math.min(rows - 1, Math.floor(Math.min(1 - Number.EPSILON, copy.maxY) * rows)));
     for (let y = top; y <= bottom; y += 1) {
-      for (let x = left; x <= right; x += 1) buckets[y * columns + x]!.push(copy);
+      for (let x = left; x <= right; x += 1) buckets[y * columns + x]!.push(index);
+    }
+  });
+  return buckets.map((bucket) => Int32Array.from(bucket));
+}
+
+/**
+ * Metric slack added around each copy's bounding box for the ownerAt
+ * early-out. Every sparse shape test accepts a point at most
+ * sqrt(r² + EPSILON) <= r + sqrt(EPSILON) ~ r + 3.2e-5 from its core (chamber
+ * contours are bounded by their conservative outer radius), so 1e-4 keeps the
+ * skip exact with ample floating-point margin; it is under a quarter of a
+ * native pixel.
+ */
+const SPARSE_COPY_BOUND_SLACK = 1e-4;
+
+/** Fine lookup cells per coarse sparse bucket axis; a power of two. */
+const SPARSE_BUCKET_REFINEMENT = 4;
+
+interface SparseBucketLookup {
+  fineColumns: number;
+  fineRows: number;
+  /** Flat per-fine-cell copy lists: entries[offsets[cell] .. offsets[cell + 1]). */
+  offsets: Int32Array;
+  entries: Int32Array;
+  longest: number;
+}
+
+/**
+ * PERF: split each coarse bucket into 4x4 finer lookup cells. A fine cell
+ * keeps, in the same ascending order, every copy of its enclosing coarse
+ * bucket whose padded bounds reach the cell (with rounding slack). The copies
+ * it drops are exactly those ownerAt's bounding-box test would skip for every
+ * point in the cell, so owners and their insertion order are unchanged.
+ */
+function refineSparseBuckets(
+  buckets: readonly Int32Array[],
+  copies: PackedSparsePrimitiveCopies,
+  columns: number,
+  rows: number,
+): SparseBucketLookup {
+  const fineColumns = columns * SPARSE_BUCKET_REFINEMENT, fineRows = rows * SPARSE_BUCKET_REFINEMENT;
+  const slack = 1e-12;
+  const offsets = new Int32Array(fineColumns * fineRows + 1);
+  const entries: number[] = [];
+  let longest = 0;
+  for (let row = 0; row < fineRows; row += 1) {
+    const top = row / fineRows - slack, bottom = (row + 1) / fineRows + slack;
+    const parentRow = Math.floor(row / SPARSE_BUCKET_REFINEMENT) * columns;
+    for (let column = 0; column < fineColumns; column += 1) {
+      const left = column / fineColumns - slack, right = (column + 1) / fineColumns + slack;
+      const start = entries.length;
+      for (const copy of buckets[parentRow + Math.floor(column / SPARSE_BUCKET_REFINEMENT)]!) {
+        if (copies.maxX[copy]! < left || copies.minX[copy]! > right || copies.maxY[copy]! < top || copies.minY[copy]! > bottom) continue;
+        entries.push(copy);
+      }
+      longest = Math.max(longest, entries.length - start);
+      offsets[row * fineColumns + column + 1] = entries.length;
     }
   }
-  return buckets;
+  return { fineColumns, fineRows, offsets, entries: Int32Array.from(entries), longest };
+}
+
+interface PackedSparsePrimitiveCopies {
+  primitiveIndex: Int32Array;
+  /** Curved-corridor segment index, or -1. */
+  segmentIndex: Int32Array;
+  offsetX: Float64Array;
+  offsetY: Float64Array;
+  /** Padded normalized bounds; a point outside cannot be inside the copy. */
+  minX: Float64Array;
+  maxX: Float64Array;
+  minY: Float64Array;
+  maxY: Float64Array;
+}
+
+function packSparsePrimitiveCopies(copies: readonly SparsePrimitiveCopy[], metricAspect: number): PackedSparsePrimitiveCopies {
+  const count = copies.length;
+  const packed: PackedSparsePrimitiveCopies = {
+    primitiveIndex: new Int32Array(count),
+    segmentIndex: new Int32Array(count),
+    offsetX: new Float64Array(count),
+    offsetY: new Float64Array(count),
+    minX: new Float64Array(count),
+    maxX: new Float64Array(count),
+    minY: new Float64Array(count),
+    maxY: new Float64Array(count),
+  };
+  const slackX = SPARSE_COPY_BOUND_SLACK / metricAspect;
+  copies.forEach((copy, index) => {
+    packed.primitiveIndex[index] = copy.primitiveIndex;
+    packed.segmentIndex[index] = copy.segmentIndex ?? -1;
+    packed.offsetX[index] = copy.offsetX;
+    packed.offsetY[index] = copy.offsetY;
+    packed.minX[index] = copy.minX - slackX;
+    packed.maxX[index] = copy.maxX + slackX;
+    packed.minY[index] = copy.minY - SPARSE_COPY_BOUND_SLACK;
+    packed.maxY[index] = copy.maxY + SPARSE_COPY_BOUND_SLACK;
+  });
+  return packed;
 }
 
 function pointSegmentDistanceSquared(
@@ -1713,10 +1882,18 @@ function pointSegmentDistanceSquared(
   return (px - qx) ** 2 + (py - qy) ** 2;
 }
 
-function nearestMetricOwner(x: number, y: number, candidates: readonly number[], plane: Plane, metricAspect: number): number {
-  let best = candidates[0] ?? -1;
+function nearestMetricOwner(
+  x: number,
+  y: number,
+  candidates: Int32Array,
+  count: number,
+  plane: Plane,
+  metricAspect: number,
+): number {
+  let best = count ? candidates[0]! : -1;
   let bestDistance = Infinity;
-  for (const index of candidates) {
+  for (let slot = 0; slot < count; slot += 1) {
+    const index = candidates[slot]!;
     const province = plane.provinces[index];
     if (!province) continue;
     const distance = metricDistanceSquared(x, y, province.x, province.y, plane, metricAspect);
@@ -1807,7 +1984,7 @@ function sparseSharedBorders(
   return borders;
 }
 
-function initialPeriodicFrame(province: Province, plane: Pick<Plane, "wrapX" | "wrapY">): TaggedPoint[] {
+function initialPeriodicFrame(province: VoronoiSite, plane: Pick<Plane, "wrapX" | "wrapY">): TaggedPoint[] {
   const left = plane.wrapX ? province.x - 0.5 : 0;
   const right = plane.wrapX ? province.x + 0.5 : 1;
   const top = plane.wrapY ? province.y - 0.5 : 0;
