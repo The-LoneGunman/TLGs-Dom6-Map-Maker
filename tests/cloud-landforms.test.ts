@@ -238,8 +238,9 @@ for (const [kind, digest] of [
   ["cave", "58ab6f394f071d4d072cbf41af1924e3b49927c75cf17d1444a21a869239241e"],
   ["underworld", "010c6a1e63dd4fe488e5456784baffe10ef99454184015d3ea9fffcbdcdf600e"],
 ] as const) {
-  test(`${kind}: sky-only landform refinements leave the pre-change ownership snapshot intact`, () => {
+  test(`${kind}: saved pre-natural-style maps retain the pre-change ownership snapshot`, () => {
     const plane = fixture(kind, "cloud-landforms-nonsky", 40, 256, 256);
+    delete plane.landformStyle;
     const owners = samplePlaneOwnership(plane, plane.width, plane.height);
     // Captured before the cloud-specific refinement; text avoids host endianness.
     assert.equal(createHash("sha256").update(owners.join(",")).digest("hex"), digest);

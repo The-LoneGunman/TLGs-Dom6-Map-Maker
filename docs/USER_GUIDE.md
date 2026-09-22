@@ -141,7 +141,7 @@ The pending summary groups inputs changed since the last generation recorded by 
 | Water | 18% |
 | Ocean layout | Natural / varied |
 | Major continents | 3 |
-| Biome cohesion | 68% |
+| Biome cohesion | 58% in development (68% in published 0.1.5) |
 | Economy balance | Hard competitive balance |
 | Overland topology | Competitive mix |
 | Bonus-plane size | 30% of core |
@@ -235,12 +235,22 @@ This is the requested water share on water-capable generated realms. Generation 
 
 Island Chains needs enough sea to look and play like islands. If Water is below 48%, generation raises the effective setting to 48% and reports the change.
 
+In development builds, explicit ocean presets keep their water layout during start placement. If a coast-heavy map cannot fit the requested inland capitals safely, review the spacing/category notices, allocate more Coastal or Water starts, or increase provinces per player. The generator no longer scatters the chosen ocean just to accommodate those starts.
+
+**Unreleased natural landforms:** new generations curve shared province boundaries, including shorelines. Single Continent grows a connected peripheral sea; Multiple Continents and Island Chains try broad, winding separators before falling back to their capacity-safe layouts; Central Inland Sea uses an asymmetric, lobed basin. Natural / Varied keeps its existing seed-driven water distribution with the new boundary shapes. The existing water budget, start placement and connectivity safeguards still apply; constrained settings may limit the achievable outline or continent count. These are cartographic shapes, not a physical erosion simulation.
+
+Water remains a set of playable Sea/Deep Sea provinces, not a painted overlay. Preview, clicking and native export use the same ownership. Older saved maps do not change just by loading, exporting or rerolling content; back up the project and **Generate** to obtain the new shapes. A settings recipe is not an exact map backup: it uses the current generator when you subsequently generate.
+
+Coastal boundaries use stronger bays/headlands than inland divisions; ocean interiors use broader curves, and small enclosed lakes receive rounded basin outlines. The generator saves these shape hints separately from editable terrain. Manually changing Sea or other flags changes the province's art and game terrain, not its borders. Generate again when you want water placement and shapes rebuilt together.
+
 ### Biome cohesion
 
-Range: **0-100%**. Default: **68%**.
+Range: **0-100%**. Development default: **58%** (published 0.1.5 uses 68%). Saved settings are not automatically lowered.
 
 - Lower values make smaller, more varied terrain patches.
 - Higher values create larger connected biome regions.
+
+The development generator blends a little more regional moisture/elevation detail into ordinary temperate land at low and medium cohesion. This produces smaller, more varied plains, forest and highland patches while preserving connected terrain regions. Deliberate high cohesion (80% and above), themed variants, explicit terrain weights and regional plans retain their existing behavior and priority; this does not force equal terrain percentages.
 
 The generator still enforces minimum terrain variety, so the relationship is directional rather than a promise that every low-cohesion seed will have fewer same-terrain neighbors than every high-cohesion seed.
 
@@ -259,6 +269,14 @@ This policy changes generated population values, not the identity of independent
 - **Strategic regions:** adds deterministic regional chokepoints away from every capital while keeping the movement graph connected.
 
 This affects solid Surface and surface-like Custom planes. Cave-family and sparse special realms retain their own topology.
+
+#### Connected border rivers
+
+On newly generated solid Surface and surface-like Custom maps, small river borders form connected channels instead of isolated random stretches. Routes use the actual junctions where province borders meet, including enabled wrap seams. Upland and lake headwaters are preferred, with routes favoring valleys toward larger water bodies. Tributaries can join existing downstream channels. Where no coast is reachable, rivers drain to another water body, an unwrapped map edge, or a low inland basin on fully wrapped dry maps. This is terrain-guided layout, not a physical water-flow simulation.
+
+Capital exits and road crossings use bridges so the river remains visually continuous without adding a seasonal river blocker there. **Open movement** uses bridged rivers throughout unless an explicit plane border-mix override is configured. Bridges retain a blue watercourse beneath their crossing marks in the editor and PNG; the native package uses the game's river/bridge border commands.
+
+Use **Planes → Generation preferences → Eligible dry-land border mix → River share (%)** to change the amount, or enter **0** to disable generated border rivers. The share is approximate: complete routes take priority over filling the percentage with disconnected pieces, and constrained explicit requests produce a generation notice. River crossings can replace some requested road borders with bridges. Regenerate to apply these settings; loading, synchronizing or exporting an existing map does not reroute authored rivers. The River Styx, ocean provinces, cave waterways, and sparse-realm passages are unchanged.
 
 ### Province-name controls
 
@@ -405,6 +423,8 @@ Cloud and Air use broader, wind-shaped floating-island groups with irregular coa
 
 The Underworld uses its dedicated **River Styx layout** to preserve its water barrier and controlled crossings. Solid planes retain full province ownership.
 
+New generations additionally use **natural landforms**: solid planes have irregular shared boundaries rather than straight cell edges; Cave has rounded irregular chambers, Great Cavern elongated vaults, Infernal rounded facets, Abyss warped pockets, Dream lobed basins, and Elemental rounded shard-like rooms. Passage provinces stay broad. Cloud/Air keep the wind-shaped treatment above, and the Styx layout is unchanged. This newer pass is applied only by Generate; existing saves without its style marker retain their previous outlines. The Planes panel distinguishes saved outlines from the new applied shapes. A content edit or recipe does not silently enable the new style; explicit geometry settings can still reshape a map as documented.
+
 Some older or manually linked planes have nonlocal connections that cannot be represented by adjacent regional provinces. Atlas retains compatibility geometry and displays a notice instead of silently deleting or rewriting those links. Keep the authored map, or back up and **Generate** for the new regional layout; normal regeneration can replace province content as described above. Compatibility geometry is a preservation safeguard, not another selectable generation style.
 
 Atlas checks native-resolution ownership before displaying regional geometry. Detached pixel fragments are cleared into the background. If the resolution cannot preserve the intended shared borders, a notice advises increasing resolution or reducing province density. Increasing resolution rechecks the layout without requiring regeneration or changing the movement graph.
@@ -448,7 +468,7 @@ Expand **Generation preferences · Next generation** on the active plane. Blank 
 | Plane water / Cave ocean (%) | Requests 0–60% water on the supported plane family. Cave ocean applies to Cave/Great Cavern. Neither removes the Underworld's edge-to-edge Styx. Starts, ocean style, and topology can override a requested share. |
 | Dry-terrain weights | Values 0–5 bias plains, forest, farm, swamp, waste, highland, and mountains. Blank or 1 retains the normal preference; 0 is not an absolute exclusion because variety and safety repairs take priority. Caves use underground equivalents; farm has no underground effect. Water and cave walls are excluded. |
 | Regional plans | Assign a dry-terrain preference to the north/south/east/west half or central quarter. Up to 16 plans per plane; the first matching plan wins. Normalized bounds scale with map dimensions, and saved recipes can specify custom rectangles. These are generation plans, not saved province selections. |
-| Eligible dry-land border mix | On solid overland planes, road/river/mountain-pass shares total at most 100%; the remainder becomes ordinary borders. Capital exits, water, impassable borders, and mountain barriers are preserved. This overrides the topology policy only on eligible edges. |
+| Eligible dry-land border mix | On solid overland planes, road/river/mountain-pass shares total at most 100%. Capital access, water, impassable borders, and mountain barriers are preserved. River share budgets complete connected routes, including bridges, rather than independent border rolls; barriers and outlet access can reduce the achieved share. This overrides the topology policy only on eligible edges. |
 | Guarded share | Requests authored guardians on 0–80% of eligible provinces, outside the two-step capital buffer, using the plane's existing themed pools. |
 | Guardian troop-count multiplier | Inherit, 0.5×, 1×, 1.5×, or 2× squad counts. This is not a calibrated difficulty rating; review commander leadership warnings and test combat in Dominions. |
 | Many-sites share | Requests the Many sites terrain flag outside capital rings. It does not place named sites or guarantee rewards. |
@@ -671,9 +691,9 @@ The primary terrain is a preset that contributes mechanical flags. Artwork uses 
 - Cave swamp = Cave + Swamp
 - Cave waste = Cave + Waste
 - Cave highlands = Cave + Highland
-- Cave wall = blocked Cave-wall terrain; selecting it also removes generic, team, and nation-specific starts, throne setup, and guardian groups
+- Cave wall = blocked Cave-wall terrain; selecting it also removes generic, team, and nation-specific starts, throne setup, catalogued throne sites, and guardian groups
 
-Changing primary terrain does not normally recalculate manually edited population, poptype, guardians, or biome. Cave wall is the safety exception: blocked space cannot retain a start, throne, or guardian group.
+Changing primary terrain does not normally recalculate manually edited population, poptype, guardians, or biome. Cave wall is the safety exception: blocked space cannot retain a start, throne, or guardian group. The same cleanup applies when a primary-terrain edit retains an additional Cave Wall flag.
 
 #### Biome
 
@@ -704,9 +724,15 @@ Useful combinations:
 - Sea + Cave: flooded cave.
 - Fresh water without Sea: land.
 - Deep without Sea: no aquatic effect.
-- Cave wall: blocked, No start, and no generic start.
+- Swamp + Forest: wooded marsh, retaining low swamp relief (also for Cave + Swamp + Forest). Explicit Highland or Mountains still raises land relief.
+- Cave wall: blocked and No start; either the primary preset or additional flag clears all start assignments, throne setup, sites identified as thrones by the active catalog, and guardian groups.
+- Sea + Cave wall: still blocked, with both terrain flags retained and submerged native relief. Validation warns that this mixed terrain's in-game appearance has not been verified. Remove Cave Wall if you intend navigable water.
 
 Validation warns when Forest, Swamp, Waste, Highland, and Mountains exceed the manual's recommendation of at most two adverse types.
+
+Cave-wall cleanup is a single Undo-able edit. Unchecking the flag does not restore deleted contents; use Undo to restore the previous province and its start assignments. A global start lock refuses edits that would change starts. Batch edits respect field locks; intentional inspector edits can override them as described under [authoring locks](#layout-start-and-field-locks).
+
+Unrelated economy, ordinary or unrecognized sites, battle settings, and raw directives are preserved. Recognized guardian/throne-site commands in a blocked province's raw directives must be removed explicitly before export. Imported projects are not silently cleaned: validation and playable-package export reject blocked provinces with throne setup, catalogued throne sites, or guardian groups/commands. Project JSON can still be saved while resolving these errors. Plane/project-level raw commands are not fully interpreted by this check and still require host review; they can override structured content or terrain.
 
 #### Magic path bias
 

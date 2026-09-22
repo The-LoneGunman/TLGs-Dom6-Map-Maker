@@ -4,13 +4,14 @@ import { parseProject, serializeProject } from "./export";
 import { assertProjectLocks } from "./authoringLocks";
 
 export const MAX_RECIPE_BYTES = 256 * 1024;
+export const SETTINGS_GENERATOR_REVISION = "atlas-generation-2026-09-22-natural-v1";
 const PLANE_KEYS = ["id", "name", "kind", "variant", "autoSize", "noGeneratedStarts", "provinceTarget", "width", "height", "wrapX", "wrapY", "ownershipMode", "generationOverrides", "sparseLayout"] as const;
 export type RecipePlane = Pick<Plane, typeof PLANE_KEYS[number]>;
 export interface SettingsRecipe {
   kind: "pantokrator-settings";
   version: 1;
   name: string;
-  generator: "atlas-generation-2026-09-20";
+  generator: "atlas-generation-2026-09-20" | typeof SETTINGS_GENERATOR_REVISION;
   seed?: string;
   settings: GenerationSettings;
   planes: RecipePlane[];
@@ -20,7 +21,7 @@ export interface SettingsRecipe {
 
 export function createSettingsRecipe(project: MapProject, name = project.name, includeSeed = false): SettingsRecipe {
   return {
-    kind: "pantokrator-settings", version: 1, name: name.trim().slice(0,120) || "Atlas recipe", generator: "atlas-generation-2026-09-20",
+    kind: "pantokrator-settings", version: 1, name: name.trim().slice(0,120) || "Atlas recipe", generator: SETTINGS_GENERATOR_REVISION,
     ...(includeSeed ? { seed: project.seed } : {}),
     settings: structuredClone(project.settings),
     planes: project.planes.map(p => Object.fromEntries(PLANE_KEYS.filter(k => p[k] !== undefined).map(k => [k, structuredClone(p[k])]))) as unknown as RecipePlane[],
@@ -36,7 +37,8 @@ function bounded(value: number | undefined, min: number, max: number, label: str
 export function parseSettingsRecipe(text: string): SettingsRecipe {
   if (new TextEncoder().encode(text).byteLength > MAX_RECIPE_BYTES) throw new Error("Settings recipes are limited to 256 KiB.");
   const value = JSON.parse(text) as SettingsRecipe;
-  if (!value || value.kind !== "pantokrator-settings" || value.version !== 1 || value.generator !== "atlas-generation-2026-09-20") throw new Error("This is not a supported Atlas settings recipe.");
+  if (!value || value.kind !== "pantokrator-settings" || value.version !== 1
+    || !["atlas-generation-2026-09-20", SETTINGS_GENERATOR_REVISION].includes(value.generator)) throw new Error("This is not a supported Atlas settings recipe.");
   if (Object.keys(value).some(k => !["kind", "version", "name", "generator", "seed", "settings", "planes", "assumptions", "populationDefense"].includes(k))) throw new Error("The settings recipe contains unknown fields.");
   if (typeof value.name !== "string" || !value.name.trim() || value.name.length > 120) throw new Error("Recipe names require 1–120 characters.");
   if (value.seed !== undefined && (typeof value.seed !== "string" || value.seed.length > 4096)) throw new Error("Invalid recipe seed.");
@@ -117,7 +119,7 @@ export function applySettingsRecipe(project: MapProject, recipe: SettingsRecipe)
 }
 
 export const BUILTIN_RECIPES = [
-  { id: "ffa", name: "Balanced FFA", note: "Neutral start allocation with the existing hard economy and competitive-route defaults.", settings: { waterPercent:18, oceanLayout:"natural", economyBalance:"hard", overlandTopology:"competitive", biomeCohesion:68 } },
+  { id: "ffa", name: "Balanced FFA", note: "Neutral start allocation with the existing hard economy and competitive-route defaults.", settings: { waterPercent:18, oceanLayout:"natural", economyBalance:"hard", overlandTopology:"competitive", biomeCohesion:58 } },
   { id: "continents", name: "Continental rivalry", note: "Three major landmasses requested; feasibility depends on starts, wrapping and water.", settings: { waterPercent:40, oceanLayout:"multiple_continents", continentCount:3, economyBalance:"hard", overlandTopology:"strategic" } },
   { id: "naval", name: "Naval geography", note: "Island chains and open routes. Configure water/coastal starts separately; this does not choose nations.", settings: { waterPercent:52, oceanLayout:"island_chains", economyBalance:"soft", overlandTopology:"open" } },
   { id: "frontiers", name: "Strategic frontiers", note: "More overland chokepoints with soft economy correction; existing team/start annotations are not moved.", settings: { waterPercent:25, oceanLayout:"natural", economyBalance:"soft", overlandTopology:"strategic", biomeCohesion:82 } },

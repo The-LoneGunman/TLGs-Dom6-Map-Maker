@@ -203,8 +203,11 @@ test("the planes screen reports one effective layout and exposes no classic sele
     assert.match(sky, /floating-island provinces/);
     assert.match(sky, /wind-shaped coastlines and broad, gently curved causeways/);
   }
-  assert.equal(render("surface"), "");
-  assert.equal(render("cave", "solid"), "");
+  assert.match(render("surface"), /Natural shared borders/);
+  assert.match(render("cave", "solid"), /Natural shared borders/);
+  const saved = { ...plane, kind: "surface" as const, ownershipMode: "solid" as const };
+  delete saved.landformStyle;
+  assert.match(renderToStaticMarkup(createElement(PlaneLayoutInfo, {plane:saved})), /Saved province outlines/);
 });
 
 test("unsafe authored regional graphs remain importable and show a compatibility-geometry notice", () => {

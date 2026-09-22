@@ -1,0 +1,53 @@
+# Natural province and water shapes — September 22, 2026
+
+Source-stage verification from `codex/terrain-edit-safety-sep22`, following the terrain-edit and connected-river repairs. These changes are unreleased: merging the source does not deploy the hosted app or update the Windows installer.
+
+## What changes
+
+- Newly generated solid planes use one bounded, invertible deformation of their shared partition. Inland borders and shorelines become irregular together; drawing, province clicks, river routes and D6M ownership all use that same geometry. Centers, province counts and neighbor pairs are preserved by the shape operation.
+- Coasts have a stronger bay/headland contour than inland boundaries. Open-water divisions use longer, quieter curves, and small enclosed water bodies receive rounded, optionally elongated basin hints. These profiles are blended into the same partition, not drawn as mismatched overlays.
+- Single Continent grows its sea along a connected frontier. Multiple Continents and Island Chains first try broad, sinuous separators, then retain their existing capacity-safe fallbacks. Central Inland Sea uses a coherent asymmetric, lobed basin. Natural / Varied keeps its water-selection distribution. Exact effective water quotas and topology safeguards remain in force; very constrained settings can limit the visual result.
+- Compatible connected realms gain different contour families: Cave's irregular rounded chambers, Great Cavern's elongated vaults, Infernal's rounded facets, Abyss's warped pockets, Dream's lobed basins, and Elemental's rounded shard-like rooms. Passage provinces remain broad. Cloud/Air keep their existing wind-shaped islands and causeways. The Underworld/Styx implementation is unchanged.
+- This is ownership geometry, not a shoreline drawn over a different click area. Native Surface/Custom artwork remains game-rendered; supported illustrated realms continue to use the existing exporter. No external art or additional dependencies are required.
+
+## Preservation and limits
+
+Generation records `landformStyle: "natural-v1"` on each plane. Missing metadata means its saved pre-update geometry; import, export and content rerolls do not upgrade it. The style participates in geometry caches and layout locks. Existing compatibility fallbacks for nonlocal authored links and dense sparse maps remain intact.
+
+Generated solid planes additionally record their physical water groups in `landformWater`, after locked terrain has been restored. This snapshot, not later editable Sea flags, determines the coast/basin shape hints. Converting a province's terrain updates its artwork and game flags but does not move its borders. Regenerate to rebuild water shapes. Invalid or dangling provenance is rejected on import and reported by validation. Very crowded solid rasters (less than 512 native pixels per province) warn that tiny contacts may not resolve cleanly; a larger output is advisable.
+
+Settings recipes intentionally omit applied shape provenance. Old September 20 recipes remain accepted; new recipes identify the September 22 natural-landform generator. Applying the same geometry preferences preserves the current outlines. A subsequent Generate uses the current implementation, so the same seed and old recipe need not recreate an older map. Use editable-project JSON for exact map preservation, and keep a pre-upgrade backup for older Atlas builds that reject unknown fields.
+
+The shape operation preserves neighbors; changing the ocean preset's water selection can intentionally change coastal starts, terrain, local economy, names, thrones and guardians during generation. Existing start-protection, economy and feasibility checks still run afterward. This work is not multiplayer balance certification or a physical drainage/erosion simulation.
+
+## Verification
+
+Before the biome follow-up below, the pre-natural river checkpoint's five full-generation hashes were reproduced before updating them. Default changed only the style marker and 22 river/bridge border kinds (routing follows the new curves); Cave and eight-plane fixtures changed only style metadata. Island/continent fixtures intentionally changed water-driven content. That stage retained every fixture's province IDs, coordinates, counts, movement pairs, gateway records and start totals. The final biome-follow-up comparison reproduced the same old hashes and intentionally changed new-generation terrain, seeded positions, links and dependent content; province/start totals remained unchanged. Frozen saved-map fixtures retain their original ownership hashes independently of evolving generation defaults.
+
+Focused automated coverage includes forward/inverse and polygon/native ownership agreement, shared-border two-sided tests, wrapping, saved geometry snapshots, strict persistence, old/new recipes and layout locks; realm footprint connectivity and movement-frontier parity; and water quotas, feasible continents, substantial island groups, mixed land/coastal/aquatic starts, and safe capital river exits.
+
+Additional independent checks covered 72 import/recipe/content-reroll preservation cases, 72 water-layout edge cases, and 9 extreme-aspect/density maps through 800 provinces with 18,432 inverse/ownership samples. All passed.
+
+The controlled eight-seed coast fixture measured average coastal chord deviation 2.35 times the inland value, with different open-water curves. Tests also check water-snapshot persistence, physical rather than movement-restricted water grouping, wrapped seams, malformed metadata, enclosed inland-sea generation and safe starts.
+
+Real browser use found a later interaction the initial layout-only tests missed: generic start-category repair could repaint an explicit ocean preset into scattered water. That terrain-repainting repair is now restricted to Natural / Varied; explicit ocean presets retain their generated water masks while the existing start allocator and validation handle real category/spacing constraints. The reproduced Single Continent fixture now has one 38-province ocean, one 58-province continent and six actual land starts, without validation errors. Mixed-start and deferred-versus-full-generation regressions cover this boundary. Impossible all-land requests on small, coast-heavy maps must still be addressed through settings rather than silently breaking geography.
+
+Stress testing found excessive retained JavaScript objects in the first warp implementation. Compact typed-array meshes and a bounded eight-entry warp cache replaced them. In an isolated 40-generation/2,000-province stress process (above the supported 800-province limit), retained heap fell from about 491 MiB to 12.5 MiB, with 43 MiB of array buffers. The intermediate 4,096² ownership benchmark was about 2.38 seconds at 800 provinces; these are machine-specific diagnostics, not supported output-size or performance guarantees.
+
+The final coast-aware 800-province 4,096² stress diagnostic sampled ownership at about 6.52 million pixels/second, retained every province center, and added no raster contacts. Like the legacy raster, it can lose extremely short vector contacts under pixel quantization; two provinces had a single diagonally attached pixel. An extreme-aspect clipping discrepancy was identical in coastal, plain-natural and legacy samples. These inherited/quantization limits are not a guarantee of exact four-connected pixel topology at every size, and the density warning is advisory rather than exhaustive proof. The supported output controls and existing sparse-geometry fallbacks are unchanged.
+
+## Smaller, more varied biomes
+
+The development new-project default and Balanced FFA recipe use 58% cohesion rather than 68%. A restrained regional moisture/elevation blend adds local variation to temperate Surface/Custom terrain below 80% cohesion. It does not impose equal terrain quotas or change themed climate sampling; explicit terrain weights and regional plans keep their priority. Saved cohesion settings are not migrated.
+
+A fixed 24-seed corpus at each of 48/96/192 provinces found mean connected dry-terrain patches changed from 3.10/4.87/6.22 to 3.07/4.43/5.06 provinces. Same-terrain neighboring pairs fell from 40.0%/54.9%/57.3% to 38.0%/52.8%/53.2%; largest-patch shares also fell, while forest remained about 15–22% and meaningful farms, wetlands and high ground remained. At explicit 85% cohesion the measured aggregates match the previous sampler. These tests establish the intended modest distribution change, not nation-specific multiplayer balance.
+
+## Final checks
+
+The final application source passed the production build and 14 integration tests. After the deliberately reviewed fixture updates and additional full-generation regressions, the complete TypeScript suite passed 996/996: **1,010 automated tests total**, with no failures or skips. Typecheck, ESLint, third-party license consistency and whitespace checks passed. Two synthetic import tests now discard stale shape membership when they replace the entire province collection; strict dangling-reference validation remains intact.
+
+Interactive checks used the isolated `127.0.0.1:3028` build, seed `natural-coasts-qa`, 2048×1152 nonwrapped output and 58% cohesion. The repaired 96-province Single Continent retained peripheral water and six inland starts; the visible spacing/degree warnings remained honest, with no export blockers. A 120-province Island Chains map using 2 Land, 1 Coastal and 1 Water start correctly raised water from 40% to 48%, displayed separate land groups in a connected sea, and had no export blockers. The same 120-province mixed allocation with Central Inland Sea at 40% produced an enclosed basin and no export blockers. Keyboard province selection, a manual Sea-to-Forest edit and Undo, generation confirmation/progress, pending settings and reload preservation worked. No captured browser warnings or errors remained.
+
+The local preview was checked before source handoff. Hosted deployment and Windows release remain separate from committing and merging these changes. A fresh in-game visual check remains separate from the automated D6M/illustrated ownership checks.
+
+No new Dominions 6 in-game visual acceptance is claimed for this shape pass. Earlier illustrated-art loading evidence does not substitute for inspecting these new outlines in the engine.

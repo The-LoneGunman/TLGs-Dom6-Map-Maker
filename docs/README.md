@@ -22,6 +22,9 @@ These records preserve the conditions and evidence at the stated revision/date. 
 
 | Record | Role |
 | --- | --- |
+| [September 22 natural landforms](NATURAL_LANDFORMS_2026-09-22.md) | Unreleased shared province curves, natural ocean/basin layouts, realm-specific contours and saved-map compatibility. |
+| [September 22 connected border rivers](CONNECTED_BORDER_RIVERS_2026-09-22.md) | Unreleased continuous river routing, safe bridge crossings, geographic constraints and verification evidence. |
+| [September 22 terrain-edit repairs](TERRAIN_EDIT_REPAIRS_2026-09-22.md) | Unreleased cave-wall cleanup, blocked-content export checks, mixed-terrain relief corrections and verification scope. |
 | [September 21 connected-region verification](CONNECTED_REGIONS_2026-09-21.md) | Unreleased adjacent-region layout, compatibility safeguards, automated checks and browser/native visual acceptance. |
 | [September 22 illustrated export](ILLUSTRATED_EXPORT_2026-09-22.md) | Playable custom-image implementation, eight-plane loading/connectivity evidence, Cloud visual acceptance and safe delivery. |
 | [September 21 procedural realm artwork](REALM_ARTWORK_2026-09-21.md) | Earlier editor/PNG checkpoint, rendering invariants and dated tests; its preview-only export boundary is superseded by September 22. |

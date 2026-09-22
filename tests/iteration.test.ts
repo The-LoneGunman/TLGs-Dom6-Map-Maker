@@ -13,13 +13,17 @@ import { BUILTIN_DOM6_CATALOG } from "../src/catalog";
 import { IterationPanel } from "../src/IterationPanel";
 
 const frozen: Record<string,string> = {
-  default:"bb6c7ae62970a8d44f42f82d6db7916b0984e3341dd82327b0aba120c2389da9",
-  islands:"f6e25c37740bd78b4fc803bffb89b75d7d925a36319fba56253e85543a092448",
-  continents:"e50ec3e83bef10a045f420b3405b59cf6e688ca4b7f5214221d2d3530b1cda4e",
-  // Sparse generation intentionally changed when connected regions became
-  // mandatory. Keep reviewed new baselines while solid-only hashes stay frozen.
-  caves:"cc1ced9a0757c0c539660b603bd87dc9c4617b27aac73e0f9b10ceb16a838da2",
-  eight:"48abe5e004a6caf6dfae5624cbfdbfd6cd121956ea39b15e868a359d9d8a88cc",
+  // Reviewed September22 against reproduced pre-natural river hashes. New
+  // biome defaults/sampling intentionally change content and seeded positions;
+  // water-shape provenance and routing are also now applied. Explicit ocean
+  // presets retain their water mask during start placement. All five fixtures
+  // retain their requested province/start totals; old saved ownership is tested
+  // independently from these explicit new-generation snapshots.
+  default:"36d54b2af29f629c04f810d45cb7b14ad696fbd0a5477c5d6cf6e62b0c4b66d9",
+  islands:"5d647f1d3ebb385cbcb068d21e4135e95315cb7b5fc871623def835b5b353d07",
+  continents:"2912f015787b08746f286060621250d77079e8828bb1877a66fdb7c4312e47dc",
+  caves:"ba79749f126f067b5a80135b46d00d0bbebf80bae2da24958c859f09b8b61dde",
+  eight:"56db7137496d27fb0549f8c056c9b1ea66cd46be30f139d5e2f6bf3b76a0d59b",
 };
 function frozenFixture(kind: string): MapProject {
   let p = createDefaultProject(`round-baseline-${kind}`);

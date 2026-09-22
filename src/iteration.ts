@@ -5,7 +5,7 @@ import { serializeProject } from "./export";
 import { BUILTIN_DOM6_CATALOG, type Dom6CatalogBundle } from "./catalog";
 import { rerollPlaneDetails } from "./generator";
 import { regenerateGeneratedProvinceNames } from "./naming";
-import { applyPrimaryTerrain } from "./uiWorkflow";
+import { applyAdditionalTerrainFlag, applyPrimaryTerrain } from "./uiWorkflow";
 
 export interface ProvinceSelection {
   planeId: string;
@@ -118,12 +118,11 @@ export function previewBatchEdit(project: MapProject, planeId: string, ids: read
     if (edit.kind !== "clearGuardians" && protectedKeys.has(`${planeId}:${province.id}`)) { result.protected++; continue; }
     const original = structuredClone(province);
     const before = JSON.stringify(province);
-    if (edit.kind === "terrain") applyPrimaryTerrain(result.project, planeId, province.id, edit.terrain);
+    if (edit.kind === "terrain") applyPrimaryTerrain(result.project, planeId, province.id, edit.terrain, catalog);
     else if (edit.kind === "flag") {
+      applyAdditionalTerrainFlag(result.project, planeId, province.id, edit.flag, edit.enabled, catalog);
       // Materialize the complete mask so removing an inherent preset flag really removes it.
       const flags = new Set(effectiveProvinceTerrainFlags(province));
-      if (edit.enabled) flags.add(edit.flag); else flags.delete(edit.flag);
-      if (flags.has("cavewall")) applyPrimaryTerrain(result.project, planeId, province.id, "cavewall");
       province.terrain = "plains"; province.terrainFlags = [...flags]; province.freshwater = false;
     } else if (edit.kind === "population") province.population = edit.value;
     else if (edit.kind === "poptype") province.poptype = edit.value;

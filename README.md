@@ -40,8 +40,9 @@ Where browser folder access is supported, use **Install directly**; otherwise us
 
 ## What it can generate
 
-- Seeded terrain regions, varied province shapes, configurable wrapping, and movement borders derived from visible ownership.
-- Natural oceans, one or several continents, island chains, or a central inland sea.
+- Seeded terrain regions, varied province shapes, configurable wrapping, and movement borders derived from visible ownership. Unreleased temperate-biome tuning makes default terrain regions slightly smaller and more varied, without lowering saved cohesion settings.
+- Natural oceans, one or several continents, island chains, or a central inland sea. Unreleased new generations add irregular shared coastlines, lobed inland basins, and less rigid continent/island separators; saved maps retain their prior outlines.
+- Unreleased connected overland border rivers: terrain-guided channels and tributaries, safe bridge crossings, and an adjustable river share; the province-water Styx is separate.
 - Surface, Cave, Great Cavern, Cloud, Air, Underworld, Infernal, Abyss, Dream, Elemental, and Custom realms, including sparse chambers, corridors, and hubs.
 - Flooded caves, water-to-water interplane links, and an edge-to-edge River Styx with two banks and controlled crossings.
 - Automatic or manually edited gate networks, scale-aware starts, per-plane start blocking, cave-start nations, throne recommendations, and fairness warnings.
@@ -129,6 +130,7 @@ The 0.1.5 source passed **743 automated tests**, type checking, lint, license ch
 - [Artwork provenance](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/ASSET_PROVENANCE.md)
 - [Unreleased procedural realm artwork](docs/REALM_ARTWORK_2026-09-21.md)
 - [Unreleased in-game illustrated export and native evidence](docs/ILLUSTRATED_EXPORT_2026-09-22.md)
+- [Unreleased natural province and water shapes](docs/NATURAL_LANDFORMS_2026-09-22.md)
 
 The documentation index separates current references, unfinished proposals, and historical evidence. Old test counts and audit findings are not current release status.
 

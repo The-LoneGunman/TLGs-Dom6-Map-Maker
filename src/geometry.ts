@@ -1,5 +1,6 @@
 import { isCaveProvince, isWaterProvince, type Plane, type PlaneOwnershipMode, type Province } from "./domain";
 import { createConnectedRegionOwnership } from "./connectedRegions";
+import { createNaturalLandformWarp } from "./naturalLandforms";
 
 export interface Point {
   x: number;
@@ -156,7 +157,16 @@ export function computeProvinceTopology(plane: Plane): ProvinceTopology {
   }
 
   const solid = computeSolidProvinceTopology(plane);
-  if (resolvePlaneOwnershipMode(plane) === "solid") return cacheTopology(signature, solid);
+  if (resolvePlaneOwnershipMode(plane) === "solid") {
+    const warp = createNaturalLandformWarp(plane);
+    if (!warp) return cacheTopology(signature, solid);
+    return cacheTopology(signature, {
+      ...solid,
+      cells: solid.cells.map(cell => ({ ...cell, polygons: cell.polygons.map(polygon => polygon.flatMap((from, index) =>
+        warp.border(from, polygon[(index + 1) % polygon.length]!).map(segment => segment.from))) })),
+      sharedBorders: new Map([...solid.sharedBorders].map(([key, segments]) => [key, segments.flatMap(segment => warp.border(segment.from, segment.to))])),
+    });
+  }
 
   const pairs = intentionalPairs(plane);
   const pairKeys = new Set(pairs.map((pair) => pair.key));
@@ -321,7 +331,9 @@ export function createProvinceOwnershipModel(
   const rows = Math.max(2, Math.ceil(Math.max(1, plane.provinces.length) / columns));
 
   if (mode === "solid" || !plane.provinces.length) {
-    const buckets = buildCandidateBuckets(plane, columns, rows);
+    const snapshot = { ...plane, provinces: plane.provinces.map(province => ({ ...province })) };
+    const buckets = buildCandidateBuckets(snapshot, columns, rows);
+    const warp = mode === "solid" ? createNaturalLandformWarp(snapshot) : undefined;
     return cacheOwnership(signature, {
       mode,
       metricAspect,
@@ -329,12 +341,14 @@ export function createProvinceOwnershipModel(
       rows,
       primitives: [],
       ownerAt: (x, y) => {
-        if (!plane.provinces.length) return -1;
-        const nx = normalizeCoordinate(x, plane.wrapX);
-        const ny = normalizeCoordinate(y, plane.wrapY);
+        if (!snapshot.provinces.length) return -1;
+        const normalizedX = normalizeCoordinate(x, snapshot.wrapX);
+        const normalizedY = normalizeCoordinate(y, snapshot.wrapY);
+        const original = warp?.inverse(normalizedX, normalizedY);
+        const nx = original?.x ?? normalizedX, ny = original?.y ?? normalizedY;
         const bucketX = Math.max(0, Math.min(columns - 1, Math.floor(nx * columns)));
         const bucketY = Math.max(0, Math.min(rows - 1, Math.floor(ny * rows)));
-        return nearestOwner(nx, ny, buckets[bucketY * columns + bucketX]!, plane);
+        return nearestOwner(nx, ny, buckets[bucketY * columns + bucketX]!, snapshot);
       },
     });
   }
@@ -1508,9 +1522,9 @@ function geometrySignature(plane: Plane): string {
   const edgePart = ownership === "sparse"
     ? plane.edges.map((edge) => `${connectionKey(edge.a, edge.b)}${plane.kind === "underworld" && isExplicitBridge(edge) ? ":bridge" : ""}`).sort().join(",")
     : "";
-  return `${ownership}${usesConnectedRegions(plane) ? ":regions" : ""}:${plane.id}:${plane.kind}:${plane.width}x${plane.height}:${plane.wrapX ? 1 : 0}${plane.wrapY ? 1 : 0}:${plane.provinces
+  return `${ownership}${usesConnectedRegions(plane) ? ":regions" : ""}:${plane.landformStyle ?? "legacy"}:${plane.id}:${plane.kind}:${plane.width}x${plane.height}:${plane.wrapX ? 1 : 0}${plane.wrapY ? 1 : 0}:${plane.provinces
     .map((province) => `${province.id}:${province.index}:${province.x}:${province.y}:${province.small ? 1 : 0}${province.large ? 1 : 0}:${province.terrain}:${province.freshwater ? 1 : 0}:${[...(province.terrainFlags ?? [])].sort().join("+")}`)
-    .join(";")}:${edgePart}`;
+    .join(";")}:${edgePart}:${JSON.stringify(plane.landformWater ?? null)}`;
 }
 
 function ownershipSignature(plane: Plane): string {

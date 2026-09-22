@@ -1,4 +1,4 @@
-import { cloneProject, sanitizeMapName, type MapProject } from "./domain";
+import { cloneProject, landformWaterError, sanitizeMapName, type MapProject, type Plane } from "./domain";
 import { calculateFairness } from "./generator";
 import { buildHostTopologyReport } from "./hostReport";
 import { analysisContextLines, analyzeStarts, buildStartAnalysisText } from "./workbench";
@@ -6,6 +6,7 @@ import { BUILTIN_DOM6_CATALOG, type Dom6CatalogBundle } from "./catalog";
 import { assertPlaneGenerationOverrides } from "./generationControls";
 import { buildInitialDefensePlan, type InitialDefensePlan, type VerifiedPopulationDefenseProfile } from "./populationDefenders";
 import { VERIFIED_POPULATION_DEFENSE_PROFILES } from "./populationDefenseProfiles";
+import { assertBlockedTerrainContentSafe } from "./terrainSafety";
 import {
   createIllustratedExport,
   illustratedExportError,
@@ -59,6 +60,7 @@ export type { ExportArtwork } from "./illustratedMap";
 /** Registry override supports internal verification fixtures; project imports cannot supply trusted profiles. */
 export async function buildPackageFiles(project: MapProject, onProgress?: ProgressCallback, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG, audience: PackageAudience = "host",
   populationProfiles: readonly VerifiedPopulationDefenseProfile[] = VERIFIED_POPULATION_DEFENSE_PROFILES, artwork: ExportArtwork = "native"): Promise<PackageFile[]> {
+  assertBlockedTerrainContentSafe(project, catalog);
   assertArtworkExportSupported(project, artwork);
   const illustrated = artwork === "illustrated" ? createIllustratedExport(project) : undefined;
   const base = sanitizeMapName(project.name);
@@ -153,6 +155,7 @@ export async function removeObsoletePlaneArtifacts(
 }
 
 export async function installPackage(project: MapProject, onProgress?: ProgressCallback, catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG, artwork: ExportArtwork = "native"): Promise<"installed" | "unsupported" | "cancelled"> {
+  assertBlockedTerrainContentSafe(project, catalog);
   assertArtworkExportSupported(project, artwork);
   const picker = (window as typeof window & {
     showDirectoryPicker?: (options?: { mode?: "read" | "readwrite"; id?: string }) => Promise<FileSystemDirectoryHandle>;
@@ -449,7 +452,7 @@ const PLANE_CONNECTION_FIELDS = new Set(["a", "b", "pairs", "enabled"]);
 const PLANE_FIELDS = new Set([
   "id", "name", "kind", "variant", "autoSize", "noGeneratedStarts", "provinceTarget", "width", "height", "wrapX",
   "wrapY", "ownershipMode", "mapNoHide", "noDeepCaves", "mapTextColor", "mapDominionColor", "provinces", "edges",
-  "rawDirectives", "generationOverrides", "sparseLayout",
+  "rawDirectives", "generationOverrides", "sparseLayout", "landformStyle", "landformWater",
 ]);
 const EDGE_FIELDS = new Set(["id", "a", "b", "kind", "special"]);
 const PROVINCE_FIELDS = new Set([
@@ -642,6 +645,7 @@ function assertPlane(plane: Record<string, unknown>, index: number): void {
   booleanAt(plane.wrapX, `${path}.wrapX`);
   booleanAt(plane.wrapY, `${path}.wrapY`);
   optionalEnumAt(plane.ownershipMode, OWNERSHIP_MODES, `${path}.ownershipMode`);
+  optionalEnumAt(plane.landformStyle, new Set(["natural-v1"]), `${path}.landformStyle`);
   optionalEnumAt(plane.sparseLayout, SPARSE_LAYOUTS, `${path}.sparseLayout`);
   optionalBooleanAt(plane.mapNoHide, `${path}.mapNoHide`);
   optionalBooleanAt(plane.noDeepCaves, `${path}.noDeepCaves`);
@@ -655,6 +659,8 @@ function assertPlane(plane: Record<string, unknown>, index: number): void {
       throw new Error(`${path}.provinces must be stored in local province-number order; expected index ${provinceIndex + 1} at array position ${provinceIndex}.`);
     }
   });
+  const waterProvenanceError = landformWaterError(plane as unknown as Plane);
+  if (waterProvenanceError) throw new Error(`${path}.${waterProvenanceError}`);
   boundedArrayAt(plane.edges, `${path}.edges`, MAX_IMPORTED_EDGES_PER_PLANE).forEach((value, edgeIndex) => {
     const edgePath = `${path}.edges[${edgeIndex}]`;
     const edge = recordAt(value, edgePath);

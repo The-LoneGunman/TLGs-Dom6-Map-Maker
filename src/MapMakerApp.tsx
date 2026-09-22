@@ -123,6 +123,7 @@ import {
 import { loadProjectAutosave, saveProjectAutosave, type AutosaveRevision, type AutosaveState } from "./autosave";
 import {
   appendHistorySnapshot,
+  applyAdditionalTerrainFlag,
   applyPrimaryTerrain,
   armedEndpointCopy,
   atlasReplacementImpact,
@@ -1334,6 +1335,7 @@ export function MapMakerApp() {
                   {OCEAN_LAYOUTS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                 </select>
               </Field>
+              <p className="field-note">New maps use irregular shared coastlines. Continent and island styles shape larger seas; Central inland sea creates an enclosed basin. Saved maps keep their outlines until Generate.</p>
               {(project.settings.oceanLayout ?? "natural") === "island_chains" && <p className="field-note">Island chains use at least {ISLAND_CHAIN_MIN_WATER_PERCENT}% water so land is genuinely separated; Generate records that effective value when the slider is lower.</p>}
               {(project.settings.oceanLayout ?? "natural") === "multiple_continents" && <>
                 <NumberField scope="Next generation"
@@ -1658,7 +1660,7 @@ export function MapMakerApp() {
                 ))}
               </div>
               <div id="inspector-active-panel" className="panel-scroll inspector-scroll" role="tabpanel" aria-labelledby={`inspector-tab-${inspectorTab}`}>
-                {inspectorTab === "terrain" && <TerrainInspector planeId={activePlane.id} province={selected} update={updateSelected} mutateProject={mutate} />}
+                {inspectorTab === "terrain" && <TerrainInspector catalog={catalog} planeId={activePlane.id} province={selected} update={updateSelected} mutateProject={mutate} />}
                 {inspectorTab === "gameplay" && <><GameplayInspector catalog={catalog} project={project} planeId={activePlane.id} province={selected} update={updateSelected} mutateProject={mutate} />
                   <div className="inspector-stack"><PopulationDefenseProvinceStatus project={project} catalog={catalog} planeId={activePlane.id} provinceId={selected.id} onConfigure={() => setLeftTab("scenario")} /></div>
                 </>}
@@ -1744,7 +1746,7 @@ export function MapMakerApp() {
   );
 }
 
-function TerrainInspector({ planeId, province, update, mutateProject }: { planeId: string; province: Province; update: (recipe: (province: Province) => void) => void; mutateProject: (recipe: (project: MapProject) => void) => void }) {
+function TerrainInspector({ catalog, planeId, province, update, mutateProject }: { catalog: Dom6CatalogBundle; planeId: string; province: Province; update: (recipe: (province: Province) => void) => void; mutateProject: (recipe: (project: MapProject) => void) => void }) {
   const inherentFlags = effectiveProvinceTerrainFlags({ terrain: province.terrain, terrainFlags: undefined, freshwater: false });
   const effectiveFlags = effectiveProvinceTerrainFlags(province);
   const additionalFlags = ADDITIVE_TERRAIN_FLAGS.filter((flag) => !inherentFlags.has(flag));
@@ -1753,7 +1755,7 @@ function TerrainInspector({ planeId, province, update, mutateProject }: { planeI
       <SectionHeading kicker="TERRAIN & ARTWORK" title="Biome & terrain" />
       <Field label="Primary terrain preset"><select value={province.terrain} onChange={(event) => {
         const terrain = event.target.value as TerrainKey;
-        mutateProject((draft) => { applyPrimaryTerrain(draft, planeId, province.id, terrain); });
+        mutateProject((draft) => { applyPrimaryTerrain(draft, planeId, province.id, terrain, catalog); });
       }}>{TERRAIN_KEYS.map((key) => <option value={key} key={key}>{TERRAIN_LABELS[key]}</option>)}</select></Field>
       <Field scope="Saved note only" label="Biome (descriptive only)"><select value={province.biome} onChange={(event) => update((item) => { item.biome = event.target.value as BiomeKey; })}>{BIOME_KEYS.map((key) => <option value={key} key={key}>{BIOME_LABELS[key]}</option>)}</select></Field>
       <div className="choice-grid">
@@ -1778,19 +1780,13 @@ function TerrainInspector({ planeId, province, update, mutateProject }: { planeI
           compact
           label={TERRAIN_FLAG_LABELS[flag]}
           checked={province.terrainFlags?.includes(flag) ?? false}
-          onChange={(value) => update((item) => {
-            item.terrainFlags = value
-              ? [...new Set([...(item.terrainFlags ?? []), flag])]
-              : item.terrainFlags?.filter((entry) => entry !== flag);
-            if (!item.terrainFlags?.length) item.terrainFlags = undefined;
-            if (value && flag === "cavewall") {
-              item.noStart = true;
-              item.start = false;
-            }
+          onChange={(value) => mutateProject((draft) => {
+            applyAdditionalTerrainFlag(draft, planeId, province.id, flag, value, catalog);
           })}
         />)}
       </div>
       <p className="field-note">Effective mask: {[...effectiveFlags].map((flag) => TERRAIN_FLAG_LABELS[flag]).join(" + ") || "plain land"}. Sea + Mountains enables underwater-mountain sites; Sea + Forest is kelp/underwater forest. Fresh water remains a land marker unless Sea is also set.</p>
+      <p className="field-note">Cave Wall blocks the province and clears all starts, throne setup, catalogued throne sites, and guardian groups. Undo restores the previous contents. Raw province commands are preserved; recognized guardian and throne-site commands block export.</p>
       <Divider />
       <SectionHeading kicker="SITE AFFINITY" title="Magic path bias" />
       <div className="path-grid">
@@ -2238,7 +2234,14 @@ function RangeField({ label, value, suffix, min, max, onInteractionStart, onInte
 function Toggle({ label, checked, describedBy, onChange, scope }: { label: string; checked: boolean; describedBy?: string; onChange: (value: boolean) => void; scope?: ControlScope }) { return <label className="toggle-row"><span>{label} <ScopeBadge scope={scope} /></span><input type="checkbox" checked={checked} aria-describedby={describedBy} onChange={(event) => onChange(event.target.checked)} /><i /></label>; }
 
 export function PlaneLayoutInfo({ plane }: { plane: Plane }) {
-  if (resolvePlaneOwnershipMode(plane) !== "sparse") return null;
+  const natural = plane.landformStyle === "natural-v1";
+  if (resolvePlaneOwnershipMode(plane) !== "sparse") return <div className="resolution-card province-layout-info">
+    <span>Province outlines</span>
+    <strong>{!plane.provinces.length ? "Generated with the next atlas" : natural ? "Natural shared borders" : "Saved province outlines"}</strong>
+    <small>{natural
+      ? "Irregular shared boundaries shape both shores and inland provinces. Preview, clicks and native export use the same ownership."
+      : "Generate creates the new natural outlines. Opening, editing content or exporting this map keeps its saved shape."}</small>
+  </div>;
   const underworld = plane.kind === "underworld";
   const sky = plane.kind === "cloud" || plane.kind === "air";
   const layoutNotice = usesConnectedRegions(plane) ? connectedRegionLayoutNotice(plane) : undefined;
@@ -2252,6 +2255,9 @@ export function PlaneLayoutInfo({ plane }: { plane: Plane }) {
         ? "The Underworld keeps its realm-bisecting Styx and controlled crossings."
         : sky ? "Adjoining floating-island provinces have wind-shaped coastlines and broad, gently curved causeways."
         : "Adjoining province groups are joined by broad, playable passage provinces."}</small>
+      {!underworld && !sky && <small>{natural
+        ? "Realm-specific chamber contours vary without changing the movement graph."
+        : "Saved contours are retained. Generate applies the new realm-specific shapes."}</small>}
     </div>
     {layoutNotice && <p id={noticeId} className="warning-copy province-layout-notice" role="status">
       <strong>Current map uses compatibility geometry.</strong>{" "}

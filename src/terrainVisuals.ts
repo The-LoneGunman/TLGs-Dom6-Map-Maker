@@ -93,13 +93,17 @@ const TERRAIN_HEIGHTS: Record<TerrainKey, number> = {
 /** D6M relief uses the same current flags as the .map mask and editor. */
 export function terrainElevation(province: ProvinceTerrain): number {
   const flags = effectiveProvinceTerrainFlags(province);
-  if (flags.has("cavewall")) return 1250;
+  // Sea is also written into the D6M province spec. Keep its relief submerged
+  // even when the separate gameplay mask marks the province as blocked rock.
   if (flags.has("sea")) {
     if (flags.has("deep")) return -1180;
     if (flags.has("mountains") || flags.has("highland")) return -220;
     return flags.has("forest") ? -290 : -380;
   }
+  if (flags.has("cavewall")) return 1250;
   if (flags.has("mountains")) return 900;
   if (flags.has("highland")) return flags.has("cave") ? 640 : 520;
+  // Forest is cover, not a reason to raise a marsh out of its low-lying basin.
+  if (flags.has("swamp")) return flags.has("cave") ? 35 : 18;
   return TERRAIN_HEIGHTS[terrainVisualKey(province)];
 }

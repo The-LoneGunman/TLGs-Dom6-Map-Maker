@@ -3,8 +3,11 @@ import {
   setNationSpecificStart,
   type GateEndpoint,
   type MapProject,
+  type TerrainFlag,
   type TerrainKey,
 } from "./domain";
+import { BUILTIN_DOM6_CATALOG, type Dom6CatalogBundle } from "./catalog";
+import { clearBlockedTerrainContent } from "./terrainSafety";
 
 export interface AtlasReplacementImpact {
   planeCount: number;
@@ -61,6 +64,7 @@ export function applyPrimaryTerrain(
   planeId: string,
   provinceId: string,
   terrain: TerrainKey,
+  catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG,
 ): boolean {
   const province = project.planes
     .find((plane) => plane.id === planeId)
@@ -72,14 +76,42 @@ export function applyPrimaryTerrain(
   province.terrainFlags = province.terrainFlags?.filter((flag) => !inherentFlags.has(flag));
   if (!province.terrainFlags?.length) province.terrainFlags = undefined;
 
-  if (terrain === "cavewall") {
-    province.noStart = true;
-    province.start = false;
-    province.startType = undefined;
-    province.teamStart = undefined;
-    province.throne = "none";
-    province.fixedThrone = undefined;
-    province.defenders = [];
+  if (effectiveProvinceTerrainFlags(province).has("cavewall")) {
+    clearBlockedTerrainContent(province, catalog);
+    setNationSpecificStart(project, planeId, provinceId, undefined);
+  }
+  return true;
+}
+
+/** Apply an additive flag with the same project-wide wall cleanup as the primary preset. */
+export function applyAdditionalTerrainFlag(
+  project: MapProject,
+  planeId: string,
+  provinceId: string,
+  flag: TerrainFlag,
+  enabled: boolean,
+  catalog: Dom6CatalogBundle = BUILTIN_DOM6_CATALOG,
+): boolean {
+  const province = project.planes.find(plane => plane.id === planeId)?.provinces.find(item => item.id === provinceId);
+  if (!province) return false;
+
+  const inherentFlags = effectiveProvinceTerrainFlags({ terrain: province.terrain, terrainFlags: undefined, freshwater: false });
+  if (!enabled && inherentFlags.has(flag)) {
+    // Batch edits may remove a preset's inherent flag; preserve every other effective bit.
+    const flags = new Set(effectiveProvinceTerrainFlags(province));
+    flags.delete(flag);
+    province.terrain = "plains";
+    province.terrainFlags = [...flags];
+    province.freshwater = false;
+  } else {
+    province.terrainFlags = enabled
+      ? [...new Set([...(province.terrainFlags ?? []), flag])]
+      : province.terrainFlags?.filter(entry => entry !== flag);
+    if (!enabled && flag === "freshwater") province.freshwater = false;
+  }
+  if (!province.terrainFlags?.length) province.terrainFlags = undefined;
+  if (effectiveProvinceTerrainFlags(province).has("cavewall")) {
+    clearBlockedTerrainContent(province, catalog);
     setNationSpecificStart(project, planeId, provinceId, undefined);
   }
   return true;

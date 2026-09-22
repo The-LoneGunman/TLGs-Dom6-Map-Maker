@@ -55,9 +55,10 @@ export function PlanePreferencesPanel({ plane, onChange }: { plane: Plane; onCha
       {c.regions?.map((r,i)=><div className="iteration-actions" key={i}><span>{r.name}: {r.terrain}</span><button className="text-button" type="button" aria-label={`Remove regional plan ${r.name}`} onClick={()=>update({...c,regions:c.regions!.filter((_,j)=>j!==i)})}>Remove</button></div>)}
     </details>
     {surface && plane.ownershipMode !== "sparse" && <details><summary>Eligible dry-land border mix</summary>
-      <p>Optional shares total at most 100%. Capital exits, water, impassable borders and mountain barriers are preserved. Remaining eligible edges become ordinary borders. These replace the selected topology policy on eligible edges only.</p>
+      <p>Optional shares total at most 100%. Capital access, water, impassable borders and mountain barriers are preserved. These replace the selected topology policy on eligible edges only. River share budgets complete connected routes, including bridges; safe outlets and barriers can reduce the achieved share.</p>
       <PreferenceNumber label="Road share (%)" value={c.roadPercent} onChange={v=>set("roadPercent",v)} />
       <PreferenceNumber label="River share (%)" value={c.riverPercent} onChange={v=>set("riverPercent",v)} />
+      <p>Rivers follow shared borders from uplands or lakes toward coasts, joining into channels and tributaries. Capital and road crossings use bridges. Set River share to 0 for no generated border rivers. Changes apply on Generate; existing authored borders are not rerouted.</p>
       <PreferenceNumber label="Mountain-pass share (%)" value={c.passPercent} onChange={v=>set("passPercent",v)} />
     </details>}
     <PreferenceNumber label="Guarded share of eligible provinces (%)" value={c.guardianCoveragePercent} max={80} onChange={v=>set("guardianCoveragePercent",v)} />
