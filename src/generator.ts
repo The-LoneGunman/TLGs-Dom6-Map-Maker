@@ -5292,7 +5292,7 @@ export function calculateFairness(project: MapProject): FairnessMetrics {
   if (!refs.length) {
     return { overall: 0, startSeparation: 0, expansionParity: 0, throneAccess: 0, terrainVariety: 0, connectivity: 0, startDegree: 0, startAllocation: 0, notes: ["Generate a map to score it."] };
   }
-  const adjacency = globalMovementAdjacency(project);
+  const adjacency = sharedGlobalMovementAdjacency(project);
   const provinceKeys = new Set(refs.map((ref) => globalProvinceKey(ref.plane.id, ref.province.id)));
   const startKeys = new Set<string>();
   for (const ref of refs) {
@@ -5432,10 +5432,17 @@ export function calculateFairness(project: MapProject): FairnessMetrics {
   let connectivityWeight = 0;
   let connectivityTotal = 0;
   let disconnectedPlane = false;
+  // Each plane's traversable graph is built once and shared by the checks below.
+  const traversableByPlane = new Map<Plane, Map<string, string[]>>();
+  const traversableAdjacency = (plane: Plane) => {
+    let local = traversableByPlane.get(plane);
+    if (!local) traversableByPlane.set(plane, local = adjacencyFor(plane, { traversableOnly: true }));
+    return local;
+  };
   for (const plane of project.planes) {
     const active = plane.provinces.filter((province) => !isBlockedProvince(province));
     if (!active.length) continue;
-    const local = adjacencyFor(plane, { traversableOnly: true });
+    const local = traversableAdjacency(plane);
     const reachable = shortestDistances(local, active[0]!.id).size;
     const degrees = active.map((province) => local.get(province.id)?.length ?? 0);
     const coverage = reachable / active.length;
@@ -5461,7 +5468,7 @@ export function calculateFairness(project: MapProject): FairnessMetrics {
   if (disconnectedPlane) notes.push("At least one plane has a disconnected traversable province pocket.");
 
   const targetDegree = project.settings.startDegreeTarget ?? 4;
-  const localAdjacency = new Map(project.planes.map((plane) => [plane.id, adjacencyFor(plane, { traversableOnly: true })]));
+  const localAdjacency = new Map(project.planes.map((plane) => [plane.id, traversableAdjacency(plane)]));
   const startDegrees = starts.map((start) => localAdjacency.get(start.plane.id)?.get(start.province.id)?.length ?? 0);
   const degreeDeficit = startDegrees.length ? mean(startDegrees.map((degree) => Math.max(0, targetDegree - degree))) : targetDegree;
   const degreeSpread = startDegrees.length ? max(startDegrees) - min(startDegrees) : targetDegree;
@@ -5491,34 +5498,73 @@ function globalProvinceKey(planeId: string, provinceId: string): string {
 }
 
 export function globalMovementAdjacency(project: MapProject): Map<string, string[]> {
-  const result = new Map<string, string[]>();
-  const addNode = (key: string) => { if (!result.has(key)) result.set(key, []); };
+  // Set-backed de-duplication; every list is sorted at the end, so the
+  // result is identical to the former Array.includes construction.
+  const neighbourSets = new Map<string, Set<string>>();
+  const addNode = (key: string) => {
+    let neighbours = neighbourSets.get(key);
+    if (!neighbours) neighbourSets.set(key, neighbours = new Set());
+    return neighbours;
+  };
   const link = (a: string, b: string) => {
-    addNode(a);
-    addNode(b);
-    if (!result.get(a)!.includes(b)) result.get(a)!.push(b);
-    if (!result.get(b)!.includes(a)) result.get(b)!.push(a);
+    const fromA = addNode(a);
+    const fromB = addNode(b);
+    fromA.add(b);
+    fromB.add(a);
   };
   for (const plane of project.planes) {
-    for (const province of plane.provinces) if (!isBlockedProvince(province)) addNode(globalProvinceKey(plane.id, province.id));
+    const blocked = new Set<Province>();
+    for (const province of plane.provinces) {
+      if (isBlockedProvince(province)) blocked.add(province);
+      else addNode(globalProvinceKey(plane.id, province.id));
+    }
     const byId = new Map(plane.provinces.map((province) => [province.id, province]));
     for (const edge of plane.edges) {
       const a = byId.get(edge.a);
       const b = byId.get(edge.b);
-      if (isImpassableEdge(edge) || !a || !b || isBlockedProvince(a) || isBlockedProvince(b)) continue;
+      if (isImpassableEdge(edge) || !a || !b || blocked.has(a) || blocked.has(b)) continue;
       link(globalProvinceKey(plane.id, edge.a), globalProvinceKey(plane.id, edge.b));
     }
   }
   for (const gate of project.gates) {
-    const endpoints = gate.endpoints.filter((endpoint) => result.has(globalProvinceKey(endpoint.planeId, endpoint.provinceId)));
+    const endpoints = gate.endpoints.filter((endpoint) => neighbourSets.has(globalProvinceKey(endpoint.planeId, endpoint.provinceId)));
     for (let a = 0; a < endpoints.length; a += 1) {
       for (let b = a + 1; b < endpoints.length; b += 1) {
         link(globalProvinceKey(endpoints[a]!.planeId, endpoints[a]!.provinceId), globalProvinceKey(endpoints[b]!.planeId, endpoints[b]!.provinceId));
       }
     }
   }
-  for (const neighbours of result.values()) neighbours.sort();
+  const result = new Map<string, string[]>();
+  for (const [key, neighbours] of neighbourSets) result.set(key, [...neighbours].sort());
   return result;
+}
+
+const immutableAnalysisProjects = new WeakSet<MapProject>();
+let sharedMovementGraph: { project: MapProject; adjacency: Map<string, string[]> } | undefined;
+
+/**
+ * Declares that `project` will never be mutated again (the editor replaces
+ * committed projects instead of editing them). Read-only analyses of such a
+ * project may then share derived results instead of rebuilding them.
+ */
+export function markProjectImmutable<T extends MapProject>(project: T): T {
+  immutableAnalysisProjects.add(project);
+  return project;
+}
+
+export function isProjectMarkedImmutable(project: MapProject): boolean {
+  return immutableAnalysisProjects.has(project);
+}
+
+/**
+ * `globalMovementAdjacency` for read-only callers. The most recent project
+ * marked immutable shares one graph between validation, fairness and start
+ * analysis; any other project gets a fresh graph. Never mutate the result.
+ */
+export function sharedGlobalMovementAdjacency(project: MapProject): Map<string, string[]> {
+  if (!immutableAnalysisProjects.has(project)) return globalMovementAdjacency(project);
+  if (sharedMovementGraph?.project !== project) sharedMovementGraph = { project, adjacency: globalMovementAdjacency(project) };
+  return sharedMovementGraph.adjacency;
 }
 
 export function provinceGlobalNumber(project: MapProject, planeId: string, provinceId: string): number | undefined {
