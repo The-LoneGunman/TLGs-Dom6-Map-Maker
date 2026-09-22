@@ -441,46 +441,112 @@ export interface ProvinceBudgetRow {
   reason: string;
 }
 
-/** The same planning calculation feeds generation and its read-only budget preview. */
-export function previewProvinceBudget(project: MapProject) {
+type StartPlaneTargets = Map<StartType, Map<string, number>>;
+
+/** Start families a plane can host; the families never share a plane. */
+function plannedStartTypesForPlane(plane: Pick<Plane, "kind" | "variant" | "ownershipMode">): StartType[] {
+  if (!isCorePlaneForSizing(plane)) return ["cave", "other"];
+  return isTrueCaveCorePlane(plane) ? ["cave"] : ["land", "coastal", "water"];
+}
+
+function plannedStartsOnPlane(targets: StartPlaneTargets, plane: Pick<Plane, "id" | "kind" | "variant" | "ownershipMode">): number {
+  return plannedStartTypesForPlane(plane).reduce((sum, type) => sum + (targets.get(type)?.get(plane.id) ?? 0), 0);
+}
+
+/**
+ * Auto-sized planes grow with the starts they receive, while the capacity
+ * greedy split depends on those sizes. Iterate from the historical stand-in
+ * split until the greedy reproduces the split on the sizes it implies, so the
+ * preview, the generated plane sizes and start placement share one plan. If
+ * the iteration ever revisits a split, the split reached before the repeat is
+ * kept; placement uses that frozen split rather than re-deriving another.
+ */
+function settleStartSplit(
+  planes: PlanningPlane[],
+  requested: StartDistribution,
+  initialSizes: readonly number[],
+  resize: (plane: PlanningPlane, allocatedStarts: number) => number | undefined,
+): StartPlaneTargets {
+  const project = { planes };
+  let targets = allocateGeneratedStartsBySize(project, initialSizes, requested);
+  const signature = (split: StartPlaneTargets) => planes.map((plane) => plannedStartsOnPlane(split, plane)).join(":");
+  const sizesFor = (split: StartPlaneTargets) => planes.map((plane, index) =>
+    resize(plane, plannedStartsOnPlane(split, plane)) ?? initialSizes[index]!);
+  const seen = new Set<string>([signature(targets)]);
+  for (let iteration = 0; iteration < 16; iteration += 1) {
+    const next = allocateGeneratedStartsBySize(project, sizesFor(targets), requested);
+    const nextSignature = signature(next);
+    if (nextSignature === signature(targets) || seen.has(nextSignature)) break;
+    seen.add(nextSignature);
+    targets = next;
+  }
+  return targets;
+}
+
+type PlanningPlane = Plane & { autoSize: boolean };
+
+interface GeneratedStartPlan {
+  rows: ProvinceBudgetRow[];
+  /** The one per-plane start split used by the budget and by placement. */
+  targets: StartPlaneTargets;
+  actualCore: number;
+  referenceCore: number;
+}
+
+function planGeneratedStarts(project: Pick<MapProject, "planes" | "settings">, requestedOverride?: StartDistribution): GeneratedStartPlan {
   const settings = { ...project.settings,
     players: clamp(Math.round(project.settings.players), 2, 32),
     provincesPerPlayer: clamp(Math.round(project.settings.provincesPerPlayer), 8, 30),
     specialPlaneSizePercent: clamp(Math.round(project.settings.specialPlaneSizePercent ?? 30), 1, 500),
     startDegreeTarget: clamp(Math.round(project.settings.startDegreeTarget ?? 4), 1, 8),
   };
-  const planes = project.planes.map((plane, index) => ({ ...plane,
+  const planes: PlanningPlane[] = project.planes.map((plane, index) => ({ ...plane,
     kind: normalizePlaneKind(plane.kind),
     variant: plane.variant ?? ARCHETYPE_PROFILES[normalizePlaneKind(plane.kind)].defaultVariant,
     autoSize: plane.autoSize ?? index === 0,
     provinceTarget: clamp(Math.round(plane.provinceTarget), 8, 800),
   }));
-  const requestedStarts = normalizeStartDistribution(settings.startDistribution, settings.players);
+  const requestedStarts = requestedOverride ?? normalizeStartDistribution(settings.startDistribution, settings.players);
+  // Manual planes are measured by their next-generation target. Their current
+  // province count may be stale (an edited target is applied only by Generate).
+  const autoCore = (plane: PlanningPlane) => plane.autoSize && isCorePlaneForSizing(plane);
+  const autoCoreTarget = (allocated: number) => Math.max(18, Math.round(allocated * settings.provincesPerPlayer));
+  const coreStartTargets = settleStartSplit(
+    planes,
+    requestedStarts,
+    planes.map((plane) => autoCore(plane) ? settings.provincesPerPlayer : plane.provinceTarget),
+    (plane, allocated) => autoCore(plane) ? clamp(autoCoreTarget(allocated), 8, 800) : undefined,
+  );
   const coreTargets = new Map<number, number>();
-  const corePlanningPlanes = planes.map(plane => plane.autoSize && isCorePlaneForSizing(plane)
-    ? { ...plane, provinces: [], provinceTarget: settings.provincesPerPlayer } : plane);
-  const coreStartTargets = generatedStartPlaneTargets({ planes: corePlanningPlanes }, requestedStarts);
-  const count = (targets: Map<StartType, Map<string, number>>, id: string, types: StartType[]) =>
-    types.reduce((sum, type) => sum + (targets.get(type)?.get(id) ?? 0), 0);
   planes.forEach((plane, index) => {
     if (!isCorePlaneForSizing(plane)) return;
-    const allocated = count(coreStartTargets, plane.id, isTrueCaveCorePlane(plane) ? ["cave"] : ["land", "coastal", "water"]);
-    coreTargets.set(index, plane.autoSize ? Math.max(18, Math.round(allocated * settings.provincesPerPlayer)) : plane.provinceTarget);
+    coreTargets.set(index, plane.autoSize ? autoCoreTarget(plannedStartsOnPlane(coreStartTargets, plane)) : plane.provinceTarget);
   });
   const actualCore = [...coreTargets.values()].reduce((sum, value) => sum + clamp(value, 8, 800), 0);
   const referenceCore = actualCore || settings.players * settings.provincesPerPlayer;
   const percentageTarget = Math.round(referenceCore * settings.specialPlaneSizePercent / 100);
-  const bonusPlanningPlanes = planes.map((plane, index) => ({ ...plane, provinces: [],
-    provinceTarget: plane.autoSize
+  const autoBonus = (plane: PlanningPlane) => plane.autoSize && !isCorePlaneForSizing(plane);
+  const bonusStartTargets = settleStartSplit(
+    planes,
+    requestedStarts,
+    planes.map((plane, index) => plane.autoSize
       ? isCorePlaneForSizing(plane) ? coreTargets.get(index) ?? plane.provinceTarget : Math.max(18, percentageTarget)
-      : plane.provinceTarget,
-  }));
-  const bonusStartTargets = generatedStartPlaneTargets({ planes: bonusPlanningPlanes }, requestedStarts);
+      : plane.provinceTarget),
+    (plane, allocated) => autoBonus(plane)
+      ? clamp(Math.max(18, allocated ? allocated * (12 + 2 * settings.startDegreeTarget) : 18, percentageTarget), 8, 800)
+      : undefined,
+  );
+  const targets: StartPlaneTargets = new Map(START_TYPES.map((type) => [type, new Map<string, number>()]));
+  for (const plane of planes) {
+    const source = isCorePlaneForSizing(plane) ? coreStartTargets : bonusStartTargets;
+    for (const type of plannedStartTypesForPlane(plane)) {
+      const count = source.get(type)?.get(plane.id) ?? 0;
+      if (count) targets.get(type)!.set(plane.id, count);
+    }
+  }
   const rows: ProvinceBudgetRow[] = planes.map((plane, index) => {
     const core = isCorePlaneForSizing(plane);
-    const allocatedStarts = core
-      ? count(coreStartTargets, plane.id, isTrueCaveCorePlane(plane) ? ["cave"] : ["land", "coastal", "water"])
-      : count(bonusStartTargets, plane.id, ["cave", "other"]);
+    const allocatedStarts = plannedStartsOnPlane(targets, plane);
     const minimumForStarts = allocatedStarts ? allocatedStarts * (12 + 2 * settings.startDegreeTarget) : 18;
     const requested = !plane.autoSize ? plane.provinceTarget : core ? coreTargets.get(index) ?? plane.provinceTarget
       : Math.max(18, minimumForStarts, percentageTarget);
@@ -492,6 +558,12 @@ export function previewProvinceBudget(project: MapProject) {
     return { planeId: plane.id, name: plane.name, core, autoSize: plane.autoSize, reserved: plane.noGeneratedStarts ?? false,
       current: plane.provinces.length, target, requested, allocatedStarts, reason };
   });
+  return { rows, targets, actualCore, referenceCore };
+}
+
+/** The same planning calculation feeds generation and its read-only budget preview. */
+export function previewProvinceBudget(project: MapProject) {
+  const { rows, actualCore, referenceCore } = planGeneratedStarts(project);
   return { planes: rows, core: actualCore, bonus: rows.filter(r => !r.core).reduce((sum, r) => sum + r.target, 0),
     total: rows.reduce((sum, r) => sum + r.target, 0), referenceCore, usesFallbackCore: actualCore === 0 };
 }
@@ -552,6 +624,8 @@ export function generateProject(project: MapProject): MapProject {
   remapGenerationPlaneIds(working, ids);
   const generated = generateProjectWithIdentities(working);
   remapGenerationPlaneIds(generated, new Map([...ids].map(([from, to]) => [to, from])));
+  // After gateways and final names, so the notice matches export validation.
+  appendAuthoredStartSpacingWarnings(generated);
   return generated;
 }
 
@@ -3239,6 +3313,167 @@ function separationForPlane(plan: number | ReadonlyMap<string, number>, planeId:
   return typeof plan === "number" ? plan : plan.get(planeId) ?? 3;
 }
 
+interface AuthoredStartObstacle {
+  provinceId: string;
+  /**
+   * Movement distance from this start once start-border repair has opened
+   * both this capital's borders and a generated capital's own borders.
+   */
+  distances: Map<string, number>;
+}
+
+type AuthoredStartsByPlane = ReadonlyMap<string, readonly AuthoredStartObstacle[]>;
+
+const NO_AUTHORED_STARTS: AuthoredStartsByPlane = new Map();
+
+/**
+ * Nation-specific starts the author placed (and any team starts) survive
+ * generation and are validated as distinct multiplayer starts. Generated
+ * cave assignments are rebuilt after placement, and a manual assignment for
+ * a configured cave nation is required to share a generated cave start, so
+ * neither is something generated capitals must avoid.
+ */
+function protectedAuthoredStarts(project: MapProject): { nation?: number; plane: Plane; province: Province }[] {
+  const caveNations = new Set(normalizeCaveStartNations(project.settings.caveStartNations));
+  const seen = new Set<string>();
+  const result: { nation?: number; plane: Plane; province: Province }[] = [];
+  for (const start of project.specificStarts) {
+    if (start.source === "generated-cave" || caveNations.has(start.nation)) continue;
+    const plane = project.planes.find((item) => item.id === start.planeId);
+    const province = plane?.provinces.find((item) => item.id === start.provinceId);
+    const key = globalProvinceKey(start.planeId, start.provinceId);
+    if (!plane || !province || seen.has(key)) continue;
+    seen.add(key);
+    result.push({ nation: start.nation, plane, province });
+  }
+  for (const plane of project.planes) for (const province of plane.provinces) {
+    const key = globalProvinceKey(plane.id, province.id);
+    if (province.teamStart === undefined || seen.has(key)) continue;
+    seen.add(key);
+    result.push({ plane, province });
+  }
+  return result;
+}
+
+function authoredStartObstacles(
+  project: MapProject,
+  traversableByPlane: ReadonlyMap<string, Map<string, string[]>>,
+): AuthoredStartsByPlane {
+  const authored = protectedAuthoredStarts(project);
+  if (!authored.length) return NO_AUTHORED_STARTS;
+  const result = new Map<string, AuthoredStartObstacle[]>();
+  const fullByPlane = new Map<string, Map<string, string[]>>();
+  for (const { plane, province } of authored) {
+    const traversable = traversableByPlane.get(plane.id) ?? adjacencyFor(plane, { traversableOnly: true });
+    let full = fullByPlane.get(plane.id);
+    if (!full) {
+      full = adjacencyFor(plane);
+      fullByPlane.set(plane.id, full);
+    }
+    // repairStartBorders opens every border of a protected capital, so its
+    // first step may cross any authored border.
+    const reached = new Map([[province.id, 0]]);
+    const queue = [province.id];
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      const id = queue[cursor]!;
+      for (const neighbour of (cursor === 0 ? full : traversable).get(id) ?? []) {
+        if (reached.has(neighbour)) continue;
+        reached.set(neighbour, reached.get(id)! + 1);
+        queue.push(neighbour);
+      }
+    }
+    // A generated capital's own borders are opened as well.
+    const distances = new Map<string, number>();
+    for (const candidate of plane.provinces) {
+      let distance = reached.get(candidate.id) ?? Infinity;
+      for (const neighbour of full.get(candidate.id) ?? []) distance = Math.min(distance, (reached.get(neighbour) ?? Infinity) + 1);
+      if (Number.isFinite(distance)) distances.set(candidate.id, distance);
+    }
+    const list = result.get(plane.id) ?? [];
+    list.push({ provinceId: province.id, distances });
+    result.set(plane.id, list);
+  }
+  return result;
+}
+
+function authoredStartDistance(authoredStarts: AuthoredStartsByPlane, planeId: string, provinceId: string): number {
+  let distance = Infinity;
+  for (const start of authoredStarts.get(planeId) ?? []) distance = Math.min(distance, start.distances.get(provinceId) ?? Infinity);
+  return distance;
+}
+
+/**
+ * Explain, after generation, any authored nation start that generated
+ * capitals could not keep distinct. Validation still blocks export; this
+ * names the start and the spacing achieved so the author can decide.
+ */
+function appendAuthoredStartSpacingWarnings(project: MapProject): void {
+  const authored = protectedAuthoredStarts(project).filter((item) => item.nation !== undefined);
+  if (!authored.length) return;
+  const conflicts = authoredStartSpacingConflicts(project, authored);
+  if (!conflicts.length) return;
+  project.generationWarnings ??= [];
+  for (const conflict of conflicts) {
+    const { nation, plane, province, nearest, nearestPlane, distance } = conflict;
+    project.generationWarnings.push(`${plane.name}: generated starts could not keep 3 movement connections from the authored start for nation ${nation} at ${province.name}; generated start ${nearest.name}${nearestPlane.id === plane.id ? "" : ` (${nearestPlane.name})`} is only ${distance} connection${distance === 1 ? "" : "s"} away. Export stays blocked until you move or remove that nation start, or change players, provinces per player or plane sizes and Generate again.`);
+  }
+}
+
+interface AuthoredStartSpacingConflict {
+  nation: number;
+  plane: Plane;
+  province: Province;
+  nearest: Province;
+  nearestPlane: Plane;
+  distance: number;
+}
+
+function authoredStartSpacingConflicts(
+  project: MapProject,
+  authored: readonly { nation?: number; plane: Plane; province: Province }[],
+): AuthoredStartSpacingConflict[] {
+  const generated = new Map(project.planes.flatMap((plane) => plane.provinces
+    .filter((province) => province.start)
+    .map((province) => [globalProvinceKey(plane.id, province.id), { plane, province }] as const)));
+  if (!generated.size) return [];
+  const movement = globalMovementAdjacency(project);
+  const conflicts: AuthoredStartSpacingConflict[] = [];
+  for (const { nation, plane, province } of authored) {
+    if (nation === undefined) continue;
+    for (const [key, distance] of shortestDistances(movement, globalProvinceKey(plane.id, province.id), 2)) {
+      const hit = distance > 0 ? generated.get(key) : undefined;
+      if (!hit) continue;
+      conflicts.push({ nation, plane, province, nearest: hit.province, nearestPlane: hit.plane, distance });
+      break;
+    }
+  }
+  return conflicts;
+}
+
+export interface AuthoredStartNotice {
+  nation: number;
+  planeId: string;
+  provinceId: string;
+  message: string;
+}
+
+/**
+ * Non-blocking pre-generation notice for authored nation starts that the
+ * current map already crowds. Generate keeps generated capitals at least 3
+ * movement connections away whenever the new geometry allows; the author can
+ * proceed, or move/remove the nation start first.
+ */
+export function preflightAuthoredStartNotices(project: MapProject): AuthoredStartNotice[] {
+  const authored = protectedAuthoredStarts(project).filter((item) => item.nation !== undefined);
+  if (!authored.length) return [];
+  return authoredStartSpacingConflicts(project, authored).map(({ nation, plane, province, nearest, nearestPlane, distance }) => ({
+    nation,
+    planeId: plane.id,
+    provinceId: province.id,
+    message: `Nation ${nation}'s authored start at ${province.name} (${plane.name}) is only ${distance} movement connection${distance === 1 ? "" : "s"} from generated start ${nearest.name}${nearestPlane.id === plane.id ? "" : ` (${nearestPlane.name})`}. Generate places generated starts at least 3 connections from it when the new geometry allows; if it cannot, it records a warning and export stays blocked until the nation start is moved or removed.`,
+  }));
+}
+
 function placeDistributedStarts(project: MapProject, preparedStartAnchors: readonly PreparedStartAnchor[] = []) {
   const requested = normalizeStartDistribution(project.settings.startDistribution, project.settings.players);
   project.settings.startDistribution = requested;
@@ -3252,6 +3487,11 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
 
   const adjacency = new Map(project.planes.map((plane) => [plane.id, adjacencyFor(plane, { traversableOnly: true })]));
   const planeTargets = generatedStartPlaneTargets(project, requested);
+  // Authored nation starts are fixed capitals: never reuse their province and
+  // keep every generated capital at least three moves away (the export floor).
+  const authoredStarts = authoredStartObstacles(project, adjacency);
+  const authoredKeys = new Set([...authoredStarts].flatMap(([planeId, starts]) =>
+    starts.map((start) => globalProvinceKey(planeId, start.provinceId))));
   const bridgeEndpoints = new Map(project.planes.map((plane) => {
     const bridgeKeys = graphBridgeKeys(plane);
     const endpoints = new Set<string>();
@@ -3307,6 +3547,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
           separationPlan,
           planeTargets,
           adjacency,
+          authoredStarts,
         );
         if (!candidate) return [];
         attempt.push(candidate);
@@ -3337,6 +3578,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
       const eligiblePlaneIds = new Set(eligibleGeneratedStartPlaneIndexes(project, type).map((index) => project.planes[index]!.id));
       let candidates = refs.filter((ref) => eligiblePlaneIds.has(ref.plane.id)
         && isEligibleStartProvince(ref.province)
+        && !authoredKeys.has(globalProvinceKey(ref.plane.id, ref.province.id))
         && matchesStartType(ref, type, adjacency.get(ref.plane.id)!)
         && (degree === undefined
           ? (adjacency.get(ref.plane.id)?.get(ref.province.id)?.length ?? 0) >= minimumUsefulDegree
@@ -3371,6 +3613,8 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
       const distances = distancesFrom(candidate);
       return Math.min(...samePlane.map((item) => distances.get(item.province.id) ?? 0));
     };
+    const authoredSeparation = (candidate: ProvinceRef) =>
+      authoredStartDistance(authoredStarts, candidate.plane.id, candidate.province.id);
     let visitedNodes = 0;
     const nodeBudget = 12_000;
     const search = (slotIndex: number): ProvinceRef[] | undefined => {
@@ -3387,7 +3631,8 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
           && matchesStartType(item, type, adjacency.get(item.plane.id)!)).length;
         return planeLoad < planeQuota
           && !used.has(key)
-          && separationFromAttempt(candidate) >= separationForPlane(separationPlan, candidate.plane.id);
+          && separationFromAttempt(candidate) >= separationForPlane(separationPlan, candidate.plane.id)
+          && authoredSeparation(candidate) >= 3;
       });
       if (preferredCapacity !== undefined) {
         const comparable = candidates.filter((candidate) => Math.abs(
@@ -3400,8 +3645,8 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
         ? adjacency.get(attempt[0]!.plane.id)?.get(attempt[0]!.province.id)?.length ?? preferredGeneratedDegree
         : preferredGeneratedDegree;
       candidates.sort((a, b) => {
-        const separationA = separationFromAttempt(a);
-        const separationB = separationFromAttempt(b);
+        const separationA = Math.min(separationFromAttempt(a), authoredSeparation(a));
+        const separationB = Math.min(separationFromAttempt(b), authoredSeparation(b));
         const degreeA = adjacency.get(a.plane.id)?.get(a.province.id)?.length ?? 0;
         const degreeB = adjacency.get(b.plane.id)?.get(b.province.id)?.length ?? 0;
         const capacityA = twoRingCapacity.get(a.plane.id)?.get(a.province.id) ?? 0;
@@ -3466,7 +3711,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
   const preparedCounts = new Map<StartType, number>();
   for (const item of preparedPlacement) preparedCounts.set(item.type, (preparedCounts.get(item.type) ?? 0) + 1);
   const preparedKeys = new Set(preparedPlacement.map((item) => globalProvinceKey(item.plane.id, item.province.id)));
-  const preparedSafe = project.settings.players > 16
+  const preparedPlanSafe = project.settings.players > 16
     && preparedPlacement.length === project.settings.players
     && preparedKeys.size === preparedPlacement.length
     && (Object.keys(requested) as StartType[]).every((type) => (preparedCounts.get(type) ?? 0) === requested[type])
@@ -3479,9 +3724,37 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
       return (shortestDistances(adjacency.get(item.plane.id)!, item.province.id).get(other.province.id) ?? 0)
         >= (preferredSeparation.get(item.plane.id) ?? 3);
     }));
-  let selected: ProvinceRef[] = preparedSafe
+  // Category anchors are planned before authored starts are considered.
+  const clearOfAuthoredStarts = (item: ProvinceRef) => !authoredKeys.has(globalProvinceKey(item.plane.id, item.province.id))
+    && authoredStartDistance(authoredStarts, item.plane.id, item.province.id) >= 3;
+  let selected: ProvinceRef[] = preparedPlanSafe && preparedPlacement.every(clearOfAuthoredStarts)
     ? preparedPlacement.map(({ plane, planeIndex, province }) => ({ plane, planeIndex, province }))
     : [];
+  let preparedSubstituted = false;
+  if (!selected.length && preparedPlanSafe) {
+    // Only authored starts crowd the large prepared plan: keep its other
+    // anchors and re-choose just the crowded ones, preferring the kept degree.
+    const kept = preparedPlacement.filter(clearOfAuthoredStarts);
+    const crowded = preparedPlacement.filter((item) => !clearOfAuthoredStarts(item));
+    const keptDegrees = new Set(kept.map((item) => adjacency.get(item.plane.id)?.get(item.province.id)?.length ?? 0));
+    const degreeChoices = keptDegrees.size === 1 ? [[...keptDegrees][0]!, undefined] : [undefined];
+    substitution:
+    for (const separationPlan of separationPlans) {
+      for (const forcedDegree of degreeChoices) {
+        const attempt: ProvinceRef[] = kept.map(({ plane, planeIndex, province }) => ({ plane, planeIndex, province }));
+        for (const [slot, item] of crowded.entries()) {
+          const candidate = chooseDistributedStart(project, item.type, attempt, adjacency, twoRingCapacity, bridgeEndpoints,
+            `${project.seed}:distributed:prepared-substitute:${slot}`, forcedDegree, separationPlan, planeTargets, adjacency, authoredStarts);
+          if (!candidate) break;
+          attempt.push(candidate);
+        }
+        if (attempt.length !== project.settings.players) continue;
+        selected = attempt;
+        preparedSubstituted = true;
+        break substitution;
+      }
+    }
+  }
   const separationVariantCount = project.settings.players <= 12 ? 12 : 3;
   for (const separationPlan of selected.length ? [] : separationPlans) {
     for (const degree of candidateDegrees) {
@@ -3557,7 +3830,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
   if (!selected.length) {
     for (const type of placementOrder) {
       for (let slot = 0; slot < requested[type]; slot += 1) {
-        const candidate = chooseDistributedStart(project, type, selected, adjacency, twoRingCapacity, bridgeEndpoints, `${project.seed}:distributed:${type}:${slot}`, undefined, 0, planeTargets, adjacency);
+        const candidate = chooseDistributedStart(project, type, selected, adjacency, twoRingCapacity, bridgeEndpoints, `${project.seed}:distributed:${type}:${slot}`, undefined, 0, planeTargets, adjacency, authoredStarts);
         if (!candidate) break;
         selected.push(candidate);
       }
@@ -3568,7 +3841,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
   // total number of capitals. Fill remaining slots from safe provinces and
   // record their real category so startAllocation exposes the shortfall.
   while (selected.length < project.settings.players) {
-    const candidate = chooseDistributedStart(project, undefined, selected, adjacency, twoRingCapacity, bridgeEndpoints, `${project.seed}:distributed:fallback:${selected.length}`, undefined, 0, planeTargets, adjacency);
+    const candidate = chooseDistributedStart(project, undefined, selected, adjacency, twoRingCapacity, bridgeEndpoints, `${project.seed}:distributed:fallback:${selected.length}`, undefined, 0, planeTargets, adjacency, authoredStarts);
     if (!candidate) break;
     selected.push(candidate);
   }
@@ -3578,7 +3851,8 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
   // distance-two independent set, retaining a common degree when one is
   // feasible and relaxing degree parity only before relaxing start safety.
   const repairPlaneSelection = (plane: Plane, planeIndex: number, current: ProvinceRef[]): ProvinceRef[] | undefined => {
-    if (current.length < 2) return current;
+    // A lone generated capital still needs repair when it crowds an authored start.
+    if (current.length < ((authoredStarts.get(plane.id)?.length ?? 0) ? 1 : 2)) return current;
     const local = adjacency.get(plane.id)!;
     const distances = new Map<string, Map<string, number>>();
     const distancesFrom = (id: string) => {
@@ -3590,15 +3864,27 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
       return result;
     };
     const preferredPlaneSeparation = preferredSeparation.get(plane.id) ?? 3;
+    const authoredDistance = (id: string) => authoredStartDistance(authoredStarts, plane.id, id);
+    const isAuthored = (id: string) => authoredKeys.has(globalProvinceKey(plane.id, id));
+    const clearOfAuthored = (items: readonly ProvinceRef[]) => items.every((item) => authoredDistance(item.province.id) >= 3);
     const minimumPairDistance = (items: readonly ProvinceRef[]) => items.reduce((minimum, item, left) =>
       Math.min(minimum, ...items.slice(left + 1).map((other) =>
         distancesFrom(item.province.id).get(other.province.id) ?? Infinity)), Infinity);
     const degreeAfterBorderRepair = (province: Province) => plane.edges.filter((edge) =>
       edge.a === province.id || edge.b === province.id).length;
     const regional = usesConnectedRegions(plane);
-    if (minimumPairDistance(current) >= preferredPlaneSeparation
-      && new Set(current.map((item) => degreeAfterBorderRepair(item.province))).size === 1
-      && (!regional || current.every(item => !bridgeEndpoints.get(plane.id)?.has(item.province.id)))) return current;
+    const currentMeets = (separation: number) => minimumPairDistance(current) >= separation
+      && clearOfAuthored(current)
+      && (!regional || current.every(item => !bridgeEndpoints.get(plane.id)?.has(item.province.id)));
+    // Like the >20-capital prepared plan below, a substituted prepared plan
+    // that already meets spacing keeps degree parity as a best-effort warning
+    // rather than re-running the exponential exact-degree search.
+    if (currentMeets(preferredPlaneSeparation)
+      && (preparedSubstituted || new Set(current.map((item) => degreeAfterBorderRepair(item.province))).size === 1)) return current;
+    // Every separation plan was already searched with the authored floor, so
+    // an authored start's plane re-searches with a bounded budget and keeps a
+    // current common-degree selection at the best spacing it already meets.
+    const authoredOnPlane = (authoredStarts.get(plane.id)?.length ?? 0) > 0;
 
     const counts = new Map<StartType, number>();
     for (const item of current) {
@@ -3613,7 +3899,9 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
     for (const item of prepared) preparedCounts.set(item.type, (preparedCounts.get(item.type) ?? 0) + 1);
     const preparedMatches = prepared.length === current.length
       && [...counts].every(([type, count]) => preparedCounts.get(type) === count)
+      && clearOfAuthored(prepared)
       && prepared.every((item) => matchesStartType(item, item.type, local)
+        && !isAuthored(item.province.id)
         && (local.get(item.province.id)?.length ?? 0) >= minimumUsefulDegree
         && (!regional || !bridgeEndpoints.get(plane.id)?.has(item.province.id)));
     const preparedRefs = prepared.map((item) => ({
@@ -3638,6 +3926,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
       const pools = new Map<StartType, ProvinceRef[]>();
       for (const [type, count] of counts) {
         let pool = plane.provinces.filter((province) => isEligibleStartProvince(province)
+          && !isAuthored(province.id)
           && matchesStartType({ plane, planeIndex, province }, type, local)
           && (local.get(province.id)?.length ?? 0) >= minimumUsefulDegree
           && (forcedDegree === undefined || degreeAfterBorderRepair(province) === forcedDegree))
@@ -3649,9 +3938,10 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
       const remaining = new Map(counts);
       const working: ProvinceRef[] = [];
       let visitedNodes = 0;
-      const nodeBudget = 250_000;
-      const compatible = (candidate: ProvinceRef) => working.every((other) =>
-        (distancesFrom(candidate.province.id).get(other.province.id) ?? Infinity) >= requiredSeparation);
+      const nodeBudget = authoredOnPlane ? 12_000 : 250_000;
+      const compatible = (candidate: ProvinceRef) => authoredDistance(candidate.province.id) >= 3
+        && working.every((other) =>
+          (distancesFrom(candidate.province.id).get(other.province.id) ?? Infinity) >= requiredSeparation);
       const search = (): ProvinceRef[] | undefined => {
         if (working.length === current.length) return [...working];
         if (visitedNodes >= nodeBudget) return undefined;
@@ -3704,6 +3994,7 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
     }
     if (commonDegree !== undefined) {
       for (let separation = preferredPlaneSeparation; separation >= 3; separation -= 1) {
+        if (authoredOnPlane && currentMeets(separation)) return current;
         const common = solve(commonDegree, separation);
         if (common) return common;
         if (preparedMatches && preparedDegrees.size === 1 && preparedDegrees.has(commonDegree)
@@ -3890,6 +4181,7 @@ function chooseDistributedStart(
     normalizeStartDistribution(project.settings.startDistribution, project.settings.players),
   ),
   separationAdjacencyByPlane: Map<string, Map<string, string[]>> = adjacencyByPlane,
+  authoredStarts: AuthoredStartsByPlane = NO_AUTHORED_STARTS,
 ): ProvinceRef | undefined {
   const target = project.settings.startDegreeTarget ?? 4;
   const selectedDegrees = selected.map((item) => adjacencyByPlane.get(item.plane.id)?.get(item.province.id)?.length ?? 0);
@@ -3901,6 +4193,8 @@ function chooseDistributedStart(
     ? new Set(project.planes.filter((plane) => !plane.noGeneratedStarts).map((plane) => plane.id))
     : new Set(eligibleGeneratedStartPlaneIndexes(project, requestedType).map((index) => project.planes[index]!.id));
   const selectedKeys = new Set(selected.map((item) => globalProvinceKey(item.plane.id, item.province.id)));
+  for (const [planeId, starts] of authoredStarts) for (const start of starts) selectedKeys.add(globalProvinceKey(planeId, start.provinceId));
+  const authoredRequired = minimumSeparation === 0 ? 0 : 3;
   const startsByPlane = new Map(project.planes.map((plane) => [plane.id, selected.filter((item) => item.plane.id === plane.id).map((item) => item.province)]));
   const distanceMaps = new Map(project.planes.map((plane) => {
     const adjacency = separationAdjacencyByPlane.get(plane.id)!;
@@ -3920,14 +4214,19 @@ function chooseDistributedStart(
     const planeStarts = startsByPlane.get(plane.id) ?? [];
     const maps = distanceMaps.get(plane.id) ?? [];
     const requiredSeparation = separationForPlane(minimumSeparation, plane.id);
-    const distance = maps.length
+    const generatedDistance = maps.length
       ? Math.min(...maps.map((distances) => distances.get(province.id) ?? 0))
       : 6;
+    // Authored starts hold the hard three-move floor in every spaced search,
+    // so they never cost generated capitals their scaled mutual spacing.
+    const authoredDistance = authoredStartDistance(authoredStarts, plane.id, province.id);
     return {
       ref,
       adjacency,
       planeStarts,
-      distance,
+      distance: Math.min(generatedDistance, authoredDistance),
+      spaced: (!selected.length || generatedDistance >= requiredSeparation) && authoredDistance >= authoredRequired,
+      safe: generatedDistance >= Math.max(3, requiredSeparation) && authoredDistance >= 3,
       degree: adjacency.get(province.id)?.length ?? 0,
       capacity: twoRingCapacityByPlane.get(plane.id)?.get(province.id) ?? 0,
       incidentBridge: bridgeEndpointsByPlane.get(plane.id)?.has(province.id) ?? false,
@@ -3942,7 +4241,7 @@ function chooseDistributedStart(
     if (!usesConnectedRegions(plane)) return [];
     const safe = plane.provinces.some(province => {
       const facts = rawCandidateFacts(plane, planeIndex, province);
-      if (!facts || facts.incidentBridge || facts.distance < Math.max(3, facts.requiredSeparation)) return false;
+      if (!facts || facts.incidentBridge || !facts.safe) return false;
       if (forcedDegree !== undefined) return facts.degree === forcedDegree;
       if (preferredDegree !== undefined) return facts.degree === preferredDegree;
       return facts.degree >= Math.min(target, 4);
@@ -3955,14 +4254,14 @@ function chooseDistributedStart(
   };
   const hasSafePreferredDegree = preferredDegree !== undefined && project.planes.some((plane, planeIndex) => plane.provinces.some((province) => {
     const facts = candidateFacts(plane, planeIndex, province);
-    return facts?.degree === preferredDegree && facts.distance >= Math.max(3, facts.requiredSeparation);
+    return facts?.degree === preferredDegree && facts.safe;
   }));
   let closestCapacityDifference = Infinity;
   if (preferredCapacity !== undefined) {
     for (let planeIndex = 0; planeIndex < project.planes.length; planeIndex += 1) {
       for (const province of project.planes[planeIndex]!.provinces) {
         const facts = candidateFacts(project.planes[planeIndex]!, planeIndex, province);
-        if (!facts || facts.distance < Math.max(3, facts.requiredSeparation) || (forcedDegree !== undefined && facts.degree !== forcedDegree)) continue;
+        if (!facts || !facts.safe || (forcedDegree !== undefined && facts.degree !== forcedDegree)) continue;
         if (hasSafePreferredDegree && facts.degree !== preferredDegree) continue;
         closestCapacityDifference = Math.min(closestCapacityDifference, Math.abs(facts.capacity - preferredCapacity));
       }
@@ -3971,7 +4270,7 @@ function chooseDistributedStart(
   const hasComparableCapacity = closestCapacityDifference <= capacityTolerance;
   const hasBridgeSafeCandidate = project.planes.some((plane, planeIndex) => plane.provinces.some((province) => {
     const facts = candidateFacts(plane, planeIndex, province);
-    if (!facts || facts.incidentBridge || facts.distance < Math.max(3, facts.requiredSeparation)) return false;
+    if (!facts || facts.incidentBridge || !facts.safe) return false;
     if (forcedDegree !== undefined && facts.degree !== forcedDegree) return false;
     if (hasSafePreferredDegree && facts.degree !== preferredDegree) return false;
     if (hasComparableCapacity && preferredCapacity !== undefined
@@ -3985,10 +4284,10 @@ function chooseDistributedStart(
     for (const province of plane.provinces) {
       const facts = candidateFacts(plane, planeIndex, province);
       if (!facts) continue;
-      const { ref, planeStarts, distance, degree, capacity, incidentBridge, requiredSeparation } = facts;
+      const { ref, planeStarts, distance, spaced, safe, degree, capacity, incidentBridge, requiredSeparation } = facts;
       if (forcedDegree !== undefined && degree !== forcedDegree) continue;
-      if (selected.length && distance < requiredSeparation) continue;
-      if (hasSafePreferredDegree && (degree !== preferredDegree || distance < Math.max(3, requiredSeparation))) continue;
+      if (!spaced) continue;
+      if (hasSafePreferredDegree && (degree !== preferredDegree || !safe)) continue;
       if (hasComparableCapacity && preferredCapacity !== undefined
         && Math.abs(capacity - preferredCapacity) > closestCapacityDifference) continue;
       if (hasBridgeSafeCandidate && incidentBridge) continue;
@@ -5291,10 +5590,11 @@ function eligibleGeneratedStartPlaneIndexes(project: Pick<MapProject, "planes">,
  * share. Overland categories share one load counter, preventing independent
  * land/coast/water allocations from stacking onto the same plane.
  */
-function generatedStartPlaneTargets(
+function allocateGeneratedStartsBySize(
   project: Pick<MapProject, "planes">,
+  sizes: readonly number[],
   requested: StartDistribution,
-): Map<StartType, Map<string, number>> {
+): StartPlaneTargets {
   const targets = new Map(START_TYPES.map((type) => [type, new Map<string, number>()]));
   const assignedByPlane = new Map(project.planes.map((plane) => [plane.id, 0]));
   for (const type of ["water", "coastal", "land", "cave", "other"] as StartType[]) {
@@ -5303,10 +5603,8 @@ function generatedStartPlaneTargets(
       const planeIndex = [...indexes].sort((a, b) => {
         const planeA = project.planes[a]!;
         const planeB = project.planes[b]!;
-        const sizeA = planeA.provinces.length || planeA.provinceTarget;
-        const sizeB = planeB.provinces.length || planeB.provinceTarget;
-        const capacityA = sizeA / ((assignedByPlane.get(planeA.id) ?? 0) + 1);
-        const capacityB = sizeB / ((assignedByPlane.get(planeB.id) ?? 0) + 1);
+        const capacityA = sizes[a]! / ((assignedByPlane.get(planeA.id) ?? 0) + 1);
+        const capacityB = sizes[b]! / ((assignedByPlane.get(planeB.id) ?? 0) + 1);
         return capacityB - capacityA || a - b;
       })[0]!;
       const plane = project.planes[planeIndex]!;
@@ -5318,8 +5616,20 @@ function generatedStartPlaneTargets(
   return targets;
 }
 
+/**
+ * Per-plane generated-start quotas frozen by the province budget. Placement
+ * never re-derives a split from the generated sizes: the budget sized the
+ * auto planes for exactly this split, and its preview promises it.
+ */
+function generatedStartPlaneTargets(
+  project: Pick<MapProject, "planes" | "settings">,
+  requested: StartDistribution,
+): StartPlaneTargets {
+  return planGeneratedStarts(project, requested).targets;
+}
+
 function plannedGeneratedStartsOnPlane(
-  project: Pick<MapProject, "planes">,
+  project: Pick<MapProject, "planes" | "settings">,
   requested: StartDistribution,
   type: StartType,
   planeIndex: number,

@@ -380,7 +380,7 @@ code { color: var(--gold-pale); font-size: 0.92em; }
 .microcopy { margin: 0; color: #76837c; font-size: 11px; line-height: 1.5; }
 .warning-copy { margin: 0; padding: 9px 10px; border-left: 2px solid var(--warning); background: rgba(216, 157, 83, 0.07); color: #bca884; font-size: 11px; line-height: 1.45; }
 .start-plan-errors { border-left-color: var(--danger); background: rgba(216, 109, 96, 0.07); color: #dba099; }
-.start-plan-errors ul { margin: 5px 0 0; padding-left: 16px; }
+.start-plan-errors ul, .authored-start-notices ul { margin: 5px 0 0; padding-left: 16px; }
 
 .divider { height: 1px; margin: 2px 0; background: var(--line); }
 
