@@ -129,6 +129,7 @@ import {
   atlasReplacementImpact,
   atlasReplacementNeedsConfirmation,
   planeRemovalImpact,
+  textEditHistoryStep,
   type AtlasReplacementImpact,
   type PlaneRemovalImpact,
 } from "./uiWorkflow";
@@ -461,6 +462,11 @@ export function MapMakerApp() {
   const catalogImportSessionRef = useRef(createCatalogImportSession());
   const rangeEditStartRef = useRef<MapProject | undefined>(undefined);
   const playersEditBaseRef = useRef<{ players: number; distribution: StartDistribution } | undefined>(undefined);
+  // Typing in one field is one Undo step. The field whose change event is being
+  // dispatched joins the session its first change started, until it blurs;
+  // other commits (Generate, imports, buttons) always record their own step.
+  const textChangeTargetRef = useRef<EventTarget | undefined>(undefined);
+  const textEditSessionRef = useRef<EventTarget | undefined>(undefined);
   const autosaveRevisionRef = useRef<AutosaveRevision | null>(null);
   const autosaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const actionErrorSequenceRef = useRef(0);
@@ -646,7 +652,9 @@ export function MapMakerApp() {
     }
     clearActionError("project-edit");
     const previous = currentProjectRef.current;
-    if (remember) {
+    const historyStep = textEditHistoryStep(textEditSessionRef.current, textChangeTargetRef.current);
+    textEditSessionRef.current = historyStep.session;
+    if (remember && historyStep.record) {
       setUndoStack((stack) => appendHistorySnapshot(stack, previous));
     }
     // A new edit branches away from Redo, including coalesced range edits.
@@ -690,6 +698,7 @@ export function MapMakerApp() {
     if (!previous) return;
     const current = currentProjectRef.current;
     rangeEditStartRef.current = undefined;
+    textEditSessionRef.current = undefined;
     setUndoStack((stack) => stack.slice(0, -1));
     setRedoStack((stack) => appendHistorySnapshot(stack, current));
     importGuardRef.current.changed();
@@ -706,6 +715,7 @@ export function MapMakerApp() {
     if (!next) return;
     const current = currentProjectRef.current;
     rangeEditStartRef.current = undefined;
+    textEditSessionRef.current = undefined;
     setRedoStack((stack) => stack.slice(0, -1));
     setUndoStack((stack) => appendHistorySnapshot(stack, current));
     importGuardRef.current.changed();
@@ -1215,7 +1225,14 @@ export function MapMakerApp() {
   if (!activePlane) return <main className="empty-state">No plane is available.</main>;
 
   return (
-    <main className="atlas-shell" aria-busy={!hydrated} inert={!hydrated}>
+    <main
+      className="atlas-shell"
+      aria-busy={!hydrated}
+      inert={!hydrated}
+      onChangeCapture={(event) => { textChangeTargetRef.current = isTextEntryTarget(event.target) ? event.target : undefined; }}
+      onChange={() => { textChangeTargetRef.current = undefined; }}
+      onBlur={(event) => { if (event.target === textEditSessionRef.current) textEditSessionRef.current = undefined; }}
+    >
       <header className="topbar">
         <div className="brand-block">
           <div className="brand-sigil" aria-hidden="true">P</div>
@@ -2422,6 +2439,13 @@ function CatalogManager({ catalog, hasUserCatalog, onImport, onReset, onTemplate
     <div className="catalog-actions"><button className="button quiet" type="button" onClick={onImport}>Import verified JSON</button><button className="button quiet" type="button" onClick={onTemplate}>Download template</button>{hasUserCatalog && <button className="text-button danger-text" type="button" onClick={onReset}>Reset custom entries</button>}</div>
     <p className="microcopy">The complete bundled unit and magic-site indexes come from the pinned GPL Dom6 Inspector export. Custom catalogs override matching IDs and remain in local autosave.</p>
   </section>;
+}
+
+const NON_TEXT_INPUT_TYPES = new Set(["button", "checkbox", "color", "file", "image", "radio", "range", "reset", "submit"]);
+
+function isTextEntryTarget(target: EventTarget): boolean {
+  if (typeof HTMLTextAreaElement !== "undefined" && target instanceof HTMLTextAreaElement) return true;
+  return typeof HTMLInputElement !== "undefined" && target instanceof HTMLInputElement && !NON_TEXT_INPUT_TYPES.has(target.type);
 }
 
 function defaultStartDistribution(players: number): StartDistribution {

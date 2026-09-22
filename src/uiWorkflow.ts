@@ -55,6 +55,15 @@ export function appendHistorySnapshot<T>(stack: T[], snapshot: T, limit = 30): T
 }
 
 /**
+ * Typing in one field is one Undo step. A commit dispatched by the field that
+ * started the current session joins it; any other commit (a different field,
+ * a button, Generate, an import) records its own step and ends the session.
+ */
+export function textEditHistoryStep<T>(session: T | undefined, changeTarget: T | undefined): { record: boolean; session: T | undefined } {
+  return { record: changeTarget === undefined || session !== changeTarget, session: changeTarget };
+}
+
+/**
  * Apply the province inspector's primary-terrain choice as one project edit.
  * Cave walls are impassable map space, so they cannot safely retain any kind
  * of capital marker, throne, or independent guardian group.
