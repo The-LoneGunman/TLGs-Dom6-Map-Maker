@@ -45,7 +45,7 @@ This record covers [PR #12](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Make
 - **Authored starts.** Generated starts stay at least three moves from manual nation-specific and team starts. In the reported scenario (players 6→7), spacing violations went from 7 of 8 seeds to 0. A pre-generation notice offers **Remove nation N start**, and a generation notice explains any case that cannot be met.
 - **Province budget.** The budget and generation use one frozen per-plane start split, and manual planes are measured by their target. Across a replication grid of about 22,500 plane pairs, budget-vs-generation disagreements went from about 5,200 to 0.
 - **Strategic topology.** Wet chokepoints are routed as required borders through the connected river router. Across 24 seeds, lost picks went from 31 of 35 to 0. Chokepoints that no river can pass become mountain passes. Open and Competitive output is byte-identical.
-- **Underworld borders.** Passages stay clear of unrelated chambers and bridges are drawn over the river, so exported borders equal connections. Across the main 24-plane batch, mismatches went from 77 to 0, with 180 further sampled planes also at 0. Very small Underworlds of 8–12 provinces keep the previous construction and receive a validation warning.
+- **Underworld borders.** Passages stay clear of unrelated chambers and bridges are drawn over the river, so exported borders equal connections. Across the main 24-plane batch, mismatches went from 77 to 0, with 180 further sampled planes also at 0. When a plane's grid leaves no drawable river (mostly 8–12 provinces, or a wrap across the river), it is laid out again in bands around the Styx. In a follow-up sweep of 278 Underworlds (8–800 provinces, six sizes, all wrap settings, 84 supplying cave starts), mismatches went from 113 on 43 planes to 0, and planes with validation errors went from 51 to 30.
 
 ## Usability
 
@@ -118,5 +118,5 @@ Notes:
 ## Remaining limits
 
 - **Not yet checked in Dominions 6:** the new Underworld crossings (ford links, narrowed river columns) and the strategic river routes still need an in-game playtest.
-- **Tiny Underworlds:** planes of 8–12 provinces can still show drawn borders that disagree with connections. Validation warns about them.
+- **Tiny Underworlds:** borders now equal connections on 8–12 province planes too. Two cave starts on an Underworld of about 8–12 provinces usually cannot keep three moves apart with four exits each; validation reports it.
 - **Not measured on low-end hardware:** timings come from a shared 4-core machine and are relative. Browser timings came from headless Chromium without a GPU.

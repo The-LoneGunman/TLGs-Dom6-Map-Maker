@@ -801,16 +801,12 @@ export interface SparsePassagePlanner {
   /**
    * Contacts a straight explicit bridge creates when it crosses other shapes,
    * as bridge endpoint plus touched owner. Undefined when the bridge would cut
-   * the shared frontier of another link, or cover another province's centre
-   * unless `coverCentres` accepts that (the covered province then touches both
-   * halves, and its contacts are marked `covered`).
+   * the shared frontier of another link or cover another province's centre:
+   * a covered centre strands that province's capital pixel inside the
+   * crossing, and which halves its split chamber then meets depends on the
+   * chamber's final size.
    */
-  bridgeContacts(
-    a: string,
-    b: string,
-    passages: Iterable<SparsePassage>,
-    options?: { coverCentres?: boolean },
-  ): Array<{ endpoint: string; owner: string; covered?: boolean }> | undefined;
+  bridgeContacts(a: string, b: string, passages: Iterable<SparsePassage>): Array<{ endpoint: string; owner: string }> | undefined;
   /**
    * Whether a ford from a bridge endpoint keeps its own contact with that
    * endpoint: its shared frontier lies outside the straight bridge, or it
@@ -995,31 +991,20 @@ export function createSparsePassagePlanner(plane: Plane, water?: (provinceId: st
       // neighbour; only the two far halves could meet as an unlinked pair.
       return segmentGap(half(left, p), half(right, q)) >= reach;
     },
-    bridgeContacts(a, b, passages, options) {
+    bridgeContacts(a, b, passages) {
       const bridge = resolve({ a, b });
       if (!bridge) return undefined;
       const [ai, bi] = bridge.owners as [number, number];
       const halves = [{ owner: ai, segment: half(bridge, ai) }, { owner: bi, segment: half(bridge, bi) }];
-      const contacts = new Map<string, { endpoint: string; owner: string; covered?: boolean }>();
-      const covered = new Set<number>();
+      const contacts = new Map<string, { endpoint: string; owner: string }>();
       const add = (endpoint: number, owner: number) => {
         if (endpoint === owner || bridge.owners.includes(owner)) return;
-        contacts.set(`${endpoint}:${owner}`, {
-          endpoint: idOf(endpoint), owner: idOf(owner), ...(covered.has(owner) ? { covered: true } : {}),
-        });
+        contacts.set(`${endpoint}:${owner}`, { endpoint: idOf(endpoint), owner: idOf(owner) });
       };
       for (const index of nearbyChambers(bridge, bridge.halfWidth + margin)) {
         if (bridge.owners.includes(index)) continue;
         const province = plane.provinces[index]!;
-        // A covered centre strands that province's forced capital pixel inside
-        // the crossing and splits its chamber across both halves.
-        if (pointGap(province.x * aspect, province.y, bridge.segment) < bridge.halfWidth + margin) {
-          if (!options?.coverCentres) return undefined;
-          covered.add(index);
-          add(ai, index);
-          add(bi, index);
-          continue;
-        }
+        if (pointGap(province.x * aspect, province.y, bridge.segment) < bridge.halfWidth + margin) return undefined;
         for (const bridgeHalf of halves) {
           if (pointGap(province.x * aspect, province.y, bridgeHalf.segment) < chamberBound[index]! + bridge.halfWidth + margin) {
             add(bridgeHalf.owner, index);
@@ -1035,13 +1020,11 @@ export function createSparsePassagePlanner(plane: Plane, water?: (provinceId: st
         if (other.owners.length === 2) {
           // The crossing may not sever another link at its shared frontier;
           // a passage from a bridge endpoint may instead leave the crossing
-          // beside that endpoint's own half, or end at a covered centre whose
-          // split chamber meets both halves.
+          // beside that endpoint's own half.
           const shared = other.owners.find((owner) => bridge.owners.includes(owner));
-          const far = other.owners.find((owner) => owner !== shared);
           const { ax, ay, bx, by } = other.segment;
           if (shared === undefined ? pointGap((ax + bx) / 2, (ay + by) / 2, bridge.segment) < reach
-            : !covered.has(far!) && !meetsBank(other, shared, bridge)) return undefined;
+            : !meetsBank(other, shared, bridge)) return undefined;
         }
         for (const owner of other.owners) {
           const segment = other.owners.length === 2 ? half(other, owner) : other.segment;

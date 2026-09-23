@@ -855,14 +855,24 @@ function prepareSparseStartBasins(
     // half of each sparse player's province budget for the two-ring basin and
     // inter-basin routes instead of consuming it all with a high-degree hub.
     const packingDegreeCap = Math.max(minimumUsefulDegree, Math.floor(activeCount / Math.max(1, requestedCount * 2)));
-    const sparseAnchors = repairSparseStartBasins(
+    const degree = Math.min(basinPlan.degree, packingDegreeCap);
+    const basins = (hubDegree: number) => repairSparseStartBasins(
       plane,
       requestedCount,
-      Math.min(basinPlan.degree, packingDegreeCap),
+      hubDegree,
       basinPlan.twoRingCapacity,
       caveCount > 0 ? "cave" : "other",
       `${project.seed}:plane:${planeIndex}:start-basins`,
     );
+    let sparseAnchors = basins(degree);
+    // Where an Underworld's drawable passages cannot give its hubs the common
+    // degree, its starts still get the exits validation requires.
+    if (plane.kind === "underworld" && sparseAnchors.length < requestedCount && degree > minimumUsefulDegree) {
+      const edges = plane.edges;
+      const fallback = basins(minimumUsefulDegree);
+      if (fallback.length > sparseAnchors.length) sparseAnchors = fallback;
+      else plane.edges = edges;
+    }
     const type = caveCount > 0 ? "cave" as const : "other" as const;
     anchors.push(...sparseAnchors.map((provinceId) => ({ planeId: plane.id, provinceId, type })));
   }
@@ -1388,7 +1398,9 @@ export function generatePlane(
     normalizeOceanLayout(settings.oceanLayout),
     clamp(Math.round(settings.continentCount ?? 3), 2, 6),
   );
-  const edges = buildEdges(provinces, source, stageSeed, settings, options.startCapacity ?? 0);
+  // Links the sparse graph had to accept without a drawable passage.
+  const undrawable = new Set<string>();
+  const edges = buildEdges(provinces, source, stageSeed, settings, options.startCapacity ?? 0, undrawable);
   const generated: Plane = { ...source, provinces, edges };
   repairOverlandOceanTopology(
     generated,
@@ -1398,7 +1410,18 @@ export function generatePlane(
   );
   enforceTerrainVariety(provinces, source.kind, source.variant, stageSeed);
   if (resolvePlaneOwnershipMode(generated) === "solid") refreshGeneratedBorderKinds(generated, stageSeed);
-  applySubterraneanWaters(generated, stageSeed);
+  applySubterraneanWaters(generated, stageSeed, {
+    undrawable,
+    // An Underworld whose grid leaves no drawable Styx is laid out again in
+    // bands around its river; the Styx planner tries each layout in turn.
+    relayout: (attempt) => {
+      if (attempt >= STYX_BAND_LAYOUTS) return false;
+      placeStyxBands(provinces, generated, stageSeed, attempt);
+      undrawable.clear();
+      generated.edges = buildEdges(provinces, source, stageSeed, settings, options.startCapacity ?? 0, undrawable);
+      return true;
+    },
+  });
   assignArchetypeDetails(provinces, source.kind, source.variant, stageSeed);
 
   if (!options.deferStrategicFeatures) {
@@ -2214,9 +2237,16 @@ const STYX_NAMES = [
   "The Black Current",
 ] as const;
 
-function applySubterraneanWaters(plane: Plane, seed: string) {
+interface StyxLayoutOptions {
+  /** Links of the current graph that were accepted without a drawable passage. */
+  undrawable?: ReadonlySet<string>;
+  /** Lays the plane out again (layout `attempt`) and rebuilds its graph; false when none is left. */
+  relayout?: (attempt: number) => boolean;
+}
+
+function applySubterraneanWaters(plane: Plane, seed: string, styxOptions: StyxLayoutOptions = {}) {
   if (plane.kind === "underworld") {
-    applyRiverStyx(plane, seed);
+    applyRiverStyx(plane, seed, styxOptions);
     return;
   }
   if (plane.kind !== "cave" && plane.kind !== "cavern") return;
@@ -2264,26 +2294,21 @@ function applySubterraneanWaters(plane: Plane, seed: string) {
   });
 }
 
-function applyRiverStyx(plane: Plane, seed: string) {
+function applyRiverStyx(plane: Plane, seed: string, { undrawable, relayout }: StyxLayoutOptions = {}) {
   const active = plane.provinces.filter((province) => !isBlockedProvince(province));
   if (active.length < 8) return;
   const byId = new Map(active.map((province) => [province.id, province]));
   const provisional = plane.edges.map((edge) => ({ ...edge }));
-  let styx: ReturnType<typeof planRiverStyx>;
-  // Prefer two candidate necks per crossing; fewer necks can leave the banks
-  // larger on small planes.
-  for (const necksPerCrossing of [2, 1, 0]) {
-    const guard = createPassageGuard(plane, new Set());
-    if (!guard) break;
-    plane.edges = provisional.map((edge) => ({ ...edge }));
-    const planned = planRiverStyx(plane, seed, guard, necksPerCrossing);
-    if (planned && styxLayoutHolds(plane, planned.water, planned.bankMinimum)) {
-      styx = planned;
-      break;
-    }
+  let styx = planDrawableStyx(plane, seed, undrawable);
+  // A grid that leaves no drawable river with two connected banks (most often
+  // a small plane) is laid out again in bands around the river.
+  if (!styx && relayout && resolvePlaneOwnershipMode(plane) === "sparse") {
+    const positions = plane.provinces.map(({ x, y, gridX, gridY }) => ({ x, y, gridX, gridY }));
+    for (let attempt = 0; !styx && relayout(attempt); attempt += 1) styx = planDrawableStyx(plane, seed, undrawable);
+    if (!styx) plane.provinces.forEach((province, index) => Object.assign(province, positions[index]!));
   }
-  // Very small planes may leave no drawable river with two connected banks.
-  // The movement invariants win: keep the original construction there.
+  // The movement invariants win over the drawing: should no layout draw its
+  // river, keep the original construction and let validation report it.
   if (!styx) {
     plane.edges = provisional;
     styx = planRiverStyx(plane, seed);
@@ -2297,6 +2322,27 @@ function applyRiverStyx(plane: Plane, seed: string) {
   });
 }
 
+/**
+ * The Styx plan whose every link is drawn exactly: one connected river, two
+ * connected banks and 1-2 drawable crossings, with no link that was accepted
+ * without a drawable passage. Undefined when this layout has none.
+ */
+function planDrawableStyx(plane: Plane, seed: string, undrawable: ReadonlySet<string> = new Set()) {
+  const provisional = plane.edges.map((edge) => ({ ...edge }));
+  // Prefer two candidate necks per crossing; fewer necks can leave the banks
+  // larger on small planes.
+  for (const necksPerCrossing of [2, 1, 0]) {
+    const guard = createPassageGuard(plane, new Set(), new Set(undrawable));
+    if (!guard) break;
+    plane.edges = provisional.map((edge) => ({ ...edge }));
+    const planned = planRiverStyx(plane, seed, guard, necksPerCrossing);
+    if (planned && styxLayoutHolds(plane, planned.water, planned.bankMinimum)
+      && !plane.edges.some((edge) => guard.undrawable.has(connectionKey(edge.a, edge.b)))) return planned;
+  }
+  plane.edges = provisional;
+  return undefined;
+}
+
 function planRiverStyx(
   plane: Plane,
   seed: string,
@@ -2305,7 +2351,7 @@ function planRiverStyx(
 ): { water: Set<string>; bankMinimum: number } | undefined {
   const active = plane.provinces.filter((province) => !isBlockedProvince(province));
   const horizontal = plane.width >= plane.height;
-  const target = clamp(Math.round(active.length * 0.23), 2, active.length - 4);
+  const target = styxRiverTarget(active.length);
   const dryTarget = active.length - target;
   const bankMinimum = Math.max(2, Math.min(Math.floor(dryTarget / 2), Math.floor(dryTarget * 0.34)));
   const along = (province: Province) => horizontal ? province.x : province.y;
@@ -2338,6 +2384,11 @@ function planRiverStyx(
   if (guard) carveStyxNecks(active, selected, reserved, endpointIds, horizontal, seed, (dryTarget >= 70 ? 2 : 1) * necksPerCrossing);
   enforceStyxBanks(plane, selected, horizontal, seed, guard, reserved);
   return { water: selected, bankMinimum };
+}
+
+/** Provinces the Styx plan starts from before drawing may flood more. */
+function styxRiverTarget(activeCount: number): number {
+  return clamp(Math.round(activeCount * 0.23), 2, activeCount - 4);
 }
 
 /**
@@ -2402,6 +2453,101 @@ function styxSignedDistance(province: Pick<Province, "x" | "y">, horizontal: boo
   const phase = (hashString(`${seed}:styx-course`) % 997) / 997;
   const center = 0.5 + Math.sin((along * 1.35 + phase) * TAU) * 0.075;
   return orthogonal - center;
+}
+
+/** Band layouts tried, in order, when an Underworld's grid leaves no drawable Styx; the last is regular. */
+const STYX_BAND_LAYOUTS = 6;
+
+/**
+ * Lays an Underworld out in rows parallel to its River Styx: the river rows
+ * run through the middle of the plane from its outermost column to its
+ * outermost column, and each bank fills the rows on its side. Rows are
+ * balanced so the spacing along a row matches the spacing between rows.
+ * A three-row plane gets a river row at least a third of the plane, so its
+ * passages are short and a hub has four neighbours, and bank rows whose
+ * count differs from the river's, so a crossing can pass beside a river
+ * chamber rather than over its centre or another passage's midpoint.
+ * Attempts vary the jitter and which bank takes the larger row.
+ */
+function placeStyxBands(
+  provinces: readonly Province[],
+  plane: Pick<Plane, "width" | "height">,
+  seed: string,
+  attempt: number,
+) {
+  const active = provinces.filter((province) => !isBlockedProvince(province)).sort((a, b) => a.index - b.index);
+  const count = active.length;
+  if (count < 8) return;
+  const horizontal = plane.width >= plane.height;
+  const aspect = clamp(plane.width / Math.max(1, plane.height), 0.08, 12);
+  const alongExtent = horizontal ? aspect : 1, acrossExtent = horizontal ? 1 : aspect;
+  // A large river spreads over several rows so its chambers keep the banks' spacing.
+  const riverCount = styxRiverTarget(count);
+  const dry = count - riverCount;
+  const riverRowsFor = (sideRows: number) => Math.max(1, Math.round(riverCount * 2 * sideRows / dry));
+  const rowSpacing = (sideRows: number) => 1 / (2 * sideRows + riverRowsFor(sideRows));
+  let sideRows = 1;
+  let best = Infinity;
+  for (let rows = 1; rows <= Math.max(1, Math.floor(dry / 4)); rows += 1) {
+    const mismatch = Math.abs(Math.log((alongExtent * 2 * rows / dry) / (acrossExtent * rowSpacing(rows))));
+    if (mismatch < best - 1e-9) {
+      best = mismatch;
+      sideRows = rows;
+    }
+  }
+  const riverRows = riverRowsFor(sideRows);
+  const spacing = rowSpacing(sideRows);
+  const share = (total: number, parts: number, row: number) => Math.floor(total / parts) + Number(row < total % parts);
+  let sides: [number, number];
+  let river: number[];
+  if (sideRows === 1 && riverRows === 1) {
+    // The river row floods beyond the planned water; the banks keep their minimum.
+    const riverSize = Math.max(riverCount, 3, Math.round(count / 3));
+    const larger = Math.ceil((count - riverSize) / 2), smaller = count - riverSize - larger;
+    sides = larger === riverSize && smaller === riverSize ? [larger + 1, smaller - 1] : [larger, smaller];
+    river = [riverSize];
+  } else {
+    sides = [Math.ceil(dry / 2), Math.floor(dry / 2)];
+    river = Array.from({ length: riverRows }, (_, row) => share(riverCount, riverRows, row));
+  }
+  if (attempt % 2 === 1) sides.reverse();
+  const rowSizes = [
+    ...Array.from({ length: sideRows }, (_, row) => share(sides[0], sideRows, row)),
+    ...river,
+    ...Array.from({ length: sideRows }, (_, row) => share(sides[1], sideRows, sideRows - 1 - row)),
+  ];
+  const columns = Math.max(...rowSizes);
+  const riverHalf = (riverRows - 1) / 2 * spacing;
+  // A river passage runs beside the adjacent bank row; with widely spaced
+  // river chambers that row moves out so their chambers stay clear of it.
+  const gap = Math.min(Math.max(spacing, 0.34 * alongExtent / Math.min(...river) / acrossExtent),
+    Math.max(spacing, 0.44 - riverHalf - (sideRows - 1) * spacing));
+  const offsets = rowSizes.map((_, row) => row < sideRows ? -(riverHalf + gap + (sideRows - 1 - row) * spacing)
+    : row >= sideRows + riverRows ? riverHalf + gap + (row - sideRows - riverRows) * spacing
+      : (row - sideRows) * spacing - riverHalf);
+  const regular = attempt >= STYX_BAND_LAYOUTS - 1;
+  const unit = (key: string) => regular ? 0 : hashString(`${seed}:styx-band:${attempt}:${key}`) / 4294967296 - 0.5;
+  let cursor = 0;
+  rowSizes.forEach((size, row) => {
+    const isRiver = row >= sideRows && row < sideRows + riverRows;
+    for (let slot = 0; slot < size; slot += 1) {
+      const province = active[cursor++]!;
+      const jitter = unit(`${province.id}:along`) * 0.36;
+      // River rows run from the outermost column to the outermost column, so
+      // the Styx spans the plane; their end chambers only shift outwards.
+      const along = clamp(isRiver && size > 1
+        ? (0.5 + slot * (columns - 1) / (size - 1)
+          + (slot === 0 ? -Math.abs(jitter) : slot === size - 1 ? Math.abs(jitter) : jitter * (columns - 1) / (size - 1))) / columns
+        : (slot + 0.5 + jitter) / size, 0.003, 0.997);
+      const across = clamp(0.5 + offsets[row]! + unit(`${province.id}:across`) * 0.1 * spacing, 0.003, 0.997);
+      const column = isRiver ? Math.round(slot * (columns - 1) / Math.max(1, size - 1))
+        : Math.min(columns - 1, Math.floor(along * columns));
+      province.x = horizontal ? along : across;
+      province.y = horizontal ? across : along;
+      province.gridX = horizontal ? column : row;
+      province.gridY = horizontal ? row : column;
+    }
+  });
 }
 
 /** The first unused ID in a scope; generated links may be displaced and re-added during a pass. */
@@ -2511,6 +2657,7 @@ function enforceStyxBanks(
     });
     for (const edge of candidates.slice(0, crossingLimit)) {
       plane.edges.push({ ...edge, kind: "bridge", special: undefined });
+      guard?.undrawable.add(connectionKey(edge.a, edge.b));
     }
   }
   const active = plane.provinces.filter((province) => !isBlockedProvince(province));
@@ -2735,40 +2882,35 @@ function placeDrawableStyxCrossings(
       .map((pair) => ({ a: pair.a, b: pair.b })),
   ];
   let placed = 0;
-  // Very small planes may offer no crossing that clears every Styx centre.
-  // Only then may a crossing pass over one; that province's chamber is split
-  // across the crossing and meets both banks, so both get a ford link.
-  for (const coverCentres of [false, true]) {
-    if (placed) break;
-    const tried = new Set<string>();
-    for (const candidate of candidates) {
-      if (placed >= limit) break;
-      const key = connectionKey(candidate.a.id, candidate.b.id);
-      if (tried.has(key)) continue;
-      tried.add(key);
-      const contacts = guard.planner.bridgeContacts(candidate.a.id, candidate.b.id, [...plane.edges, ...guard.stubs], { coverCentres });
-      if (!contacts || contacts.some((contact) => !styx.has(contact.owner))) continue;
-      const existing = new Set(plane.edges.map((edge) => connectionKey(edge.a, edge.b)));
-      const contactKeys = contacts.map((contact) => connectionKey(contact.endpoint, contact.owner));
-      const exempt = new Set([key, ...contactKeys]);
-      const planned: LinkLike[] = [...plane.edges, { a: candidate.a.id, b: candidate.b.id }];
-      const fords = contacts.filter((contact) => !existing.has(connectionKey(contact.endpoint, contact.owner)));
-      const drawable = fords.every((ford) => {
-        if ((!ford.covered && !guard.planner.fordMeetsBank(ford.endpoint, ford.owner, [candidate.a.id, candidate.b.id]))
-          || !passageDrawable(guard, ford.endpoint, ford.owner, planned, exempt)) return false;
-        planned.push({ a: ford.endpoint, b: ford.owner });
-        return true;
-      });
-      if (!drawable) continue;
-      plane.edges.push(candidate.source
-        ? { ...candidate.source, kind: "bridge", special: undefined }
-        : { id: nextEdgeId(plane, seed, "styx-ford"), a: candidate.a.id, b: candidate.b.id, kind: "bridge" });
-      for (const ford of fords) {
-        plane.edges.push({ id: nextEdgeId(plane, seed, "styx-ford-bank"), a: ford.endpoint, b: ford.owner, kind: "standard" });
-      }
-      for (const protectedKey of exempt) guard.protectedKeys.add(protectedKey);
-      placed += 1;
+  const tried = new Set<string>();
+  for (const candidate of candidates) {
+    if (placed >= limit) break;
+    const key = connectionKey(candidate.a.id, candidate.b.id);
+    if (tried.has(key)) continue;
+    tried.add(key);
+    // A crossing never covers a province's centre; a layout that needs one is laid out again.
+    const contacts = guard.planner.bridgeContacts(candidate.a.id, candidate.b.id, [...plane.edges, ...guard.stubs]);
+    if (!contacts || contacts.some((contact) => !styx.has(contact.owner))) continue;
+    const existing = new Set(plane.edges.map((edge) => connectionKey(edge.a, edge.b)));
+    const contactKeys = contacts.map((contact) => connectionKey(contact.endpoint, contact.owner));
+    const exempt = new Set([key, ...contactKeys]);
+    const planned: LinkLike[] = [...plane.edges, { a: candidate.a.id, b: candidate.b.id }];
+    const fords = contacts.filter((contact) => !existing.has(connectionKey(contact.endpoint, contact.owner)));
+    const drawable = fords.every((ford) => {
+      if (!guard.planner.fordMeetsBank(ford.endpoint, ford.owner, [candidate.a.id, candidate.b.id])
+        || !passageDrawable(guard, ford.endpoint, ford.owner, planned, exempt)) return false;
+      planned.push({ a: ford.endpoint, b: ford.owner });
+      return true;
+    });
+    if (!drawable) continue;
+    plane.edges.push(candidate.source
+      ? { ...candidate.source, kind: "bridge", special: undefined }
+      : { id: nextEdgeId(plane, seed, "styx-ford"), a: candidate.a.id, b: candidate.b.id, kind: "bridge" });
+    for (const ford of fords) {
+      plane.edges.push({ id: nextEdgeId(plane, seed, "styx-ford-bank"), a: ford.endpoint, b: ford.owner, kind: "standard" });
     }
+    for (const protectedKey of exempt) guard.protectedKeys.add(protectedKey);
+    placed += 1;
   }
   return placed;
 }
@@ -3067,12 +3209,13 @@ function buildEdges(
   seed: string,
   settings: GenerationSettings,
   startCapacity: number,
+  undrawable?: Set<string>,
 ): Edge[] {
   const generated = { ...plane, provinces, edges: [] };
   if (resolvePlaneOwnershipMode(generated) === "solid") {
     return synchronizePlaneEdges(generated, seed, false).edges;
   }
-  return buildSparseEdges(provinces, generated, seed, settings, startCapacity);
+  return buildSparseEdges(provinces, generated, seed, settings, startCapacity, undrawable);
 }
 
 function buildSparseEdges(
@@ -3081,6 +3224,7 @@ function buildSparseEdges(
   seed: string,
   settings: GenerationSettings,
   startCapacity: number,
+  undrawable?: Set<string>,
 ): Edge[] {
   const active = provinces.filter((province) => !isBlockedProvince(province)).sort((a, b) => a.index - b.index);
   if (active.length < 2) return [];
@@ -3090,7 +3234,7 @@ function buildSparseEdges(
   const { pairs: allPairs, spacing } = spatialPairs(active, plane);
   const pairs = regionContacts ? allPairs.filter(pair => regionContacts.has(pair.key)) : allPairs;
   const localPairs = pairs.filter((pair) => pair.distance <= spacing * 2.4 + 1e-9);
-  const guard = regions ? undefined : createPassageGuard(plane, new Set());
+  const guard = regions ? undefined : createPassageGuard(plane, new Set(), undrawable);
   const selected = new Map<string, SpatialPair>();
   const degrees = new Map(active.map((province) => [province.id, 0]));
   const addPair = (pair: SpatialPair | undefined) => {
@@ -3207,11 +3351,17 @@ interface PassageGuard {
   stubs: SparsePassage[];
   /** Links that exempt a neighbouring pair's far ends; never pruned. */
   readonly protectedKeys: Set<string>;
+  /** Links accepted without a drawable passage (a last-resort join or crossing). */
+  readonly undrawable: Set<string>;
 }
 
 type LinkLike = { a: string | Province; b: string | Province };
 
-function createPassageGuard(plane: Plane, plannedWater?: ReadonlySet<string>): PassageGuard | undefined {
+function createPassageGuard(
+  plane: Plane,
+  plannedWater?: ReadonlySet<string>,
+  undrawable: Set<string> = new Set(),
+): PassageGuard | undefined {
   if (plane.kind !== "underworld" || resolvePlaneOwnershipMode(plane) !== "sparse") return undefined;
   // Planned water can still grow, so every corridor keeps the widest Styx
   // width until the river is final; a finished plane uses exact widths.
@@ -3220,6 +3370,7 @@ function createPassageGuard(plane: Plane, plannedWater?: ReadonlySet<string>): P
     planner: createSparsePassagePlanner(plane, plannedWater ? undefined : (id) => water.has(id)),
     stubs: styxStubPassages(plane, water),
     protectedKeys: new Set(),
+    undrawable,
   };
 }
 
@@ -3267,6 +3418,7 @@ function minimumSpanningPairs(
   active: readonly Province[],
   pairs: readonly SpatialPair[],
   drawable?: (pair: SpatialPair, tree: readonly SpatialPair[]) => boolean,
+  undrawable?: Set<string>,
 ): SpatialPair[] {
   const position = new Map(active.map((province, index) => [province.id, index]));
   const parent = active.map((_, index) => index);
@@ -3304,6 +3456,7 @@ function minimumSpanningPairs(
     for (const pair of pairs) {
       if (!union(position.get(pair.a.id)!, position.get(pair.b.id)!)) continue;
       tree.push(pair);
+      undrawable?.add(pair.key);
       if (tree.length === active.length - 1) break;
     }
   }
@@ -3324,7 +3477,7 @@ function buildChamberGraph(
   const drawable = guard ? (pair: SpatialPair) => pairDrawable(guard, pair, selected.values()) : undefined;
   const tree = minimumSpanningPairs(active, pairs, guard
     ? (pair, partial) => pairDrawable(guard, pair, [...selected.values(), ...partial])
-    : undefined);
+    : undefined, guard?.undrawable);
   for (const pair of tree) addPair(pair);
   const desiredClusters = active.length < 12
     ? 1
@@ -3610,6 +3763,7 @@ function addSparseStartHubs(
       }
     }
     if (!hub) break;
+    const beforeHub = guard ? new Set(selected.keys()) : undefined;
     while ((degrees.get(hub.id) ?? 0) < targetDegree) {
       const currentAdjacency = adjacencyFromPairs(active, selected.values());
       const currentTwoRing = new Set([...shortestDistances(currentAdjacency, hub.id).entries()]
@@ -3634,7 +3788,17 @@ function addSparseStartHubs(
       if (!addPair(pair)) break;
     }
     if ((degrees.get(hub.id) ?? 0) < targetDegree) {
-      if (!regional) break;
+      if (!regional && !beforeHub) break;
+      // An Underworld hub whose drawable passages cannot reach the degree
+      // withdraws them, and another candidate is tried.
+      if (beforeHub) {
+        for (const [key, pair] of [...selected]) {
+          if (beforeHub.has(key)) continue;
+          selected.delete(key);
+          degrees.set(pair.a.id, (degrees.get(pair.a.id) ?? 0) - 1);
+          degrees.set(pair.b.id, (degrees.get(pair.b.id) ?? 0) - 1);
+        }
+      }
       exhaustedRegionalHubs.add(hub.id);
       plannedHubIds.delete(hub.id);
       continue;
