@@ -12,19 +12,23 @@ import { applyBuiltinRecipe, applySettingsRecipe, createSettingsRecipe, parseSet
 import { parseProject, serializeProject } from "../src/export";
 import { BUILTIN_DOM6_CATALOG } from "../src/catalog";
 import { IterationPanel } from "../src/IterationPanel";
+import { validateProject } from "../src/dom6";
 
 const frozen: Record<string,string> = {
   // Reviewed September22 against reproduced pre-natural river hashes. New
   // biome defaults/sampling intentionally change content and seeded positions;
   // water-shape provenance and routing are also now applied. Explicit ocean
-  // presets retain their water mask during start placement. All five fixtures
+  // presets other than constrained islands retain their water mask during start placement. All five fixtures
   // retain their requested province/start totals; old saved ownership is tested
   // independently from these explicit new-generation snapshots. The natural
   // layout's start-category repair now keeps generated Sea/Deep Sea/Kelp and
   // only rewrites provinces whose land/water status changes (default, caves,
   // eight); totals, starts and validation results are unchanged.
   default:"a2b57a22e35c15e2203b00f7dea5f9144fb24e8d84c91e7825fb8c7cc4354482",
-  islands:"5d647f1d3ebb385cbcb068d21e4135e95315cb7b5fc871623def835b5b353d07",
+  // September23: the old island mask yielded 0 land / 4 coastal rather than
+  // the requested 2 / 2. Start-aware islands now fit every category at the
+  // same 46-water/96-province budget, with degree-five separated capitals.
+  islands:"d84a3c3b985da2264b3e7bcccb22c63c2fb59e48afddb11ba2210db5b742d1b5",
   continents:"2912f015787b08746f286060621250d77079e8828bb1877a66fdb7c4312e47dc",
   caves:"9d124324c25670d469b52ba3fc1a0ae2fcade864109b4de277348f9dc77abb1f",
   // Its Underworld now keeps every link drawable, so exported borders equal its connections.
@@ -43,6 +47,7 @@ for (const [kind, digest] of Object.entries(frozen)) test(`${kind} defaults matc
   // These same-seed/default-ID fixtures retain their original gameplay data;
   // the new applied identity is separately checked by generation-identity tests.
   assert.equal(createHash("sha256").update(JSON.stringify(p,(key,value)=>key==="createdAt"||key==="updatedAt"||key==="generationKey"?undefined:value)).digest("hex"),digest);
+  if(kind==="islands") assert.deepEqual(validateProject(p).filter(issue=>issue.severity==="error"),[]);
 });
 
 const baseline = createDefaultProject("iteration-regressions");

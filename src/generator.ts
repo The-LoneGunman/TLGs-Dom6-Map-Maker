@@ -52,6 +52,7 @@ import { regenerateGeneratedProvinceNames } from "./naming";
 import { assertCanRebuildLayout, pruneAuthoringRegions, restoreGenerationLocks } from "./authoringLocks";
 import { applyPlaneContentPreferences, applyPlaneRoutePreferences, assertPlaneGenerationOverrides, preferredDryTerrain } from "./generationControls";
 import { generateBorderRivers } from "./borderRivers";
+import { planIslandStarts } from "./islandStartPlanning";
 
 const TAU = Math.PI * 2;
 
@@ -828,7 +829,9 @@ function prepareSparseStartBasins(
   // Explicit ocean presets promise a particular land/water topology. Their
   // real terrain must constrain starts, not be repainted into scattered seas
   // by the generic category repair. The downstream allocator reports limits.
-  const preparedStartAnchors = naturalOverland && (scaleAwareNatural || highLoadAtlas || !basinPlan.feasible || !separatedOverlandPlan.feasible)
+  const preparedStartAnchors = project.settings.oceanLayout === "island_chains"
+    ? prepareIslandStartBasins(project, requested)
+    : naturalOverland && (scaleAwareNatural || highLoadAtlas || !basinPlan.feasible || !separatedOverlandPlan.feasible)
     ? ensureOverlandStartCategories(project, requested)
     : undefined;
   if (preparedStartAnchors) {
@@ -951,6 +954,46 @@ interface PreparedStartAnchor {
   planeId: string;
   provinceId: string;
   type: StartType;
+}
+
+function prepareIslandStartBasins(project: MapProject, requested: StartDistribution): PreparedStartAnchor[] {
+  const anchors: PreparedStartAnchor[] = [];
+  for (const planeIndex of eligibleGeneratedStartPlaneIndexes(project, "land")) {
+    const plane = project.planes[planeIndex]!;
+    if (resolvePlaneOwnershipMode(plane) !== "solid") continue;
+    const counts = {
+      land: plannedGeneratedStartsOnPlane(project, requested, "land", planeIndex),
+      coastal: plannedGeneratedStartsOnPlane(project, requested, "coastal", planeIndex),
+      water: plannedGeneratedStartsOnPlane(project, requested, "water", planeIndex),
+    };
+    const total = counts.land + counts.coastal + counts.water;
+    if (!total) continue;
+    // Opening capital borders may shorten paths. Reserve against the complete
+    // shared-border graph, including authored nation capitals on this plane.
+    const adjacency = adjacencyFor(plane);
+    const excludedStarts = new Set<string>();
+    for (const start of project.specificStarts.filter(start => start.planeId === plane.id)) {
+      for (const id of shortestDistances(adjacency, start.provinceId, 2).keys()) excludedStarts.add(id);
+    }
+    const plan = planIslandStarts(plane, adjacency, counts, {
+      minimumDegree: Math.min(project.settings.startDegreeTarget ?? 4, 4),
+      preferredSeparation: scaledStartSeparationTarget(plane.provinces.length, total),
+      rank: key => hashString(`${project.seed}:island-starts:${planeIndex}:${key}`),
+      excludedStarts,
+    });
+    if (!plan) {
+      project.generationWarnings!.push(`${plane.name}: island geography could not fit the requested inland/coastal/water starts with safe spacing and the current water quota. Increase provinces per player, request more coastal starts, or reduce water. Export validation remains authoritative.`);
+      continue;
+    }
+    const converted = plane.provinces.filter(province => plan.water.has(province.id) !== isWaterProvince(province));
+    if (converted.length) {
+      const seed = `${project.seed}:island-start-repair:${planeIndex}`;
+      applyOverlandWaterSelection({ ...plane, provinces: converted }, plan.water, seed);
+      assignArchetypeDetails(converted, plane.kind, plane.variant, seed);
+    }
+    anchors.push(...plan.starts.map(start => ({ planeId: plane.id, ...start })));
+  }
+  return anchors;
 }
 
 function ensureOverlandStartCategories(project: MapProject, requested: StartDistribution): PreparedStartAnchor[] | undefined {
@@ -4472,19 +4515,20 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
   const preparedCounts = new Map<StartType, number>();
   for (const item of preparedPlacement) preparedCounts.set(item.type, (preparedCounts.get(item.type) ?? 0) + 1);
   const preparedKeys = new Set(preparedPlacement.map((item) => globalProvinceKey(item.plane.id, item.province.id)));
-  const preparedPlanSafe = project.settings.players > 16
-    && preparedPlacement.length === project.settings.players
+  const preparedMatchesRequest = preparedPlacement.length === project.settings.players
     && preparedKeys.size === preparedPlacement.length
     && (Object.keys(requested) as StartType[]).every((type) => (preparedCounts.get(type) ?? 0) === requested[type])
     && preparedPlacement.every((item) => isEligibleStartProvince(item.province)
       && matchesStartType(item, item.type, adjacency.get(item.plane.id)!)
       && (adjacency.get(item.plane.id)?.get(item.province.id)?.length ?? 0) >= minimumUsefulDegree
-      && (!usesConnectedRegions(item.plane) || !bridgeEndpoints.get(item.plane.id)?.has(item.province.id)))
-    && preparedPlacement.every((item, index) => preparedPlacement.slice(index + 1).every((other) => {
+      && (!usesConnectedRegions(item.plane) || !bridgeEndpoints.get(item.plane.id)?.has(item.province.id)));
+  const preparedSpaced = (target: (planeId: string) => number) => preparedPlacement.every((item, index) => preparedPlacement.slice(index + 1).every((other) => {
       if (item.plane.id !== other.plane.id) return true;
       return (distancesFrom(adjacency.get(item.plane.id)!, item.province.id).get(other.province.id) ?? 0)
-        >= (preferredSeparation.get(item.plane.id) ?? 3);
+        >= target(item.plane.id);
     }));
+  const preparedPlanSafe = project.settings.players > 16 && preparedMatchesRequest
+    && preparedSpaced(planeId => preferredSeparation.get(planeId) ?? 3);
   // Category anchors are planned before authored starts are considered.
   const clearOfAuthoredStarts = (item: ProvinceRef) => !authoredKeys.has(globalProvinceKey(item.plane.id, item.province.id))
     && authoredStartDistance(authoredStarts, item.plane.id, item.province.id) >= 3;
@@ -4573,6 +4617,13 @@ function placeDistributedStarts(project: MapProject, preparedStartAnchors: reado
         }
       }
     }
+  }
+
+  // The island planner has already proved a complete, typed assignment. Keep
+  // it before the compatibility fallback relaxes spacing or start degree.
+  if (!selected.length && project.settings.oceanLayout === "island_chains" && preparedMatchesRequest
+    && preparedSpaced(() => 3) && preparedPlacement.every(clearOfAuthoredStarts)) {
+    selected = preparedPlacement.map(({ plane, planeIndex, province }) => ({ plane, planeIndex, province }));
   }
 
   // Some intentionally small or tightly split scenarios cannot satisfy the

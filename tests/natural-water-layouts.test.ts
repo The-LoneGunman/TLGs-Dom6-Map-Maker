@@ -115,7 +115,7 @@ test("new water outlines remain compatible with full start placement and capital
   }
 });
 
-test("explicit ocean presets keep their exact water membership through full six-player start allocation", () => {
+test("ocean presets keep water topology while island starts may reshape undersized interiors", () => {
   for (const mode of ["single_continent", "multiple_continents", "island_chains", "inland_sea"] as const) {
     let project = createDefaultProject("realm-92x5xo-1xlomu9", { generate: false });
     project.seed = "natural-coasts-qa";
@@ -127,6 +127,17 @@ test("explicit ocean presets keep their exact water membership through full six-
       `${project.seed}:plane:0:v1`, 0, { deferStrategicFeatures: true, waterPercent: effectiveWater });
     const generated = generateProject(project), final = generated.planes[0]!;
     const waterIds = (plane: Plane) => plane.provinces.filter(isWaterProvince).map(province => province.id).sort();
+    if (mode === "island_chains") {
+      // Six inland capitals need wider islands than the coast-heavy initial
+      // mask provides. The repair changes membership, never quota or topology.
+      assert.equal(waterIds(final).length, waterIds(deferred).length);
+      assert.equal(components(final, isWaterProvince).length, 1);
+      assert.ok(components(final, province => !isWaterProvince(province)).length >= 3);
+      assert.equal(final.provinces.filter(province => province.start).length, 6);
+      assert.ok(final.provinces.filter(province => province.start).every(province => classifyCurrentStart(final, province) === "land"));
+      assert.deepEqual(validateProject(generated).filter(issue => issue.severity === "error"), []);
+      continue;
+    }
     assert.deepEqual(waterIds(final), waterIds(deferred), `${mode}: start-category repair must not repaint the selected geography`);
     assert.deepEqual(components(final, isWaterProvince).map(group => group.map(province => province.id).sort()),
       components(deferred, isWaterProvince).map(group => group.map(province => province.id).sort()), mode);
@@ -137,7 +148,7 @@ test("explicit ocean presets keep their exact water membership through full six-
       assert.ok(final.provinces.filter(province => province.start).every(province => classifyCurrentStart(final, province) === "land"));
       assert.deepEqual(validateProject(generated).filter(issue => issue.severity === "error"), [], `${mode}: this exact layout has six viable noncoastal starts`);
     } else {
-      // Tiny islands and a narrow inland-sea land ring cannot support six
+      // A narrow inland-sea land ring cannot support six
       // noncoastal, degree-four, distance-three capitals in this fixture.
       // Keep the requested coastline and expose the real constraint instead
       // of manufacturing room by scattering new seas through the map.
