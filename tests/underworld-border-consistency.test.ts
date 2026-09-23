@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { validateProject } from "../src/dom6";
 import { isBlockedProvince, isWaterProvince, type MapProject, type Plane, type Province } from "../src/domain";
-import { addPlane, createDefaultProject, generateProject } from "../src/generator";
+import { addPlane, adjacencyFor, createDefaultProject, generateProject, previewProvinceBudget } from "../src/generator";
 import { auditSparseRasterTopology, connectionKey, createProvinceOwnershipModel } from "../src/geometry";
 import { samplePlaneOwnership } from "../src/MapCanvas";
 
@@ -12,10 +12,11 @@ interface Fixture {
   height?: number;
   provinceTarget?: number;
   wrapX?: boolean;
+  wrapY?: boolean;
   caveStarts?: number;
 }
 
-function generatedUnderworld({ seed, width, height, provinceTarget, wrapX, caveStarts }: Fixture): { project: MapProject; plane: Plane } {
+function stagedUnderworld({ seed, width, height, provinceTarget, wrapX, wrapY, caveStarts }: Fixture): MapProject {
   let project = createDefaultProject(seed, { generate: false });
   if (caveStarts) {
     project.settings = { ...project.settings, startDistribution: { land: 6 - caveStarts, coastal: 0, water: 0, cave: caveStarts, other: 0 } };
@@ -24,7 +25,12 @@ function generatedUnderworld({ seed, width, height, provinceTarget, wrapX, caveS
   const source = project.planes[1]!;
   if (width && height) Object.assign(source, { width, height });
   if (wrapX !== undefined) source.wrapX = wrapX;
-  project = generateProject(project);
+  if (wrapY !== undefined) source.wrapY = wrapY;
+  return project;
+}
+
+function generatedUnderworld(fixture: Fixture): { project: MapProject; plane: Plane } {
+  const project = generateProject(stagedUnderworld(fixture));
   return { project, plane: project.planes[1]! };
 }
 
@@ -126,11 +132,66 @@ test("generated Underworld borders equal their connections across sizes, wraps, 
   }
 });
 
+test("small and seam-wrapped Underworlds draw exactly their connections with an intact Styx", () => {
+  // All but the 256x256 plane shipped 1-7 drawn borders without connections,
+  // or connections without borders, on 1968d4b. Most grids left no drawable
+  // river (on seam-wrapped planes every short crossing ran around it), so the
+  // original construction was kept; one plan ended with an undrawable
+  // last-resort crossing, and one crossing covered a river chamber's centre.
+  const fixtures: Array<[string, Fixture]> = [
+    ["eight at 3840x2160", { seed: "tiny4k-0", width: 3840, height: 2160, provinceTarget: 8 }],
+    ["eight at 2048x1152", { seed: "uws-2048-8-0", width: 2048, height: 1152, provinceTarget: 8 }],
+    ["flooded ten", { seed: "uws-2048-10-0", width: 2048, height: 1152, provinceTarget: 10 }],
+    ["twelve", { seed: "uws-1536-12-0", width: 1536, height: 1024, provinceTarget: 12 }],
+    ["portrait eight", { seed: "uws-1152-8-0", width: 1152, height: 2048, provinceTarget: 8 }],
+    ["nine wrapped north-south", { seed: "uws-1536-9-1", width: 1536, height: 1024, provinceTarget: 9, wrapY: true }],
+    ["twenty wrapped north-south", { seed: "uwm-1536-20", width: 1536, height: 1024, provinceTarget: 20, wrapY: true }],
+    ["portrait nine wrapped east-west with a cave start", { seed: "uwst-1152-9-1", width: 1152, height: 2048, provinceTarget: 9, wrapX: true, caveStarts: 1 }],
+    ["eight whose crossing covered a river centre", { seed: "uwst-1024-8-1", width: 1024, height: 1024, provinceTarget: 8, caveStarts: 1 }],
+    ["eight at 256x256", { seed: "uws-256-8-0", width: 256, height: 256, provinceTarget: 8 }],
+  ];
+  for (const [name, fixture] of fixtures) {
+    const staged = stagedUnderworld(fixture);
+    const planned = previewProvinceBudget(staged).planes[1]!.target;
+    const project = generateProject(staged);
+    const plane = project.planes[1]!;
+    assert.equal(plane.provinces.length, planned, `${name}: the planned province count is kept`);
+    assertBordersMatchLinks(plane, name);
+    assertStyxContract(plane, name);
+    assert.deepEqual(validateProject(project).filter((issue) => issue.planeId === plane.id
+      && /drawn border|draws \d+ border/.test(issue.message)), [], `${name}: no border warning`);
+  }
+});
+
+test("a small Underworld that supplies a cave start gives it four drawable exits", () => {
+  // On 1968d4b each of these starts kept three connections: its first hub
+  // candidate could not reach four drawable passages and no other was tried.
+  const fixtures: Array<[string, Fixture]> = [
+    ["nine at 256x256", { seed: "uwst-256-9-1", width: 256, height: 256, provinceTarget: 9, caveStarts: 1 }],
+    ["ten wrapped north-south", { seed: "uwst-256-10-1", width: 256, height: 256, provinceTarget: 10, wrapY: true, caveStarts: 1 }],
+    ["eight wrapped east-west", { seed: "uwst-1536-8-1", width: 1536, height: 1024, provinceTarget: 8, wrapX: true, caveStarts: 1 }],
+    ["nine at 1024x1024", { seed: "uwst-1024-9-1", width: 1024, height: 1024, provinceTarget: 9, wrapY: true, caveStarts: 1 }],
+  ];
+  for (const [name, fixture] of fixtures) {
+    const { project, plane } = generatedUnderworld(fixture);
+    const adjacency = adjacencyFor(plane, { traversableOnly: true });
+    const starts = plane.provinces.filter((province) => province.start);
+    assert.equal(starts.length, 1, `${name}: the Underworld supplies the cave start`);
+    for (const start of starts) assert.ok((adjacency.get(start.id)?.length ?? 0) >= 4, `${name}: #${start.index} has four exits`);
+    assert.deepEqual(validateProject(project).filter((issue) => issue.severity === "error").map((issue) => issue.message), [], name);
+    assertBordersMatchLinks(plane, name);
+    assertStyxContract(plane, name);
+  }
+});
+
 test("Underworld border-consistent generation is deterministic", () => {
   const fixture = { seed: "uw-border-determinism", width: 1024, height: 768, provinceTarget: 80 };
   const first = generatedUnderworld(fixture).plane, second = generatedUnderworld(fixture).plane;
   assert.deepEqual(second.edges, first.edges);
   assert.deepEqual(second.provinces, first.provinces);
+  // A small plane laid out again around its river is just as repeatable.
+  const small = { seed: "uws-2048-8-0", width: 2048, height: 1152, provinceTarget: 8 };
+  assert.deepEqual(generatedUnderworld(small).plane, generatedUnderworld(small).plane);
 });
 
 test("the sampled raster audit matches a full native reading and flags an authored crossing link", () => {
