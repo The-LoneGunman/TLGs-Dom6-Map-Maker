@@ -10,7 +10,7 @@ import {
   type AutosaveLockManager,
 } from "../src/autosave";
 import { createDefaultProject } from "../src/generator";
-import { MAX_IMPORTED_STRING_LENGTH, parseProject, serializeProject } from "../src/export";
+import { MAX_IMPORTED_GATE_ENDPOINTS, MAX_IMPORTED_STRING_LENGTH, parseProject, serializeProject } from "../src/export";
 
 class MemoryDriver implements AutosaveDriver {
   value: string | null;
@@ -260,6 +260,43 @@ test("an editor value beyond import limits cannot overwrite a recoverable autosa
   assert.equal(indexeddb.value, original);
   assert.equal(localstorage.value, original);
   assert.equal((await loadProjectAutosave(drivers(indexeddb, localstorage))).project?.description, parseProject(original).description);
+});
+
+test("an autosave beyond the combined import ceilings is refused like an import and stays recoverable", async () => {
+  const project = createDefaultProject("autosave-over-combined-limit");
+  const plane = project.planes[0]!;
+  // 65 gates of 64 endpoints: each gate is within its own limit, the total is not.
+  project.gates = Array.from({ length: MAX_IMPORTED_GATE_ENDPOINTS / 64 + 1 }, (_, gate) => ({
+    id: `gate-${gate + 1}`,
+    gateNumber: gate + 1,
+    endpoints: Array.from({ length: 64 }, (_, endpoint) => ({ planeId: plane.id, provinceId: plane.provinces[endpoint]!.id })),
+  }));
+  const raw = JSON.stringify(project);
+  const importError = (() => {
+    try {
+      parseProject(raw);
+    } catch (error) {
+      return error as Error;
+    }
+    throw new Error("The over-limit project unexpectedly parsed.");
+  })();
+  assert.match(importError.message, /at most 4096 gateway endpoints in total/);
+
+  const indexeddb = new MemoryDriver(raw);
+  const localstorage = new MemoryDriver();
+  const loaded = await loadProjectAutosave(drivers(indexeddb, localstorage));
+  assert.equal(loaded.project, undefined);
+  assert.equal(loaded.conflict?.reason, "unreadable-copy");
+  assert.deepEqual(loaded.recoveryCopies, [{ backend: "indexeddb", text: raw }]);
+  assert.deepEqual(loaded.errors.filter((entry) => entry.operation === "parse").map((entry) => entry.message), [importError.message]);
+
+  const automatic = await saveProjectAutosave(createDefaultProject("autosave-over-limit-fresh"), drivers(indexeddb, localstorage), { expectedRevision: loaded.revision! });
+  assert.equal(automatic.conflict?.reason, "unreadable-copy");
+  assert.equal(indexeddb.value, raw);
+
+  const saved = await saveProjectAutosave(project, drivers(new MemoryDriver(), new MemoryDriver()));
+  assert.equal(saved.backend, "none");
+  assert.equal(saved.errors[0]!.message, importError.message);
 });
 
 test("unreadable saved data requires explicit recovery before it can be replaced", async () => {

@@ -4,13 +4,16 @@ import type { MapProject } from "../src/domain";
 import {
   MAX_IMPORTED_DIRECTIVE_LENGTH,
   MAX_IMPORTED_EDGES_PER_PLANE,
+  MAX_IMPORTED_GATE_ENDPOINTS,
   MAX_IMPORTED_GATES,
+  MAX_IMPORTED_GUARDIAN_SQUADS,
   MAX_IMPORTED_ID_LENGTH,
   MAX_IMPORTED_PLANES,
   MAX_IMPORTED_PROVINCES_PER_PLANE,
   MAX_IMPORTED_STRING_LENGTH,
   MAX_PROJECT_IMPORT_BYTES,
   parseProject,
+  serializeProject,
 } from "../src/export";
 import { createDefaultProject } from "../src/generator";
 
@@ -86,6 +89,68 @@ test("project import bounds plane, province, edge, and gate collections", () => 
       ],
     }));
   })), /project\.gates must contain at most 2048 entries/);
+});
+
+/** `count` gates of `size` endpoints each, cycling over the first plane's provinces. */
+function gatesWithEndpoints(draft: MapProject, count: number, size: number): MapProject["gates"] {
+  const plane = draft.planes[0]!;
+  return Array.from({ length: count }, (_, gate) => ({
+    id: `gate-${gate + 1}`,
+    gateNumber: gate + 1,
+    endpoints: Array.from({ length: size }, (_, endpoint) => ({
+      planeId: plane.id,
+      provinceId: plane.provinces[(gate * size + endpoint) % plane.provinces.length]!.id,
+    })),
+  }));
+}
+
+/** Only `provinces` provinces keep guardians: 32 groups of 64 squads (2,048 squads) each. */
+function maximalGuardians(draft: MapProject, provinces: number, extraSquads = 0): void {
+  for (const plane of draft.planes) for (const province of plane.provinces) province.defenders = [];
+  const targets = draft.planes[0]!.provinces.slice(0, provinces + (extraSquads > 0 ? 1 : 0));
+  targets.forEach((province, provinceIndex) => {
+    const extra = provinceIndex === provinces;
+    province.defenders = Array.from({ length: extra ? 1 : 32 }, (_, group) => ({
+      commander: "Commander",
+      squads: Array.from({ length: extra ? extraSquads : 64 }, (_, squad) => ({ id: `squad-${group}-${squad}`, unit: "Unit", count: 1 })),
+    }));
+  });
+}
+
+test("project import bounds project-wide gateway endpoints and guardian squads", () => {
+  // Every individually permitted gate count still fits as two-endpoint gateways.
+  assert.equal(MAX_IMPORTED_GATE_ENDPOINTS, 2 * MAX_IMPORTED_GATES);
+  const pairs = parseProject(serializedMutation((draft) => { draft.gates = gatesWithEndpoints(draft, MAX_IMPORTED_GATES, 2); }));
+  assert.equal(pairs.gates.length, MAX_IMPORTED_GATES);
+  const wide = parseProject(serializedMutation((draft) => { draft.gates = gatesWithEndpoints(draft, MAX_IMPORTED_GATE_ENDPOINTS / 64, 64); }));
+  assert.equal(wide.gates.reduce((sum, gate) => sum + gate.endpoints.length, 0), MAX_IMPORTED_GATE_ENDPOINTS);
+
+  // 64 endpoints per gate and 2,048 gates are each allowed, but not together.
+  const overEndpoints = [
+    (draft: MapProject) => { draft.gates = gatesWithEndpoints(draft, MAX_IMPORTED_GATES, 64); },
+    (draft: MapProject) => {
+      draft.gates = gatesWithEndpoints(draft, MAX_IMPORTED_GATES, 2);
+      draft.gates[0]!.endpoints.push({ planeId: draft.planes[0]!.id, provinceId: draft.planes[0]!.provinces.at(-1)!.id });
+    },
+  ];
+  for (const mutation of overEndpoints) {
+    assert.throws(() => parseProject(serializedMutation(mutation)), /project\.gates must contain at most 4096 gateway endpoints in total/);
+  }
+
+  const squadsPerProvince = 32 * 64;
+  const fullProvinces = MAX_IMPORTED_GUARDIAN_SQUADS / squadsPerProvince;
+  const atLimit = parseProject(serializedMutation((draft) => maximalGuardians(draft, fullProvinces)));
+  assert.equal(atLimit.planes.flatMap((plane) => plane.provinces).reduce((sum, province) =>
+    sum + province.defenders.reduce((groups, group) => groups + group.squads.length, 0), 0), MAX_IMPORTED_GUARDIAN_SQUADS);
+  assert.throws(
+    () => parseProject(serializedMutation((draft) => maximalGuardians(draft, fullProvinces, 1))),
+    /Guardian groups across the project must contain at most 16384 squads in total/,
+  );
+
+  // Editor edits, autosave and project downloads share the same ceiling.
+  const draft = structuredClone(createDefaultProject("import-envelope-serialize"));
+  draft.gates = gatesWithEndpoints(draft, MAX_IMPORTED_GATES, 64);
+  assert.throws(() => serializeProject(draft), /at most 4096 gateway endpoints in total/);
 });
 
 test("project import bounds ordinary strings, directive blocks, and UTF-8 file size before JSON parsing", () => {

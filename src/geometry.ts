@@ -2171,10 +2171,89 @@ function buildCandidateBuckets(plane: Plane, columns: number, rows: number): num
         }
       }
       if (!found.size) plane.provinces.forEach((_, index) => found.add(index));
+      else completeCandidateBucket(plane, raw, columns, rows, x, y, found);
       buckets[y * columns + x] = [...found];
     }
   }
   return buckets;
+}
+
+/**
+ * The ring search above stops after a dozen candidates, which on clustered
+ * coordinates can omit the province that is actually nearest to part of the
+ * cell. Every point of the cell is at most `bound` (squared) from some found
+ * candidate, so its nearest province, and any province within nearestOwner's
+ * EPSILON tie of it, lies within that bound of the cell. Appending exactly
+ * those provinces keeps the found candidates' order first (and with it every
+ * tie-break) while making the list complete. Distances use nearestOwner's
+ * unscaled, optionally periodic metric; query points lie inside the closed
+ * cell because ownerAt clamps them into [0, 1] before choosing the bucket.
+ */
+function completeCandidateBucket(
+  plane: Plane,
+  raw: readonly (readonly number[])[],
+  columns: number,
+  rows: number,
+  x: number,
+  y: number,
+  found: Set<number>,
+): void {
+  const x0 = x / columns, x1 = (x + 1) / columns;
+  const y0 = y / rows, y1 = (y + 1) / rows;
+  let bound = Infinity;
+  for (const index of found) {
+    const province = plane.provinces[index]!;
+    const far = farthestAxisDistance(province.x, x0, x1, plane.wrapX) ** 2
+      + farthestAxisDistance(province.y, y0, y1, plane.wrapY) ** 2;
+    if (far < bound) bound = far;
+  }
+  const limit = bound + 4 * EPSILON;
+  // A cell more than `reach` cells away along an axis is already farther than
+  // the limit along that axis alone, so only this window can qualify.
+  const reach = Math.sqrt(limit);
+  const windowColumns = axisWindow(x, Math.floor(reach * columns) + 1, columns, plane.wrapX);
+  const windowRows = axisWindow(y, Math.floor(reach * rows) + 1, rows, plane.wrapY);
+  for (const by of windowRows) {
+    for (const bx of windowColumns) {
+      for (const index of raw[by * columns + bx]!) {
+        if (found.has(index)) continue;
+        const province = plane.provinces[index]!;
+        const near = nearestAxisDistance(province.x, x0, x1, plane.wrapX) ** 2
+          + nearestAxisDistance(province.y, y0, y1, plane.wrapY) ** 2;
+        if (near <= limit) found.add(index);
+      }
+    }
+  }
+}
+
+/** Distinct bucket indexes within `reach` of `center`, wrapping periodic axes. */
+function axisWindow(center: number, reach: number, count: number, wrap: boolean): number[] {
+  if (wrap && 2 * reach + 1 >= count) return Array.from({ length: count }, (_, index) => index);
+  const window: number[] = [];
+  for (let offset = -reach; offset <= reach; offset += 1) {
+    const index = wrap ? (center + offset + count) % count : center + offset;
+    if (index >= 0 && index < count) window.push(index);
+  }
+  return window;
+}
+
+/** Smallest nearestOwner axis distance from `value` to any point of [low, high]. */
+function nearestAxisDistance(value: number, low: number, high: number, wrap: boolean): number {
+  if (value >= low && value <= high) return 0;
+  const near = value < low ? low - value : value - high;
+  if (!wrap) return near;
+  const far = Math.max(Math.abs(value - low), Math.abs(value - high));
+  return Math.max(0, Math.min(near, 1 - far));
+}
+
+/** Largest nearestOwner axis distance from `value` to any point of [low, high]. */
+function farthestAxisDistance(value: number, low: number, high: number, wrap: boolean): number {
+  const far = Math.max(Math.abs(value - low), Math.abs(value - high));
+  if (!wrap) return far;
+  const near = value >= low && value <= high ? 0 : value < low ? low - value : value - high;
+  if (far <= 0.5) return far;
+  if (near >= 0.5) return 1 - near;
+  return 0.5;
 }
 
 function nearestOwner(x: number, y: number, candidates: number[], plane: Plane): number {
