@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -31,12 +31,12 @@ function staticGraph(entry: string): Set<string> {
       }
       if (!specifier?.startsWith(".")) continue;
       const base = path.resolve(path.dirname(file), specifier.replace(/\?.*$/, ""));
-      const resolved = [base, `${base}.ts`, `${base}.tsx`, path.join(base, "index.ts")].find((candidate) => existsSync(candidate) && !candidate.endsWith("/"));
+      const resolved = [base, `${base}.ts`, `${base}.tsx`, path.join(base, "index.ts")].find((candidate) => existsSync(candidate) && statSync(candidate).isFile());
       if (resolved) visit(resolved);
     }
   };
   visit(path.join(SRC, entry));
-  return new Set([...seen].map((file) => path.relative(SRC, file)));
+  return new Set([...seen].map((file) => path.relative(SRC, file).split(path.sep).join("/")));
 }
 
 test("the generation worker loads the catalog core without the unit table", () => {

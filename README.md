@@ -10,7 +10,7 @@ Projects, imported catalogs, and generated packages remain in your browser profi
 
 ## Versions and documentation
 
-Reviewed September 22, 2026, including the [seed and numeric-edit audit repairs](docs/AUDIT_REPAIRS_2026-09-22.md) and the [review round](docs/REVIEW_ROUND_2026-09-22.md) of defect repairs, generation fixes, usability and performance work. The package version remains **0.1.5**. **Unreleased development** means source features not yet in the hosted app or Windows v0.1.5 release. Merging source does not deploy or publish either edition.
+Reviewed September 23, 2026, including the [seed and numeric-edit audit repairs](docs/AUDIT_REPAIRS_2026-09-22.md), the [review round](docs/REVIEW_ROUND_2026-09-22.md), and the [island-start/Windows/Undo corrections](docs/AUDIT_ISLAND_REPAIRS_2026-09-23.md). The package version remains **0.1.5**. **Unreleased development** means source features not yet in the hosted app or Windows v0.1.5 release; the dated records identify the branch or commit tested. Merging source does not deploy or publish either edition.
 
 | Edition | Where to check the build | Availability |
 | --- | --- | --- |
@@ -32,7 +32,7 @@ The 0.1.5 source includes smoother underground shapes and relief, the pinned 6.3
 2. Run the setup and optionally select the Desktop shortcut.
 3. Open **Pantokrator Atlas** from the Start Menu and leave its terminal window open while using the application.
 
-The installer is per-user, needs no administrator access, and includes a private Node.js runtime plus the tested production build. It does not run npm, download dependencies, or need internet access after download. The launcher serves Atlas only on your computer, chooses a free port from 3000 through 3099, and opens the GUI automatically; launching again while Atlas is running reopens that copy at the same address (and autosave) instead of starting another server. Remove it later through **Windows Settings -> Apps -> Installed apps**.
+The installer is per-user, needs no administrator access, and includes a private Node.js runtime plus the tested production build. It does not run npm, download dependencies, or need internet access after download. The launcher serves Atlas only on your computer, chooses a free port from 3000 through 3099, and opens the GUI automatically. In published v0.1.5, launching again can start another server at a different address with separate browser autosave; reuse the existing browser tab instead. Unreleased source adds automatic reuse of a running Atlas. Remove it later through **Windows Settings -> Apps -> Installed apps**.
 
 The setup is not currently code-signed, so Windows may show an unknown-publisher warning. Download it only from this repository's release page; a `.sha256` file is supplied for verification. The portable `Pantokrator-Atlas-Windows.zip` is an alternative: it requires Node.js 22.13.0 or newer, extraction, and **Start Pantokrator Atlas.cmd**. GitHub's automatically generated source archives are not the portable release.
 

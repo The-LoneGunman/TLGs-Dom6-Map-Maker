@@ -1,20 +1,20 @@
 # Documentation index
 
-Reviewed September 22, 2026 against application source merged to `main` at **`464ff03`**. The package version remains **0.1.5**. **Unreleased development** identifies additions already on `main` but absent from the hosted/Windows release, not unmerged work. See the root [version table](../README.md#versions-and-documentation): source merges, hosted deployments and Windows releases are separate actions.
+Reviewed September 23, 2026 against merged `main` at **`59a72ff`** and the separately tested [island-start audit repair branch](AUDIT_ISLAND_REPAIRS_2026-09-23.md). The package version remains **0.1.5**. Dated records identify the branch or commit tested; unreleased source is not proof of publication. See the root [version table](../README.md#versions-and-documentation): source merges, hosted deployments and Windows releases are separate actions.
 
 ## Current source checkpoint
 
 | Edition / evidence | Verified state |
 | --- | --- |
-| Merged source | [`464ff03`, PR #9](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/pull/9), including earlier connected-region and illustrated-export merges. A current clone of `main` includes these features. |
-| Latest source tests | **1,010 passing tests** (14 build/integration + 996 TypeScript); type, lint, license, dependency and Linux/Windows server/launcher checks passed in [merged-main CI](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35738115402). |
+| Merged source | [`59a72ff`, PR #13](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/pull/13), including connected/illustrated realms, the review round, small-Underworld borders, launcher reuse and import caps. [Main CI](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35803359934) passed; its Windows job covered launcher/server checks, not the full TypeScript suite. |
+| Locally tested repair branch | **1,123 passing tests** (14 integration + 1,109 TypeScript), including the Windows bundle-test fix, numeric Undo and island-start regressions. See the [September 23 repair record](AUDIT_ISLAND_REPAIRS_2026-09-23.md) for branch, corpus results and remaining limits. This does not claim a merge or CI run. |
 | Hosted / Windows | Rechecked September 22: Site version 13 and Windows v0.1.5 still use `581b2b8`. Their [743-test release record](RELEASE_VERIFICATION_0.1.5.md) is separate from current source testing. |
 
 Post-release source includes automatic **Connected regions & passages** without the classic selector; procedural realm artwork and optional playable **Illustrated realms** export; distinct coastal, ocean, lake and realm contours; connected border rivers; 58% default biome cohesion with modest temperate variation; and cave-wall/mixed-terrain safety repairs. **Native scenery** remains the default. See the user guide for controls and the dated records below for evidence.
 
 Latest-generation shape changes require **Generate**; loading, exporting and content rerolls preserve saved natural-landform provenance. The earlier Cloud/Air renderer refinement can update compatible saved sky outlines without regenerating their graph. See [Province layout](USER_GUIDE.md#province-layout) for these distinct compatibility rules.
 
-Remaining acceptance includes an in-game visual pass for the latest sky/natural contours, connected rivers and mixed Sea + Cave Wall terrain, and multiplayer playtesting. Earlier illustrated artwork was loaded and visually checked in Dominions 6.37, but those observations predate these refinements. The historical 1,000-map quality corpus has not been rerun against this generator; see [implementation status](MULTIPLAYER_IMPLEMENTATION_STATUS.md#verification-and-remaining-work). Hosted deployment and a new installer also remain separate work.
+Remaining acceptance includes an in-game visual pass for the latest sky/natural contours, connected rivers and mixed Sea + Cave Wall terrain, and multiplayer playtesting. Earlier illustrated artwork was loaded and visually checked in Dominions 6.37, but those observations predate these refinements. The repair branch reran 1,000 structural cases: all 125 island cases passed, while three unchanged continental capacity limits remained export-blocked; see [implementation status](MULTIPLAYER_IMPLEMENTATION_STATUS.md#verification-and-remaining-work). Hosted deployment and a new installer also remain separate work.
 
 ## Current references
 
@@ -34,6 +34,7 @@ These records preserve the conditions and evidence at the stated revision/date. 
 
 | Record | Role |
 | --- | --- |
+| [September 23 audit repairs](AUDIT_ISLAND_REPAIRS_2026-09-23.md) | Island-start-aware generation, Windows test portability, single-step numeric Undo, accurate installer instructions, and local 1,000-map verification. |
 | [September 22 review round](REVIEW_ROUND_2026-09-22.md) | Unreleased defect repairs, natural-water / authored-start / budget / strategic-river / Underworld-border generation fixes, the usability pass and measured performance and memory changes (PR #12). |
 | [September 22 natural landforms](NATURAL_LANDFORMS_2026-09-22.md) | Unreleased shared province curves, natural ocean/basin layouts, realm-specific contours and saved-map compatibility. |
 | [September 22 connected border rivers](CONNECTED_BORDER_RIVERS_2026-09-22.md) | Unreleased continuous river routing, safe bridge crossings, geographic constraints and verification evidence. |

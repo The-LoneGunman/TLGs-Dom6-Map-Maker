@@ -31,5 +31,23 @@ test("typing in one field records one Undo step; other commits record their own"
   }
   // Three keystrokes, then Generate, then a new name session, then a seed session.
   assert.deepEqual(recorded,[true,false,false,true,true,true,false]);
-  assert.match(source,/onBlur=\{\(event\) => \{ if \(event\.target === textEditSessionRef\.current\) textEditSessionRef\.current = undefined; \}\}/);
+  assert.match(source,/onBlurCapture=\{\(event\) => \{ textChangeTargetRef\.current = isTextEntryTarget\(event\.target\) \? event\.target : undefined; \}\}/);
+  assert.match(source,/onBlur=\{\(event\) => \{\s*textChangeTargetRef\.current = undefined;\s*if \(event\.target === textEditSessionRef\.current\) textEditSessionRef\.current = undefined;/);
+});
+
+test("a numeric blur commit joins its typing session before the session ends",async()=>{
+  const {textEditHistoryStep}=await import("../src/uiWorkflow");
+  const field={type:"number"}; let session:typeof field|undefined;
+  const history:number[]=[]; let value=6;
+  const commit=(next:number,target:typeof field|undefined)=>{
+    const step=textEditHistoryStep(session,target);session=step.session;
+    if(step.record)history.push(value);value=next;
+  };
+  commit(12,field); // The intermediate valid value commits during change.
+  // 120 is an invalid local draft. Blur capture restores the same field as
+  // the event target before BoundedNumberInput commits its clamped value.
+  commit(32,field);
+  session=undefined; // Bubble-phase blur ends the session.
+  assert.deepEqual(history,[6]);assert.equal(value,32);
+  commit(8,field);assert.deepEqual(history,[6,32],"a later focus session is independent");
 });

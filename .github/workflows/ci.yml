@@ -67,3 +67,5 @@ jobs:
           call "Start Pantokrator Atlas.cmd" --smoke-test --no-browser
           if errorlevel 1 exit /b %errorlevel%
           node scripts/test-local-server.mjs
+      - name: Check Windows bundle boundaries and editor history
+        run: node --import tsx --test tests/bundle-boundaries.test.ts tests/history-regression.test.ts tests/editor-inputs.test.ts

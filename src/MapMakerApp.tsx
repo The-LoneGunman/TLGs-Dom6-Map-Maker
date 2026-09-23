@@ -1412,7 +1412,11 @@ export function MapMakerApp() {
       inert={!hydrated}
       onChangeCapture={(event) => { textChangeTargetRef.current = isTextEntryTarget(event.target) ? event.target : undefined; }}
       onChange={() => { textChangeTargetRef.current = undefined; }}
-      onBlur={(event) => { if (event.target === textEditSessionRef.current) textEditSessionRef.current = undefined; }}
+      onBlurCapture={(event) => { textChangeTargetRef.current = isTextEntryTarget(event.target) ? event.target : undefined; }}
+      onBlur={(event) => {
+        textChangeTargetRef.current = undefined;
+        if (event.target === textEditSessionRef.current) textEditSessionRef.current = undefined;
+      }}
     >
       <header className="topbar">
         <div className="brand-block">

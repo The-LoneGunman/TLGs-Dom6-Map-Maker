@@ -47,7 +47,9 @@ For the unreleased features already on `main`, follow [Develop from source](../R
 3. Open **Pantokrator Atlas** from the Start Menu.
 4. Keep the launcher terminal open while using Atlas. Press **Ctrl+C** there, or close it, when finished.
 
-The installer includes the tested application and a private Node.js runtime. It does not modify the system Node.js installation, run npm, or download dependencies. The launcher runs only on your computer and opens Atlas when ready at `http://127.0.0.1:<port>/`, choosing a free port from 3000 through 3099. Launching again while Atlas is already running (from either the installer or a portable copy) opens the running copy at its existing address instead of starting a second server, so the same browser autosave remains in use; the extra launcher window then closes by itself. If the running copy is a different version, the launcher says so; close that copy's launcher window first to start this one.
+The installer includes the tested application and a private Node.js runtime. It does not modify the system Node.js installation, run npm, or download dependencies. The launcher runs only on your computer and opens Atlas when ready at `http://127.0.0.1:<port>/`, choosing a free port from 3000 through 3099. In published v0.1.5, a second launch can start another server at a different address with a separate autosave. Reuse the existing browser tab; if a second tab looks empty, return to the original address. Close the old launcher before updating.
+
+**Unreleased source behavior:** launching again reopens an already running Atlas instead of starting a second server. If its package version differs, the launcher reports that difference. Close the running launcher first to use the updated source; different source commits can share the same package version.
 
 The setup is not currently code-signed, so Windows may show an unknown-publisher warning. Download it only from the project's GitHub release page. To check integrity, download its matching `Pantokrator-Atlas-Setup-x64.exe.sha256`, open PowerShell in that download folder, and run:
 
@@ -60,7 +62,7 @@ The hash values must match, ignoring letter case. Do not run the installer if th
 
 For a portable copy instead, download `Pantokrator-Atlas-Windows.zip`, install [Node.js 22.13.0 or newer](https://nodejs.org/en/download), extract the archive to a writable folder, and run **Start Pantokrator Atlas.cmd** there. Never run the launcher inside the ZIP or from the Steam game directory. GitHub's **Source code** archives are not this prepared portable release.
 
-Storage follows the browser profile and exact origin, not the application folder. Installer and portable copies share autosave when opened at the same address; different ports, `localhost`, `127.0.0.1`, and the hosted site use separate storage. A launch reuses a running Atlas rather than moving to a new port, but a port can still change between sessions if another program occupies the previous one. Use **Editable project JSON** to move projects between them.
+Storage follows the browser profile and exact origin, not the application folder. Installer and portable copies share autosave when opened at the same address; different ports, `localhost`, `127.0.0.1`, and the hosted site use separate storage. Running-instance reuse is currently source-only, and even with it the port can change between sessions if another program occupies the previous one. Use **Editable project JSON** to move projects between them.
 
 ### Updating a local copy
 
@@ -256,7 +258,9 @@ This is the requested water share on water-capable generated realms. Generation 
 
 Island Chains needs enough sea to look and play like islands. If Water is below 48%, generation raises the effective setting to 48% and reports the change.
 
-Narrow islands may have too few inland **Land** candidates with enough safe exits and spacing. Prefer more **Coastal** starts, increase provinces per player, or choose a continental layout if validation reports missing starts. Island generation does not silently fill oceans or relax capital-safety rules to satisfy an impossible start mix.
+**Unreleased island-start repair:** generation first checks whether the islands can fit the requested inland **Land**, **Coastal**, and **Water** starts. If not, it tries wider island interiors reserved around safe capital locations. The repair keeps the exact water count, one connected ocean, at least three separated islands, and the minimum capital spacing; already-feasible island geography stays unchanged. It applies only when generating, not when opening a saved map.
+
+Some combinations still cannot fit. The generator warns rather than reducing water, changing the requested start categories, or weakening export validation. Prefer more **Coastal** starts, increase provinces per player, or choose a continental layout if the requested inland start count exceeds the available dry land.
 
 On current main, explicit ocean presets keep their water layout during start placement. If a coast-heavy map cannot fit the requested inland capitals safely, review the spacing/category notices, allocate more Coastal or Water starts, or increase provinces per player. The generator no longer scatters the chosen ocean just to accommodate those starts.
 
