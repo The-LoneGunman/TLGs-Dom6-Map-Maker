@@ -47,7 +47,7 @@ For the unreleased features already on `main`, follow [Develop from source](../R
 3. Open **Pantokrator Atlas** from the Start Menu.
 4. Keep the launcher terminal open while using Atlas. Press **Ctrl+C** there, or close it, when finished.
 
-The installer includes the tested application and a private Node.js runtime. It does not modify the system Node.js installation, run npm, or download dependencies. The launcher runs only on your computer and opens Atlas when ready at `http://127.0.0.1:<port>/`, choosing a free port from 3000 through 3099.
+The installer includes the tested application and a private Node.js runtime. It does not modify the system Node.js installation, run npm, or download dependencies. The launcher runs only on your computer and opens Atlas when ready at `http://127.0.0.1:<port>/`, choosing a free port from 3000 through 3099. Launching again while Atlas is already running (from either the installer or a portable copy) opens the running copy at its existing address instead of starting a second server, so the same browser autosave remains in use; the extra launcher window then closes by itself. If the running copy is a different version, the launcher says so; close that copy's launcher window first to start this one.
 
 The setup is not currently code-signed, so Windows may show an unknown-publisher warning. Download it only from the project's GitHub release page. To check integrity, download its matching `Pantokrator-Atlas-Setup-x64.exe.sha256`, open PowerShell in that download folder, and run:
 
@@ -60,7 +60,7 @@ The hash values must match, ignoring letter case. Do not run the installer if th
 
 For a portable copy instead, download `Pantokrator-Atlas-Windows.zip`, install [Node.js 22.13.0 or newer](https://nodejs.org/en/download), extract the archive to a writable folder, and run **Start Pantokrator Atlas.cmd** there. Never run the launcher inside the ZIP or from the Steam game directory. GitHub's **Source code** archives are not this prepared portable release.
 
-Storage follows the browser profile and exact origin, not the application folder. Installer and portable copies share autosave when opened at the same address; different ports, `localhost`, `127.0.0.1`, and the hosted site use separate storage. Use **Editable project JSON** to move projects between them.
+Storage follows the browser profile and exact origin, not the application folder. Installer and portable copies share autosave when opened at the same address; different ports, `localhost`, `127.0.0.1`, and the hosted site use separate storage. A launch reuses a running Atlas rather than moving to a new port, but a port can still change between sessions if another program occupies the previous one. Use **Editable project JSON** to move projects between them.
 
 ### Updating a local copy
 
@@ -1051,7 +1051,7 @@ Projects saved by current source can contain optional analysis requirements, hos
 
 Choose **Install / export -> Editable project JSON** for a portable backup named `<map-name>.atlas.json`. Host packages and direct installs also include `atlas_project.json`; player ZIPs deliberately do not.
 
-Choose **File -> Open project…** and select either file to reopen it. **File -> Download project JSON** saves the same `<map-name>.atlas.json` backup from the header. The importer accepts up to 16 MiB of UTF-8 Atlas schema-v1 JSON with at most 8 planes and 800 provinces per plane. It does not open ZIP, `.map`, `.d6m`, custom catalog JSON, or arbitrary JSON.
+Choose **File -> Open project…** and select either file to reopen it. **File -> Download project JSON** saves the same `<map-name>.atlas.json` backup from the header. The importer accepts up to 16 MiB of UTF-8 Atlas schema-v1 JSON with at most 8 planes and 800 provinces per plane, 4,096 gateway endpoints in total, and 16,384 guardian squads in total. The same limits apply to device autosave and to editor changes, so a larger project is refused with the same message instead of being saved. It does not open ZIP, `.map`, `.d6m`, custom catalog JSON, or arbitrary JSON.
 
 After choosing **Add plane to plan**, the new plane has no provinces until generation. That planned state round-trips through autosave and project JSON, but it remains a playable-export error until you configure the plan and Generate.
 
@@ -1163,7 +1163,7 @@ Validation, replacement-confirmation, and export dialogs trap focus. Escape clos
 | Windows shows Unknown publisher | The setup is not currently code-signed. Confirm it came from this project's GitHub release and verify the matching `.sha256` file before proceeding. |
 | Portable copy says Node.js is required | Install Node.js 22.13.0 or newer from the official link opened by the launcher, then run it again. The installed edition bundles its own private runtime. |
 | Launcher startup fails | For the installer edition, reinstall the latest setup. For a portable copy, keep the extracted release in a writable folder and do not run inside the ZIP. If it still fails, include the complete terminal error in a [GitHub issue](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/issues). |
-| GUI opens on a different local port and the autosave looks empty | Use the same browser profile and exact Atlas address as before. If Atlas is still running there, reopen that instance and export **Editable project JSON** for import at the new address. An old port may now serve another application; do not stop unrelated programs to recover Atlas. If the previous Atlas address is unavailable, use a JSON backup. |
+| GUI opens on a different local port and the autosave looks empty | A second launch now reopens a running Atlas at its existing address, so this happens only when the earlier Atlas was closed and its port is now used by another program (or for a different browser profile or address such as `localhost`). Use the same browser profile and exact Atlas address as before. If an older Atlas is still running there, reopen that instance and export **Editable project JSON** for import at the new address. An old port may now serve another application; do not stop unrelated programs to recover Atlas. If the previous Atlas address is unavailable, use a JSON backup. |
 | Generate is disabled | The five start categories must total Players, each category needs a compatible plane that permits generated starts, and configured cave nations cannot exceed Cave starts. Read the generation-plan summary and correct the allocation, nation list, or plane policy. |
 | Locked layout/start/field conflict | Unlock explicitly in Iterate or use a content-only reroll. Different world seeds change province IDs; field-locked provinces cannot be silently replaced. A rejected edit leaves the current atlas intact; bounded numeric controls restore the accepted value rather than displaying a rejected draft. |
 | Batch preview cannot apply | Review newly introduced export blockers, locked/protected skipped provinces, or a zero-change result. Change the operation/selection; existing export errors also still need repair. |
@@ -1204,7 +1204,7 @@ Validation, replacement-confirmation, and export dialogs trap focus. Escape clos
 | Autosave unavailable / storage full | Download Editable project JSON immediately. |
 | Latest edit disappeared after reload | Reload may have occurred while **Saving changes** was visible. Use **Save now**, wait for the saved status, and keep project JSON backups. |
 | Planned plane is empty after reopen | Expected: a staged plane round-trips in autosave/JSON but remains a playable-export error until you configure it and Generate. |
-| JSON will not open | Use a schema-v1 Atlas `.atlas.json` or package `atlas_project.json` within the 16 MiB limit, not a ZIP/map/D6M/catalog or autosave-recovery file. |
+| JSON will not open | Use a schema-v1 Atlas `.atlas.json` or package `atlas_project.json` within the 16 MiB limit and the size limits the error names (planes, provinces, gateway endpoints, guardian squads), not a ZIP/map/D6M/catalog or autosave-recovery file. |
 | Filename changed | Export normalized it. Use the folder/file stem shown in the package summary. |
 | Unknown catalog ID | Enable matching custom content. Catalog metadata does not install a mod. |
 | Skybox/battle-map asset warning | Copy referenced `.tga`, `.rgb`, or `.d3m` files beside the map files. |

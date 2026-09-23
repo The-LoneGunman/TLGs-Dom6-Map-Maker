@@ -22,6 +22,18 @@ export const MAX_IMPORTED_GATES = 2_048;
 export const MAX_IMPORTED_ID_LENGTH = 128;
 export const MAX_IMPORTED_STRING_LENGTH = 4_096;
 export const MAX_IMPORTED_DIRECTIVE_LENGTH = 256 * 1024;
+/**
+ * Project-wide totals. Each gate and guardian group is bounded on its own, but
+ * those bounds multiply: 2,048 gates of 64 endpoints (131,072 endpoints whose
+ * pairwise links validation and start analysis visit) take seconds per check,
+ * and 32 groups of 64 squads on many provinces reach hundreds of thousands of
+ * squads, each able to raise its own validation issue. The generator's largest
+ * 8 x 800-province atlas uses 168 endpoints and about 2,500 squads; these
+ * ceilings leave ample room for manual editing, and 4,096 endpoints still
+ * allow MAX_IMPORTED_GATES two-endpoint gateways.
+ */
+export const MAX_IMPORTED_GATE_ENDPOINTS = 4_096;
+export const MAX_IMPORTED_GUARDIAN_SQUADS = 16_384;
 
 const MAX_GENERIC_ARRAY_ENTRIES = 10_000;
 const MAX_PLAYER_ENTRIES = 512;
@@ -224,13 +236,15 @@ function assertProjectShape(project: Record<string, unknown>): void {
 
   const planes = boundedArrayAt(project.planes, "project.planes", MAX_IMPORTED_PLANES);
   if (planes.length === 0) throw new Error("project.planes must contain at least one plane.");
-  planes.forEach((value, index) => assertPlane(recordAt(value, `project.planes[${index}]`), index));
+  const totals: ProjectTotals = { guardianSquads: 0 };
+  planes.forEach((value, index) => assertPlane(recordAt(value, `project.planes[${index}]`), index, totals));
   const regions=(project.authoring as {regions?: {planeId:string;provinceIds:string[]}[]}|undefined)?.regions;
   for(const r of regions??[]){
     const plane=planes.find(v=>(v as Record<string,unknown>).id===r.planeId) as {provinces:{id:string}[]}|undefined;
     if(!plane||r.provinceIds.some(id=>!plane.provinces.some(p=>p.id===id)))throw new Error("An authored region references a missing plane or province.");
   }
 
+  let gateEndpoints = 0;
   boundedArrayAt(project.gates, "project.gates", MAX_IMPORTED_GATES).forEach((value, index) => {
     const gate = recordAt(value, `project.gates[${index}]`);
     assertKnownFields(gate, `project.gates[${index}]`, GATE_FIELDS);
@@ -240,6 +254,10 @@ function assertProjectShape(project: Record<string, unknown>): void {
     optionalBooleanAt(gate.adjacentStartFallback, `project.gates[${index}].adjacentStartFallback`);
     const endpoints = boundedArrayAt(gate.endpoints, `project.gates[${index}].endpoints`, MAX_GATE_ENDPOINTS);
     if (endpoints.length < 2) throw new Error(`project.gates[${index}].endpoints must contain at least two endpoints.`);
+    gateEndpoints += endpoints.length;
+    if (gateEndpoints > MAX_IMPORTED_GATE_ENDPOINTS) {
+      throw new Error(`project.gates must contain at most ${MAX_IMPORTED_GATE_ENDPOINTS} gateway endpoints in total.`);
+    }
     endpoints.forEach((endpointValue, endpointIndex) => {
       const endpoint = recordAt(endpointValue, `project.gates[${index}].endpoints[${endpointIndex}]`);
       assertKnownFields(endpoint, `project.gates[${index}].endpoints[${endpointIndex}]`, GATE_ENDPOINT_FIELDS);
@@ -291,7 +309,12 @@ function assertGenerationSettings(settings: Record<string, unknown>): void {
   enumAt(settings.resolution, RESOLUTIONS, "project.settings.resolution");
 }
 
-function assertPlane(plane: Record<string, unknown>, index: number): void {
+/** Running project-wide counts checked against the combined import ceilings. */
+interface ProjectTotals {
+  guardianSquads: number;
+}
+
+function assertPlane(plane: Record<string, unknown>, index: number, totals: ProjectTotals): void {
   const path = `project.planes[${index}]`;
   assertKnownFields(plane, path, PLANE_FIELDS);
   idAt(plane.id, `${path}.id`);
@@ -315,7 +338,7 @@ function assertPlane(plane: Record<string, unknown>, index: number): void {
   optionalStringAt(plane.mapTextColor, `${path}.mapTextColor`);
   optionalStringAt(plane.mapDominionColor, `${path}.mapDominionColor`);
   const provinces = boundedArrayAt(plane.provinces, `${path}.provinces`, MAX_IMPORTED_PROVINCES_PER_PLANE);
-  provinces.forEach((value, provinceIndex) => assertProvince(recordAt(value, `${path}.provinces[${provinceIndex}]`), `${path}.provinces[${provinceIndex}]`));
+  provinces.forEach((value, provinceIndex) => assertProvince(recordAt(value, `${path}.provinces[${provinceIndex}]`), `${path}.provinces[${provinceIndex}]`, totals));
   provinces.forEach((value, provinceIndex) => {
     const province = value as Record<string, unknown>;
     if (province.index !== provinceIndex + 1) {
@@ -337,7 +360,7 @@ function assertPlane(plane: Record<string, unknown>, index: number): void {
   directiveAt(plane.rawDirectives, `${path}.rawDirectives`);
 }
 
-function assertProvince(province: Record<string, unknown>, path: string): void {
+function assertProvince(province: Record<string, unknown>, path: string, totals: ProjectTotals): void {
   assertKnownFields(province, path, PROVINCE_FIELDS);
   idAt(province.id, `${path}.id`);
   numberAt(province.index, `${path}.index`);
@@ -379,7 +402,7 @@ function assertProvince(province: Record<string, unknown>, path: string): void {
   booleanAt(province.lab, `${path}.lab`);
   optionalNumberAt(province.provinceDefense, `${path}.provinceDefense`);
   boundedArrayAt(province.defenders, `${path}.defenders`, MAX_DEFENSE_GROUPS_PER_PROVINCE).forEach((value, defenderIndex) => {
-    assertDefense(recordAt(value, `${path}.defenders[${defenderIndex}]`), `${path}.defenders[${defenderIndex}]`);
+    assertDefense(recordAt(value, `${path}.defenders[${defenderIndex}]`), `${path}.defenders[${defenderIndex}]`, totals);
   });
   const battle = recordAt(province.battle, `${path}.battle`);
   assertKnownFields(battle, `${path}.battle`, BATTLE_FIELDS);
@@ -389,14 +412,19 @@ function assertProvince(province: Record<string, unknown>, path: string): void {
   directiveAt(province.rawDirectives, `${path}.rawDirectives`);
 }
 
-function assertDefense(defense: Record<string, unknown>, path: string): void {
+function assertDefense(defense: Record<string, unknown>, path: string, totals: ProjectTotals): void {
   assertKnownFields(defense, path, DEFENSE_FIELDS);
   stringAt(defense.commander, `${path}.commander`);
   optionalBooleanAt(defense.clearMagic, `${path}.clearMagic`);
   optionalStringAt(defense.commanderName, `${path}.commanderName`);
   optionalStringAt(defense.bodyguard, `${path}.bodyguard`);
   optionalNumberAt(defense.bodyguardCount, `${path}.bodyguardCount`);
-  boundedArrayAt(defense.squads, `${path}.squads`, MAX_SQUADS_PER_DEFENSE_GROUP).forEach((value, squadIndex) => {
+  const squads = boundedArrayAt(defense.squads, `${path}.squads`, MAX_SQUADS_PER_DEFENSE_GROUP);
+  totals.guardianSquads += squads.length;
+  if (totals.guardianSquads > MAX_IMPORTED_GUARDIAN_SQUADS) {
+    throw new Error(`Guardian groups across the project must contain at most ${MAX_IMPORTED_GUARDIAN_SQUADS} squads in total.`);
+  }
+  squads.forEach((value, squadIndex) => {
     const squadPath = `${path}.squads[${squadIndex}]`;
     const squad = recordAt(value, squadPath);
     assertKnownFields(squad, squadPath, DEFENSE_SQUAD_FIELDS);

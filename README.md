@@ -32,7 +32,7 @@ The 0.1.5 source includes smoother underground shapes and relief, the pinned 6.3
 2. Run the setup and optionally select the Desktop shortcut.
 3. Open **Pantokrator Atlas** from the Start Menu and leave its terminal window open while using the application.
 
-The installer is per-user, needs no administrator access, and includes a private Node.js runtime plus the tested production build. It does not run npm, download dependencies, or need internet access after download. The launcher serves Atlas only on your computer, chooses a free port from 3000 through 3099, and opens the GUI automatically. Remove it later through **Windows Settings -> Apps -> Installed apps**.
+The installer is per-user, needs no administrator access, and includes a private Node.js runtime plus the tested production build. It does not run npm, download dependencies, or need internet access after download. The launcher serves Atlas only on your computer, chooses a free port from 3000 through 3099, and opens the GUI automatically; launching again while Atlas is running reopens that copy at the same address (and autosave) instead of starting another server. Remove it later through **Windows Settings -> Apps -> Installed apps**.
 
 The setup is not currently code-signed, so Windows may show an unknown-publisher warning. Download it only from this repository's release page; a `.sha256` file is supplied for verification. The portable `Pantokrator-Atlas-Windows.zip` is an alternative: it requires Node.js 22.13.0 or newer, extraction, and **Start Pantokrator Atlas.cmd**. GitHub's automatically generated source archives are not the portable release.
 
