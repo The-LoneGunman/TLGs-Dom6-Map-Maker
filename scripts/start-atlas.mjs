@@ -164,7 +164,12 @@ async function prepareBuild() {
 }
 
 async function launcherVersion() {
-  return JSON.parse(await readFile(path.join(projectRoot, "package.json"), "utf8")).version;
+  // Same fallback as the local server's identity, so both sides agree.
+  try {
+    return JSON.parse(await readFile(path.join(projectRoot, "package.json"), "utf8")).version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
 }
 
 /**

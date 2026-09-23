@@ -34,6 +34,7 @@ async function createFixture() {
   ]) {
     await writeFixture(project, relativePath);
   }
+  await writeFixture(project, "package.json", `${JSON.stringify({ name: "pantokrator-atlas", version: "9.8.7", type: "module" })}\n`);
   await writeFixture(project, "dist/.pantokrator-release-ready", "abc123\n");
   await writeFixture(nodeRoot, "node.exe", "portable node");
   await writeFixture(nodeRoot, "LICENSE", "node license");
@@ -87,7 +88,10 @@ test("installer payload contains only runtime, documentation, and required licen
       await readFile(path.join(fixture.output, "licenses", "dom6-catalog", "NOTICE.md"), "utf8"),
       "src/catalog/data/NOTICE.md",
     );
-    assert.equal(JSON.parse(await readFile(path.join(fixture.output, "package.json"), "utf8")).type, "module");
+    const payloadPackage = JSON.parse(await readFile(path.join(fixture.output, "package.json"), "utf8"));
+    assert.equal(payloadPackage.type, "module");
+    // The launcher's running-instance check compares this with the server's identity.
+    assert.equal(payloadPackage.version, "9.8.7");
     await assert.rejects(readFile(path.join(fixture.output, "package-lock.json"), "utf8"));
   } finally {
     await rm(fixture.root, { recursive: true, force: true });
