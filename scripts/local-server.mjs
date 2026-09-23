@@ -1,5 +1,5 @@
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -9,6 +9,47 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDirectory, "..");
 const clientRoot = path.join(projectRoot, "dist", "client");
 const workerEntry = path.join(projectRoot, "dist", "server", "index.js");
+
+/**
+ * A fixed, render-free identity the launcher probes to find an Atlas server
+ * that is already running, so a second launch reuses its address (and with
+ * it the browser's autosave) instead of starting another server.
+ */
+export const ATLAS_IDENTITY_PATH = "/__pantokrator-atlas/identity";
+export const ATLAS_IDENTITY_APPLICATION = "pantokrator-atlas";
+
+export function atlasIdentity(version) {
+  return { application: ATLAS_IDENTITY_APPLICATION, name: "Pantokrator Atlas", version: String(version ?? "unknown") };
+}
+
+export function isAtlasIdentity(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value)
+    && value.application === ATLAS_IDENTITY_APPLICATION
+    && typeof value.version === "string";
+}
+
+/** GET/HEAD only; no CORS headers, so other web pages cannot read it. */
+export function identityResponse(method, version) {
+  if (method !== "GET" && method !== "HEAD") {
+    return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
+  }
+  const body = JSON.stringify(atlasIdentity(version));
+  const headers = new Headers({
+    "Cache-Control": "no-store",
+    "Content-Length": String(Buffer.byteLength(body)),
+    "Content-Type": "application/json; charset=utf-8",
+    "X-Content-Type-Options": "nosniff",
+  });
+  return new Response(method === "HEAD" ? null : body, { status: 200, headers });
+}
+
+async function packageVersion() {
+  try {
+    return JSON.parse(await readFile(path.join(projectRoot, "package.json"), "utf8")).version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
+}
 
 const contentTypes = new Map([
   [".avif", "image/avif"],
@@ -67,6 +108,30 @@ function assetPathForUrl(url) {
   return absolutePath;
 }
 
+/** Strong validator: byte size plus nanosecond modification time. */
+export function assetEntityTag(details) {
+  return `"${BigInt(details.size).toString(16)}-${BigInt(details.mtimeNs).toString(16)}"`;
+}
+
+/**
+ * RFC 9110 conditional GET/HEAD: If-None-Match (weak comparison, "*" matches
+ * any current file) takes precedence; If-Modified-Since is consulted only
+ * without it and compares whole seconds, the resolution of Last-Modified.
+ */
+export function isNotModified(method, requestHeaders, entityTag, modifiedMs) {
+  if (method !== "GET" && method !== "HEAD") return false;
+  const ifNoneMatch = requestHeaders.get("if-none-match");
+  if (ifNoneMatch !== null) {
+    const opaque = entityTag.replace(/^W\//, "");
+    return (ifNoneMatch.match(/\*|(?:W\/)?"[^"]*"/g) ?? [])
+      .some((candidate) => candidate === "*" || candidate.replace(/^W\//, "") === opaque);
+  }
+  const ifModifiedSince = requestHeaders.get("if-modified-since");
+  if (ifModifiedSince === null) return false;
+  const since = Date.parse(ifModifiedSince);
+  return Number.isFinite(since) && Math.floor(modifiedMs / 1000) * 1000 <= since;
+}
+
 async function assetResponse(request) {
   const url = new URL(request.url);
   const absolutePath = assetPathForUrl(url);
@@ -74,22 +139,28 @@ async function assetResponse(request) {
 
   let details;
   try {
-    details = await stat(absolutePath);
+    details = await stat(absolutePath, { bigint: true });
   } catch {
     return new Response("Not found", { status: 404 });
   }
   if (!details.isFile()) return new Response("Not found", { status: 404 });
 
+  const modifiedMs = Number(details.mtimeMs);
+  const entityTag = assetEntityTag(details);
+  // Hashed build assets never change under a URL. Other public files (map
+  // art, icons, manifest) keep no-cache, so browsers revalidate each load and
+  // receive 304 without a body while the file is unchanged.
   const headers = new Headers({
-    "Content-Length": String(details.size),
-    "Content-Type": contentTypes.get(path.extname(absolutePath).toLowerCase()) ?? "application/octet-stream",
+    "Cache-Control": url.pathname.startsWith("/_next/static/") ? "public, max-age=31536000, immutable" : "no-cache",
+    ETag: entityTag,
+    "Last-Modified": new Date(modifiedMs).toUTCString(),
     "X-Content-Type-Options": "nosniff",
   });
-  if (url.pathname.startsWith("/_next/static/")) {
-    headers.set("Cache-Control", "public, max-age=31536000, immutable");
-  } else {
-    headers.set("Cache-Control", "no-cache");
+  if (isNotModified(request.method, request.headers, entityTag, modifiedMs)) {
+    return new Response(null, { status: 304, headers });
   }
+  headers.set("Content-Length", String(details.size));
+  headers.set("Content-Type", contentTypes.get(path.extname(absolutePath).toLowerCase()) ?? "application/octet-stream");
 
   if (request.method === "HEAD") return new Response(null, { status: 200, headers });
   return new Response(Readable.toWeb(createReadStream(absolutePath)), { status: 200, headers });
@@ -166,12 +237,18 @@ export async function startLocalServer({ host = "127.0.0.1", port = 3000 } = {})
     },
   };
   const environment = { ASSETS: { fetch: assetResponse } };
+  const version = await packageVersion();
 
   const server = http.createServer(async (incoming, outgoing) => {
     try {
       const request = webRequestFromNode(incoming, host, port);
-      let response = await assetResponse(request);
-      if (response.status === 404) response = await worker.fetch(request, environment, executionContext);
+      let response;
+      if (new URL(request.url).pathname === ATLAS_IDENTITY_PATH) {
+        response = identityResponse(request.method, version);
+      } else {
+        response = await assetResponse(request);
+        if (response.status === 404) response = await worker.fetch(request, environment, executionContext);
+      }
       await sendWebResponse(response, outgoing);
     } catch (error) {
       console.error("Local request failed:", error);

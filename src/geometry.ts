@@ -801,16 +801,12 @@ export interface SparsePassagePlanner {
   /**
    * Contacts a straight explicit bridge creates when it crosses other shapes,
    * as bridge endpoint plus touched owner. Undefined when the bridge would cut
-   * the shared frontier of another link, or cover another province's centre
-   * unless `coverCentres` accepts that (the covered province then touches both
-   * halves, and its contacts are marked `covered`).
+   * the shared frontier of another link or cover another province's centre:
+   * a covered centre strands that province's capital pixel inside the
+   * crossing, and which halves its split chamber then meets depends on the
+   * chamber's final size.
    */
-  bridgeContacts(
-    a: string,
-    b: string,
-    passages: Iterable<SparsePassage>,
-    options?: { coverCentres?: boolean },
-  ): Array<{ endpoint: string; owner: string; covered?: boolean }> | undefined;
+  bridgeContacts(a: string, b: string, passages: Iterable<SparsePassage>): Array<{ endpoint: string; owner: string }> | undefined;
   /**
    * Whether a ford from a bridge endpoint keeps its own contact with that
    * endpoint: its shared frontier lies outside the straight bridge, or it
@@ -995,31 +991,20 @@ export function createSparsePassagePlanner(plane: Plane, water?: (provinceId: st
       // neighbour; only the two far halves could meet as an unlinked pair.
       return segmentGap(half(left, p), half(right, q)) >= reach;
     },
-    bridgeContacts(a, b, passages, options) {
+    bridgeContacts(a, b, passages) {
       const bridge = resolve({ a, b });
       if (!bridge) return undefined;
       const [ai, bi] = bridge.owners as [number, number];
       const halves = [{ owner: ai, segment: half(bridge, ai) }, { owner: bi, segment: half(bridge, bi) }];
-      const contacts = new Map<string, { endpoint: string; owner: string; covered?: boolean }>();
-      const covered = new Set<number>();
+      const contacts = new Map<string, { endpoint: string; owner: string }>();
       const add = (endpoint: number, owner: number) => {
         if (endpoint === owner || bridge.owners.includes(owner)) return;
-        contacts.set(`${endpoint}:${owner}`, {
-          endpoint: idOf(endpoint), owner: idOf(owner), ...(covered.has(owner) ? { covered: true } : {}),
-        });
+        contacts.set(`${endpoint}:${owner}`, { endpoint: idOf(endpoint), owner: idOf(owner) });
       };
       for (const index of nearbyChambers(bridge, bridge.halfWidth + margin)) {
         if (bridge.owners.includes(index)) continue;
         const province = plane.provinces[index]!;
-        // A covered centre strands that province's forced capital pixel inside
-        // the crossing and splits its chamber across both halves.
-        if (pointGap(province.x * aspect, province.y, bridge.segment) < bridge.halfWidth + margin) {
-          if (!options?.coverCentres) return undefined;
-          covered.add(index);
-          add(ai, index);
-          add(bi, index);
-          continue;
-        }
+        if (pointGap(province.x * aspect, province.y, bridge.segment) < bridge.halfWidth + margin) return undefined;
         for (const bridgeHalf of halves) {
           if (pointGap(province.x * aspect, province.y, bridgeHalf.segment) < chamberBound[index]! + bridge.halfWidth + margin) {
             add(bridgeHalf.owner, index);
@@ -1035,13 +1020,11 @@ export function createSparsePassagePlanner(plane: Plane, water?: (provinceId: st
         if (other.owners.length === 2) {
           // The crossing may not sever another link at its shared frontier;
           // a passage from a bridge endpoint may instead leave the crossing
-          // beside that endpoint's own half, or end at a covered centre whose
-          // split chamber meets both halves.
+          // beside that endpoint's own half.
           const shared = other.owners.find((owner) => bridge.owners.includes(owner));
-          const far = other.owners.find((owner) => owner !== shared);
           const { ax, ay, bx, by } = other.segment;
           if (shared === undefined ? pointGap((ax + bx) / 2, (ay + by) / 2, bridge.segment) < reach
-            : !covered.has(far!) && !meetsBank(other, shared, bridge)) return undefined;
+            : !meetsBank(other, shared, bridge)) return undefined;
         }
         for (const owner of other.owners) {
           const segment = other.owners.length === 2 ? half(other, owner) : other.segment;
@@ -2171,10 +2154,89 @@ function buildCandidateBuckets(plane: Plane, columns: number, rows: number): num
         }
       }
       if (!found.size) plane.provinces.forEach((_, index) => found.add(index));
+      else completeCandidateBucket(plane, raw, columns, rows, x, y, found);
       buckets[y * columns + x] = [...found];
     }
   }
   return buckets;
+}
+
+/**
+ * The ring search above stops after a dozen candidates, which on clustered
+ * coordinates can omit the province that is actually nearest to part of the
+ * cell. Every point of the cell is at most `bound` (squared) from some found
+ * candidate, so its nearest province, and any province within nearestOwner's
+ * EPSILON tie of it, lies within that bound of the cell. Appending exactly
+ * those provinces keeps the found candidates' order first (and with it every
+ * tie-break) while making the list complete. Distances use nearestOwner's
+ * unscaled, optionally periodic metric; query points lie inside the closed
+ * cell because ownerAt clamps them into [0, 1] before choosing the bucket.
+ */
+function completeCandidateBucket(
+  plane: Plane,
+  raw: readonly (readonly number[])[],
+  columns: number,
+  rows: number,
+  x: number,
+  y: number,
+  found: Set<number>,
+): void {
+  const x0 = x / columns, x1 = (x + 1) / columns;
+  const y0 = y / rows, y1 = (y + 1) / rows;
+  let bound = Infinity;
+  for (const index of found) {
+    const province = plane.provinces[index]!;
+    const far = farthestAxisDistance(province.x, x0, x1, plane.wrapX) ** 2
+      + farthestAxisDistance(province.y, y0, y1, plane.wrapY) ** 2;
+    if (far < bound) bound = far;
+  }
+  const limit = bound + 4 * EPSILON;
+  // A cell more than `reach` cells away along an axis is already farther than
+  // the limit along that axis alone, so only this window can qualify.
+  const reach = Math.sqrt(limit);
+  const windowColumns = axisWindow(x, Math.floor(reach * columns) + 1, columns, plane.wrapX);
+  const windowRows = axisWindow(y, Math.floor(reach * rows) + 1, rows, plane.wrapY);
+  for (const by of windowRows) {
+    for (const bx of windowColumns) {
+      for (const index of raw[by * columns + bx]!) {
+        if (found.has(index)) continue;
+        const province = plane.provinces[index]!;
+        const near = nearestAxisDistance(province.x, x0, x1, plane.wrapX) ** 2
+          + nearestAxisDistance(province.y, y0, y1, plane.wrapY) ** 2;
+        if (near <= limit) found.add(index);
+      }
+    }
+  }
+}
+
+/** Distinct bucket indexes within `reach` of `center`, wrapping periodic axes. */
+function axisWindow(center: number, reach: number, count: number, wrap: boolean): number[] {
+  if (wrap && 2 * reach + 1 >= count) return Array.from({ length: count }, (_, index) => index);
+  const window: number[] = [];
+  for (let offset = -reach; offset <= reach; offset += 1) {
+    const index = wrap ? (center + offset + count) % count : center + offset;
+    if (index >= 0 && index < count) window.push(index);
+  }
+  return window;
+}
+
+/** Smallest nearestOwner axis distance from `value` to any point of [low, high]. */
+function nearestAxisDistance(value: number, low: number, high: number, wrap: boolean): number {
+  if (value >= low && value <= high) return 0;
+  const near = value < low ? low - value : value - high;
+  if (!wrap) return near;
+  const far = Math.max(Math.abs(value - low), Math.abs(value - high));
+  return Math.max(0, Math.min(near, 1 - far));
+}
+
+/** Largest nearestOwner axis distance from `value` to any point of [low, high]. */
+function farthestAxisDistance(value: number, low: number, high: number, wrap: boolean): number {
+  const far = Math.max(Math.abs(value - low), Math.abs(value - high));
+  if (!wrap) return far;
+  const near = value >= low && value <= high ? 0 : value < low ? low - value : value - high;
+  if (far <= 0.5) return far;
+  if (near >= 0.5) return 1 - near;
+  return 0.5;
 }
 
 function nearestOwner(x: number, y: number, candidates: number[], plane: Plane): number {

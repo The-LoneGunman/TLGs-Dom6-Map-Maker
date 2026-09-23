@@ -63,6 +63,16 @@ export function findCatalogEntry(entries: CatalogEntry[], value: string | number
   return catalogEntriesByName(entries).get(normalizeSearch(text));
 }
 
+export function formatCatalogEntry(entry: CatalogEntry): string {
+  return `${entry.name} (#${entry.id})`;
+}
+
+/** A nation as the editor names it, "Ulm (#13)", or "nation 13" when the catalog lacks it. */
+export function formatNationLabel(nations: CatalogEntry[], nation: number): string {
+  const entry = findCatalogEntry(nations, nation);
+  return entry ? formatCatalogEntry(entry) : `nation ${nation}`;
+}
+
 export function normalizeSearch(value: string): string {
   return value.normalize("NFKD").replace(/[̀-ͯ]/g, "").trim().toLocaleLowerCase();
 }

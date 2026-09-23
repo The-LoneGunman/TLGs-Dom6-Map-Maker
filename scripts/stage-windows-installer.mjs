@@ -49,6 +49,9 @@ export async function stageWindowsInstaller({ projectRoot, nodeRoot, outputDirec
   await requirePath(path.join(project, "src", "catalog", "data", "NOTICE.md"), "catalog notice");
   await requirePath(path.join(project, "src", "catalog", "data", "LICENSE.dom6inspector.txt"), "catalog license");
   await requirePath(path.join(project, "installer", "INSTALLER_NOTICES.txt"), "installer notices");
+  await requirePath(path.join(project, "package.json"), "package.json");
+  const projectVersion = JSON.parse(await readFile(path.join(project, "package.json"), "utf8")).version;
+  if (typeof projectVersion !== "string" || !projectVersion) throw new Error("package.json must declare a version.");
 
   // Never clear an existing directory: a mistyped output must not erase source,
   // a previous build, the Node distribution, or unrelated user files.
@@ -72,9 +75,11 @@ export async function stageWindowsInstaller({ projectRoot, nodeRoot, outputDirec
   // payload package.json, Node would inherit the module type from whatever
   // package.json sits above the install folder (for example, a CommonJS one
   // in the user's profile) and refuse to load the server.
+  // The version is what the launcher and the local server compare when a
+  // second launch finds an Atlas that is already running.
   await writeFile(
     path.join(output, "package.json"),
-    `${JSON.stringify({ name: "pantokrator-atlas-runtime", private: true, type: "module" }, null, 2)}\n`,
+    `${JSON.stringify({ name: "pantokrator-atlas-runtime", version: projectVersion, private: true, type: "module" }, null, 2)}\n`,
     "utf8",
   );
   await mkdir(path.join(output, "runtime"), { recursive: true });

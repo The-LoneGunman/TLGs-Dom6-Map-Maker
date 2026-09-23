@@ -2,9 +2,17 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { access, lstat, readFile, readdir, readlink, writeFile } from "node:fs/promises";
+import http from "node:http";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  ATLAS_IDENTITY_PATH,
+  atlasIdentity,
+  identityResponse,
+  isAtlasIdentity,
+  isNotModified,
+} from "./local-server.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDirectory, "..");
@@ -15,6 +23,9 @@ const releaseMarker = path.join(projectRoot, "dist", ".pantokrator-release-ready
 const productionEntry = path.join(projectRoot, "dist", "server", "index.js");
 const vinextEntry = path.join(projectRoot, "node_modules", "vinext", "dist", "cli.js");
 const localServerEntry = path.join(projectRoot, "scripts", "local-server.mjs");
+const firstLocalPort = 3000;
+const lastLocalPort = 3099;
+const maxIdentityBytes = 4_096;
 const buildInputs = [
   ".openai/hosting.json",
   "app",
@@ -152,7 +163,122 @@ async function prepareBuild() {
   await writeFile(buildMarker, `${sourceHash}\n`, "utf8");
 }
 
-async function findAvailablePort(firstPort = 3000, lastPort = 3099) {
+async function launcherVersion() {
+  // Same fallback as the local server's identity, so both sides agree.
+  try {
+    return JSON.parse(await readFile(path.join(projectRoot, "package.json"), "utf8")).version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+/**
+ * Asks one local port for the Atlas identity served by scripts/local-server.mjs.
+ * Resolves the identity, or null for a closed port, another application, an
+ * oversized or malformed answer, a timeout, or an abort. A port that accepts
+ * the connection gets the longer response timeout, so a busy Atlas is still
+ * recognized; one that does not connect is given up on quickly.
+ */
+function probeAtlasPort(port, {
+  // Loopback connections complete in the kernel even while a server is busy.
+  // Windows can take about two seconds to refuse a closed port, so a port that
+  // has not connected by now is treated as closed.
+  connectTimeoutMs = 750,
+  responseTimeoutMs = 5_000,
+  signal,
+} = {}) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let request;
+    let timer;
+    const finish = (identity) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+      request?.destroy();
+      resolve(identity);
+    };
+    const abort = () => finish(null);
+    if (signal?.aborted) {
+      resolve(null);
+      return;
+    }
+    signal?.addEventListener("abort", abort, { once: true });
+    timer = setTimeout(abort, connectTimeoutMs);
+    request = http.get({
+      agent: false,
+      headers: { Accept: "application/json" },
+      host: "127.0.0.1",
+      path: ATLAS_IDENTITY_PATH,
+      port,
+    }, (response) => {
+      if (response.statusCode !== 200 || !/^application\/json\b/i.test(String(response.headers["content-type"] ?? ""))) {
+        finish(null);
+        return;
+      }
+      let body = "";
+      response.setEncoding("utf8");
+      response.on("data", (chunk) => {
+        body += chunk;
+        if (body.length > maxIdentityBytes) finish(null);
+      });
+      response.once("end", () => {
+        let identity = null;
+        try {
+          const parsed = JSON.parse(body);
+          if (isAtlasIdentity(parsed)) identity = parsed;
+        } catch {
+          // Not an Atlas identity.
+        }
+        finish(identity);
+      });
+      response.once("error", abort);
+    });
+    request.once("error", abort);
+    request.once("socket", (socket) => {
+      socket.once("connect", () => {
+        if (settled) return;
+        clearTimeout(timer);
+        timer = setTimeout(abort, responseTimeoutMs);
+      });
+    });
+  });
+}
+
+/**
+ * Probes every launcher port at once and returns the lowest one serving Atlas,
+ * or null. Remaining probes are cancelled as soon as the answer is known.
+ */
+async function findRunningAtlas({
+  ports = Array.from({ length: lastLocalPort - firstLocalPort + 1 }, (_, index) => firstLocalPort + index),
+  ...probeOptions
+} = {}) {
+  const controller = new AbortController();
+  const probes = ports.map((port) => probeAtlasPort(port, { ...probeOptions, signal: controller.signal }));
+  try {
+    for (let index = 0; index < ports.length; index += 1) {
+      const identity = await probes[index];
+      if (identity) return { port: ports[index], url: `http://127.0.0.1:${ports[index]}/`, identity };
+    }
+    return null;
+  } finally {
+    controller.abort();
+  }
+}
+
+function reportRunningAtlas(running, version, openInBrowser) {
+  console.log(`Pantokrator Atlas is already running at ${running.url}`);
+  if (running.identity.version !== version) {
+    console.log(`That copy is version ${running.identity.version}; this launcher is version ${version}.`);
+    console.log("To use this version instead, close the running Atlas window (or press Ctrl+C there) and launch again.");
+  }
+  console.log(openInBrowser
+    ? "Opening it instead of starting a second server, so your browser autosave stays at the same address."
+    : `Not starting a second server; open ${running.url} to keep using the same browser autosave.`);
+}
+
+async function findAvailablePort(firstPort = firstLocalPort, lastPort = lastLocalPort) {
   for (let port = firstPort; port <= lastPort; port += 1) {
     const available = await new Promise((resolve) => {
       const server = net.createServer();
@@ -231,7 +357,110 @@ async function runSelfTest() {
   assert.match(catalogNotice, /GNU General Public License v3\.0/);
   assert.match(catalogNotice, /LICENSE\.dom6inspector\.txt/);
   assert.equal(await exists(path.join(projectRoot, "src", "catalog", "data", "LICENSE.dom6inspector.txt")), true);
+  await selfTestRunningInstanceProbe();
+  selfTestConditionalRequests();
   console.log("Pantokrator Atlas launcher self-test passed.");
+}
+
+async function withTestServer(handler, run) {
+  const sockets = new Set();
+  const server = http.createServer(handler);
+  server.on("connection", (socket) => {
+    sockets.add(socket);
+    socket.once("close", () => sockets.delete(socket));
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  try {
+    return await run(server.address().port);
+  } finally {
+    for (const socket of sockets) socket.destroy();
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
+async function closedPort() {
+  return withTestServer(() => {}, async (port) => port);
+}
+
+async function selfTestRunningInstanceProbe() {
+  const quick = { connectTimeoutMs: 500, responseTimeoutMs: 500 };
+  const atlas = async (request, response) => {
+    // The real identity serializer that scripts/local-server.mjs serves.
+    const identity = request.url === ATLAS_IDENTITY_PATH ? identityResponse(request.method, "9.9.9") : new Response("Not found", { status: 404 });
+    response.writeHead(identity.status, Object.fromEntries(identity.headers));
+    response.end(Buffer.from(await identity.arrayBuffer()));
+  };
+  const json = (value) => (request, response) => {
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify(value));
+  };
+  const page = (request, response) => {
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end("<title>Pantokrator Atlas</title>");
+  };
+  const silent = () => {};
+
+  assert.deepEqual(atlasIdentity("1.2.3"), { application: "pantokrator-atlas", name: "Pantokrator Atlas", version: "1.2.3" });
+  assert.equal(identityResponse("POST", "1.2.3").status, 405);
+  assert.equal(isAtlasIdentity({ application: "pantokrator-atlas", version: "1" }), true);
+  for (const value of [null, [], "pantokrator-atlas", { application: "other", version: "1" }, { application: "pantokrator-atlas" }]) {
+    assert.equal(isAtlasIdentity(value), false);
+  }
+
+  await withTestServer(atlas, async (atlasPort) => {
+    assert.deepEqual(await probeAtlasPort(atlasPort, quick), atlasIdentity("9.9.9"));
+    await withTestServer(atlas, async (secondAtlasPort) => {
+      await withTestServer(page, async (pagePort) => {
+        await withTestServer(json({ application: "another-app", version: "1" }), async (otherJsonPort) => {
+          await withTestServer(json({ application: "pantokrator-atlas", version: "1", padding: "x".repeat(20_000) }), async (oversizedPort) => {
+            await withTestServer(silent, async (silentPort) => {
+              const unused = await closedPort();
+              for (const port of [pagePort, otherJsonPort, oversizedPort, unused]) {
+                assert.equal(await probeAtlasPort(port, quick), null, `port ${port} is not Atlas`);
+              }
+              let started = Date.now();
+              assert.equal(await probeAtlasPort(silentPort, quick), null);
+              assert.ok(Date.now() - started < 3_000, "A listener that never answers must time out.");
+
+              // Ports are searched in order (ascending by default); the first Atlas wins.
+              const found = await findRunningAtlas({ ports: [unused, pagePort, otherJsonPort, silentPort, atlasPort, secondAtlasPort], ...quick });
+              assert.deepEqual(found, { port: atlasPort, url: `http://127.0.0.1:${atlasPort}/`, identity: atlasIdentity("9.9.9") });
+              assert.equal(await findRunningAtlas({ ports: [unused, pagePort, otherJsonPort, oversizedPort, silentPort], ...quick }), null);
+
+              // The first Atlas in port order wins at once; a slower, silent
+              // port later in the order is cancelled rather than awaited.
+              started = Date.now();
+              const first = await findRunningAtlas({ ports: [atlasPort, silentPort], connectTimeoutMs: 30_000, responseTimeoutMs: 30_000 });
+              assert.equal(first?.port, atlasPort);
+              assert.ok(Date.now() - started < 3_000, "Remaining probes must be cancelled once Atlas is found.");
+            });
+          });
+        });
+      });
+    });
+  });
+}
+
+function selfTestConditionalRequests() {
+  const tag = "\"4d2-17f0a\"";
+  const modifiedMs = Date.parse("2026-09-22T12:00:00.750Z");
+  const headers = (entries) => new Headers(entries);
+  assert.equal(isNotModified("GET", headers({}), tag, modifiedMs), false);
+  assert.equal(isNotModified("GET", headers({ "If-None-Match": tag }), tag, modifiedMs), true);
+  assert.equal(isNotModified("HEAD", headers({ "If-None-Match": tag }), tag, modifiedMs), true);
+  assert.equal(isNotModified("POST", headers({ "If-None-Match": tag }), tag, modifiedMs), false);
+  assert.equal(isNotModified("GET", headers({ "If-None-Match": `"other", W/${tag}` }), tag, modifiedMs), true);
+  assert.equal(isNotModified("GET", headers({ "If-None-Match": "*" }), tag, modifiedMs), true);
+  assert.equal(isNotModified("GET", headers({ "If-None-Match": "\"other\"" }), tag, modifiedMs), false);
+  const lastModified = new Date(modifiedMs).toUTCString();
+  assert.equal(isNotModified("GET", headers({ "If-Modified-Since": lastModified }), tag, modifiedMs), true);
+  assert.equal(isNotModified("GET", headers({ "If-Modified-Since": "Mon, 21 Sep 2026 12:00:00 GMT" }), tag, modifiedMs), false);
+  assert.equal(isNotModified("GET", headers({ "If-Modified-Since": "not a date" }), tag, modifiedMs), false);
+  // If-None-Match takes precedence over a matching If-Modified-Since.
+  assert.equal(isNotModified("GET", headers({ "If-None-Match": "\"other\"", "If-Modified-Since": lastModified }), tag, modifiedMs), false);
 }
 
 async function main() {
@@ -244,6 +473,19 @@ async function main() {
   if (options.has("--self-test")) {
     await runSelfTest();
     return;
+  }
+
+  // Browser autosave belongs to the exact address, so a second launch must
+  // reuse a running Atlas rather than serve a new, empty-looking origin on
+  // the next free port. Preparation and the smoke test keep their own work.
+  if (!options.has("--prepare-only") && !options.has("--smoke-test")) {
+    const running = await findRunningAtlas();
+    if (running) {
+      const openInBrowser = !options.has("--no-browser");
+      reportRunningAtlas(running, await launcherVersion(), openInBrowser);
+      if (openInBrowser) openBrowser(running.url);
+      return;
+    }
   }
 
   const packagedBuildReady = (await exists(productionEntry)) && (await exists(releaseMarker));
@@ -285,6 +527,10 @@ async function main() {
       const response = await fetch(url, { signal: AbortSignal.timeout(5_000) });
       assert.equal(response.status, 200);
       assert.match(await response.text(), /Pantokrator Atlas/);
+      // A later launch must recognize this server instead of starting another.
+      const running = await findRunningAtlas({ ports: [port] });
+      assert.equal(running?.url, url, "The running-instance probe did not recognize the launched server.");
+      assert.equal(running.identity.version, await launcherVersion());
     } finally {
       if (server.exitCode === null && server.signalCode === null) server.kill();
       result = await serverExit;
