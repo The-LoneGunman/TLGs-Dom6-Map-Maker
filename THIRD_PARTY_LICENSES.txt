@@ -152,6 +152,7 @@ LOCKED PACKAGE INVENTORY (588 package instances)
 @nodelib/fs.stat@2.0.5 | MIT | node_modules/@nodelib/fs.stat
 @nodelib/fs.walk@1.2.8 | MIT | node_modules/@nodelib/fs.walk
 @oxc-project/types@0.143.0 | MIT | node_modules/@oxc-project/types
+@pantokrator-atlas/braces@3.0.3-atlas.1 | MIT | node_modules/braces
 @poppinss/colors@4.1.6 | MIT | node_modules/@poppinss/colors
 @poppinss/dumper@0.6.5 | MIT | node_modules/@poppinss/dumper
 @poppinss/exception@1.2.3 | MIT | node_modules/@poppinss/exception
@@ -261,7 +262,6 @@ baseline-browser-mapping@2.11.21 | Apache-2.0 | node_modules/baseline-browser-ma
 blake3-wasm@2.1.5 | MIT | node_modules/blake3-wasm
 brace-expansion@1.1.21 | MIT | node_modules/brace-expansion
 brace-expansion@5.0.12 | MIT | node_modules/@typescript-eslint/typescript-estree/node_modules/brace-expansion
-braces@3.0.3 | MIT | node_modules/braces
 browserslist@4.28.9 | MIT | node_modules/browserslist
 buffer-from@1.1.2 | MIT | node_modules/buffer-from
 call-bind-apply-helpers@1.0.2 | MIT | node_modules/call-bind-apply-helpers
@@ -8466,7 +8466,7 @@ DEALINGS IN THE SOFTWARE.
 
 --- SHA-256 d99bf3271ffd7561b89e2c51b5da6ca3a3669e031efc6543f477541520a1566b ---
 Packages:
-  braces@3.0.3 (LICENSE)
+  @pantokrator-atlas/braces@3.0.3-atlas.1 (LICENSE)
   fill-range@7.1.1 (LICENSE)
   is-number@7.0.0 (LICENSE)
   micromatch@4.0.8 (LICENSE)

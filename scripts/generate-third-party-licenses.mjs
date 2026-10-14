@@ -53,13 +53,18 @@ async function packageNotices(packagePath) {
 async function render() {
   const lock = JSON.parse(await readFile(lockPath, "utf8"));
   const packages = Object.entries(lock.packages)
-    .filter(([packagePath]) => packagePath)
-    .map(([packagePath, metadata]) => ({
-      id: `${packageName(packagePath)}@${metadata.version}`,
-      license: metadata.license,
-      metadata,
-      packagePath,
-    }))
+    // Count installed instances, not a linked package's source directory twice.
+    .filter(([packagePath]) => packagePath.includes("node_modules/"))
+    .map(([packagePath, entry]) => {
+      const metadata = entry.link ? lock.packages[entry.resolved] : entry;
+      if (!metadata?.version) throw new Error(`Missing locked package metadata: ${packagePath}`);
+      return {
+        id: `${metadata.name ?? packageName(packagePath)}@${metadata.version}`,
+        license: metadata.license,
+        metadata,
+        packagePath,
+      };
+    })
     .sort((left, right) => compareText(left.id, right.id) || compareText(left.packagePath, right.packagePath));
 
   const groupedNotices = new Map();

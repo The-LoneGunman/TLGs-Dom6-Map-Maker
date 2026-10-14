@@ -10,7 +10,7 @@ Projects, imported catalogs, and generated packages remain in your browser profi
 
 ## Versions and documentation
 
-Reviewed October 14, 2026, including the merged [island-start/Windows/Undo corrections](docs/AUDIT_ISLAND_REPAIRS_2026-09-23.md) and the [current audit repairs and remaining security blocker](docs/AUDIT_REPAIRS_2026-10-14.md). The package version remains **0.1.5**. **Unreleased development** means source features not yet in the hosted app or Windows v0.1.5 release; the dated records identify the branch or commit tested. Merging source does not deploy or publish either edition.
+Reviewed October 14, 2026, including the merged [island-start/Windows/Undo corrections](docs/AUDIT_ISLAND_REPAIRS_2026-09-23.md) and the [current audit repairs and tested local dependency patch](docs/AUDIT_REPAIRS_2026-10-14.md). The package version remains **0.1.5**. **Unreleased development** means source features not yet in the hosted app or Windows v0.1.5 release; the dated records identify the branch or commit tested. Merging source does not deploy or publish either edition.
 
 | Edition | Where to check the build | Availability |
 | --- | --- | --- |
@@ -132,7 +132,9 @@ npm.cmd run lint
 npm.cmd run licenses:check
 ```
 
-`npm test` includes a production build. CI additionally audits the locked dependencies and smoke-tests the local server and Windows launcher.
+`npm test` includes a production build and the local dependency security regressions (`npm run test:vendor` also runs these separately). CI additionally audits the locked dependencies and smoke-tests the local server and Windows launcher. The [local braces patch](vendor/braces/README.md) documents its provenance and removal criteria; registry audit results alone do not certify that fork.
+
+The [October 14 repair round](docs/AUDIT_REPAIRS_2026-10-14.md) passed **1,141 local tests**, type checking, lint, license checks and launcher/server checks. Full and production-only registry dependency audits report zero findings. Browser checks covered the large-export resolution fallback, Undo/Redo and narrow-screen layout; the local dependency fix separately preserves 328 upstream compatibility cases and rejects excessive nesting.
 
 The island-start repairs merged as `11a4ede` passed **1,123 automated tests** (14 production-build/integration + 1,109 TypeScript), type checking, lint, license and dependency checks, and Linux/Windows server/launcher checks in [merged-main CI](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35821623798). That is dated evidence, not a claim that a later dependency audit remains clean. Real browser checks covered generation, water layouts, terrain editing/Undo and saved geometry. The latest contours and connected rivers still need a fresh in-game visual pass; automated ownership checks are not visual acceptance or multiplayer balance certification.
 

@@ -30,6 +30,8 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci
+      - name: Verify local dependency security patch
+        run: npm run test:vendor
       - name: Audit locked dependencies
         run: npm audit --audit-level=high
       - name: Verify launcher internals
@@ -68,4 +70,4 @@ jobs:
           if errorlevel 1 exit /b %errorlevel%
           node scripts/test-local-server.mjs
       - name: Check Windows bundle boundaries and editor history
-        run: node --import tsx --test tests/bundle-boundaries.test.ts tests/history-regression.test.ts tests/editor-inputs.test.ts
+        run: node --import tsx --test tests/braces-security.test.mjs tests/bundle-boundaries.test.ts tests/history-regression.test.ts tests/editor-inputs.test.ts

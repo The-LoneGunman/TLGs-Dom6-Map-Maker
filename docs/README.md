@@ -1,13 +1,13 @@
 # Documentation index
 
-Reviewed October 14, 2026 against merged `main` at **`11a4ede`**, including the [island-start audit repairs](AUDIT_ISLAND_REPAIRS_2026-09-23.md). The package version remains **0.1.5**. Dated records identify the branch or commit tested; unreleased source is not proof of publication. See the root [version table](../README.md#versions-and-documentation): source merges, hosted deployments and Windows releases are separate actions.
+Reviewed October 14, 2026, including the [current audit repairs](AUDIT_REPAIRS_2026-10-14.md) in [PR #15](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/pull/15), based on merged `11a4ede`. The package version remains **0.1.5**. Dated records identify the branch or commit tested; unreleased source is not proof of publication. See the root [version table](../README.md#versions-and-documentation): source merges, hosted deployments and Windows releases are separate actions.
 
 ## Current source checkpoint
 
 | Edition / evidence | Verified state |
 | --- | --- |
-| Merged source | [`11a4ede`, PR #14](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/pull/14), including connected/illustrated realms, launcher reuse, import caps, island-start repairs, numeric Undo and Windows test portability. [Main CI](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35821623798) passed: **1,123 tests** (14 integration + 1,109 TypeScript) in the Linux full suite, plus Windows launcher/server and bundle/input/history checks. |
-| October repair branch | [Export fallback, generated names and dependency repairs](AUDIT_REPAIRS_2026-10-14.md): 1,132 local tests pass. Merge remains blocked by the unpatched upstream `braces` advisory; this row is not a merge or publication claim. |
+| October source repairs | [Export fallback, generated names and dependency repairs](AUDIT_REPAIRS_2026-10-14.md), [PR #15](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/pull/15): **1,141 local tests pass**. Registry audits report zero findings; the approved local dependency patch has separate mandatory CI regressions and maintenance notes. |
+| September merged baseline | [`11a4ede`, PR #14](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/pull/14), including connected/illustrated realms, launcher reuse, import caps, island-start repairs, numeric Undo and Windows test portability. [Main CI](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35821623798) passed: **1,123 tests** (14 integration + 1,109 TypeScript) in the Linux full suite, plus Windows launcher/server and bundle/input/history checks. |
 | Generator corpus | The [September 23 repair record](AUDIT_ISLAND_REPAIRS_2026-09-23.md) records 1,000 cases: all 125 island cases export-valid, three unchanged continental-capacity blockers, no generation exceptions, and 328 experimental quality misses. The October 14 audit repeated the first 128 cases: no export errors or exceptions, with 40 quality misses. This was not a new full-corpus run. |
 | Hosted / Windows | Rechecked September 22: Site version 13 and Windows v0.1.5 still use `581b2b8`. Their [743-test release record](RELEASE_VERIFICATION_0.1.5.md) is separate from current source testing. |
 
@@ -35,7 +35,7 @@ These records preserve the conditions and evidence at the stated revision/date. 
 
 | Record | Role |
 | --- | --- |
-| [October 14 audit repairs](AUDIT_REPAIRS_2026-10-14.md) | Browser-aware export options, Undoable output-size fallback, generated-name deduplication, refreshed dependency pins and the remaining upstream security blocker. |
+| [October 14 audit repairs](AUDIT_REPAIRS_2026-10-14.md) | Browser-aware export options, Undoable output-size fallback, generated-name deduplication, refreshed dependency pins and the tested local nesting-security patch. |
 | [September 23 audit repairs](AUDIT_ISLAND_REPAIRS_2026-09-23.md) | Island-start-aware generation, Windows test portability, single-step numeric Undo, accurate installer instructions, and local 1,000-map verification. |
 | [September 22 review round](REVIEW_ROUND_2026-09-22.md) | Unreleased defect repairs, natural-water / authored-start / budget / strategic-river / Underworld-border generation fixes, the usability pass and measured performance and memory changes (PR #12). |
 | [September 22 natural landforms](NATURAL_LANDFORMS_2026-09-22.md) | Unreleased shared province curves, natural ocean/basin layouts, realm-specific contours and saved-map compatibility. |
