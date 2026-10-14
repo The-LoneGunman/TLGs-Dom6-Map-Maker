@@ -10,7 +10,7 @@ Projects, imported catalogs, and generated packages remain in your browser profi
 
 ## Versions and documentation
 
-Reviewed September 23, 2026, including the [seed and numeric-edit audit repairs](docs/AUDIT_REPAIRS_2026-09-22.md), the [review round](docs/REVIEW_ROUND_2026-09-22.md), and the [island-start/Windows/Undo corrections](docs/AUDIT_ISLAND_REPAIRS_2026-09-23.md). The package version remains **0.1.5**. **Unreleased development** means source features not yet in the hosted app or Windows v0.1.5 release; the dated records identify the branch or commit tested. Merging source does not deploy or publish either edition.
+Reviewed October 14, 2026, including the merged [island-start/Windows/Undo corrections](docs/AUDIT_ISLAND_REPAIRS_2026-09-23.md) and the [current audit repairs and remaining security blocker](docs/AUDIT_REPAIRS_2026-10-14.md). The package version remains **0.1.5**. **Unreleased development** means source features not yet in the hosted app or Windows v0.1.5 release; the dated records identify the branch or commit tested. Merging source does not deploy or publish either edition.
 
 | Edition | Where to check the build | Availability |
 | --- | --- | --- |
@@ -36,7 +36,7 @@ The installer is per-user, needs no administrator access, and includes a private
 
 The setup is not currently code-signed, so Windows may show an unknown-publisher warning. Download it only from this repository's release page; a `.sha256` file is supplied for verification. The portable `Pantokrator-Atlas-Windows.zip` is an alternative: it requires Node.js 22.13.0 or newer, extraction, and **Start Pantokrator Atlas.cmd**. GitHub's automatically generated source archives are not the portable release.
 
-Where browser folder access is supported, use **Install directly**; otherwise use **Download ready ZIP**. See the [quick start](docs/USER_GUIDE.md#quick-start) for backups, updates, and troubleshooting.
+Where browser folder access is supported, use **Install directly**; otherwise use **Download ready ZIP**. Current source detects unavailable folder access and can offer an Undoable output-resolution reduction when a ZIP exceeds the memory ceiling. See the [quick start](docs/USER_GUIDE.md#quick-start) for backups, updates, and troubleshooting.
 
 ## What it can generate
 
@@ -134,9 +134,9 @@ npm.cmd run licenses:check
 
 `npm test` includes a production build. CI additionally audits the locked dependencies and smoke-tests the local server and Windows launcher.
 
-The source merged as `464ff03` passed **1,010 automated tests** (14 production-build/integration + 996 TypeScript), type checking, lint, license and dependency checks, and Linux/Windows server/launcher checks in [merged-main CI](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35738115402). Real browser checks covered generation, water layouts, terrain editing/Undo and saved geometry. The latest contours and connected rivers still need a fresh in-game visual pass; automated ownership checks are not visual acceptance or multiplayer balance certification.
+The island-start repairs merged as `11a4ede` passed **1,123 automated tests** (14 production-build/integration + 1,109 TypeScript), type checking, lint, license and dependency checks, and Linux/Windows server/launcher checks in [merged-main CI](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35821623798). That is dated evidence, not a claim that a later dependency audit remains clean. Real browser checks covered generation, water layouts, terrain editing/Undo and saved geometry. The latest contours and connected rivers still need a fresh in-game visual pass; automated ownership checks are not visual acceptance or multiplayer balance certification.
 
-The published `581b2b8` build separately passed **743 tests**. Its native 6.37 checks covered all eight planes, winter, **161 population-template terrain cases**, and one [guardian battle, capture, recruitment and PD inspection](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/research/NATIVE_GUARDIAN_CAPTURE_2026-09-21.md). See [release verification](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/RELEASE_VERIFICATION_0.1.5.md) for that release's scope. The earlier [1,000-map structural evaluation](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/IMPLEMENTATION_ROUND_2026-09-20.md) had no export errors but retained 243 experimental quality-target misses; it has not been rerun for the latest generator.
+The published `581b2b8` build separately passed **743 tests**. Its native 6.37 checks covered all eight planes, winter, **161 population-template terrain cases**, and one [guardian battle, capture, recruitment and PD inspection](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/research/NATIVE_GUARDIAN_CAPTURE_2026-09-21.md). See [release verification](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/RELEASE_VERIFICATION_0.1.5.md) for that release's scope. The [September 23 rerun of 1,000 structural cases](docs/AUDIT_ISLAND_REPAIRS_2026-09-23.md) produced 997 export-valid maps, three unchanged continental-capacity blockers, no generation exceptions, and 328 experimental quality-target misses. All 125 island cases were export-valid. These diagnostics do not certify multiplayer balance.
 
 ## Documentation and references
 

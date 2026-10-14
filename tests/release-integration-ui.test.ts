@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createElement } from "react";
+import { createElement, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ExportDialog, removeStoredCustomCatalog } from "../src/MapMakerApp";
 import { cloneProject, type MapProject } from "../src/domain";
-import { createDefaultProject } from "../src/generator";
+import { addPlane, createDefaultProject, generateProject } from "../src/generator";
 
 function sizedProject(planeCount: number): MapProject {
   const project = createDefaultProject(`release-integration-${planeCount}`);
@@ -20,19 +20,21 @@ function sizedProject(planeCount: number): MapProject {
   return project;
 }
 
-function exportDialogMarkup(project: MapProject): string {
+function exportDialogMarkup(project: MapProject, options: Partial<ComponentProps<typeof ExportDialog>> = {}): string {
   const noop = () => undefined;
   return renderToStaticMarkup(createElement(ExportDialog, {
     project,
     activePlane: project.planes[0]!,
     issues: [],
     busy: false,
+    directInstallSupported: true,
     onClose: noop,
     onInstall: noop,
     onZip: noop,
     onProject: noop,
     onPreview: noop,
     onValidate: noop,
+    ...options,
   }));
 }
 
@@ -63,4 +65,30 @@ test("custom catalog cleanup absorbs denied browser storage removals", () => {
   assert.equal(removeStoredCustomCatalog({ removeItem(key) { removed = key; } }), true);
   assert.equal(removed, "pantokrator-atlas-user-catalog-v1");
   assert.equal(removeStoredCustomCatalog({ removeItem() { throw new DOMException("denied", "SecurityError"); } }), false);
+});
+
+test("unsupported browsers never advertise direct install as available or recommended", () => {
+  for (const planeCount of [1, 8]) {
+    const markup = exportDialogMarkup(sizedProject(planeCount), { directInstallSupported: false });
+    const button = markup.match(/<button class="export-option primary-option"[\s\S]*?<\/button>/)![0];
+    assert.match(button, /disabled=""/);
+    assert.match(button, /Unavailable in this browser/);
+    assert.doesNotMatch(markup, /Recommended|Direct install and Editable project JSON remain available/);
+    assert.match(markup, /Editable project JSON/);
+    if (planeCount === 8) {
+      assert.match(zipButton(markup), /disabled=""/);
+      assert.doesNotMatch(markup, /Download the ready ZIP,/);
+      assert.match(markup, /Reduce output resolution/);
+    }
+  }
+});
+
+test("unsafe ZIPs expose a one-step resolution repair and explain layout locks", () => {
+  const project = generateProject(addPlane(createDefaultProject("export-dialog-resize"), "underworld", { generate: false, autoSize: true }));
+  const unlocked = exportDialogMarkup(project, { artwork: "illustrated", directInstallSupported: false, onResizeForZip() {} });
+  assert.match(unlocked, /Reduce output resolution to fit ZIP/);
+  project.authoring = { lockLayout: true };
+  const locked = exportDialogMarkup(project, { artwork: "illustrated", directInstallSupported: false, onResizeForZip() {} });
+  assert.match(locked, /Layout is locked/);
+  assert.doesNotMatch(locked, /Reduce output resolution to fit ZIP/);
 });

@@ -88,6 +88,7 @@ import {
   serializeProject,
 } from "./projectFile";
 import { estimatedPackageBytes, zipPackageSafety } from "./packageEstimate";
+import { smallerZipProject, supportsDirectInstall, unsupportedInstallMessage } from "./exportOptions";
 // Package building is loaded on demand; only its progress type is needed here.
 import type { ExportProgress } from "./export";
 import { loadPackageExporter, prefetchPackageExporter } from "./packageExporterLoader";
@@ -1241,7 +1242,7 @@ export function MapMakerApp() {
       if (kind === "install") {
         const result = await installPackage(project, setExportProgress, catalog, exportArtwork);
         if (result === "unsupported") {
-          setToast("Direct folder access or safe cross-tab locking is unavailable here. Use the ready-to-install ZIP instead.");
+          setToast(unsupportedInstallMessage(zipPackageSafety(project, catalog, exportArtwork), exportArtwork));
         } else if (result === "installed") {
           clearActionError("package-export");
           setToast("Installed into your selected Dominions 6 maps folder.");
@@ -2044,6 +2045,12 @@ export function MapMakerApp() {
         busy={exportBusy}
         artwork={exportArtwork}
         onArtworkChange={setExportArtwork}
+        onResizeForZip={(next) => {
+          if (currentProjectRef.current !== project) return;
+          if (commit({ ...next, updatedAt: new Date().toISOString() })) {
+            setToast("Output dimensions reduced to fit ZIP export. Province content and connections are unchanged; Undo restores the previous resolution.");
+          }
+        }}
         onClose={() => !exportBusy && setExportOpen(false)}
         onInstall={() => runExport("install")}
         onZip={() => runExport("zip")}
@@ -2501,11 +2508,16 @@ function ValidationDrawer({ issues, fairness, onClose, onReview, onSelectIssue }
   </aside></div>;
 }
 
-export function ExportDialog({ project, catalog = BUILTIN_DOM6_CATALOG, activePlane, issues, progress, busy, artwork = "native", onArtworkChange, onClose, onInstall, onZip, onPlayerZip, onProject, onPreview, onValidate }: { project: MapProject; catalog?: Dom6CatalogBundle; activePlane: Plane; issues: ValidationIssue[]; progress?: ExportProgress; busy: boolean; artwork?: ExportArtwork; onArtworkChange?: (artwork: ExportArtwork) => void; onClose: () => void; onInstall: () => void; onZip: () => void; onPlayerZip?: () => void; onProject: () => void; onPreview: () => void; onValidate: () => void }) {
+export function ExportDialog({ project, catalog = BUILTIN_DOM6_CATALOG, activePlane, issues, progress, busy, artwork = "native", directInstallSupported = supportsDirectInstall(), onArtworkChange, onResizeForZip, onClose, onInstall, onZip, onPlayerZip, onProject, onPreview, onValidate }: { project: MapProject; catalog?: Dom6CatalogBundle; activePlane: Plane; issues: ValidationIssue[]; progress?: ExportProgress; busy: boolean; artwork?: ExportArtwork; directInstallSupported?: boolean; onArtworkChange?: (artwork: ExportArtwork) => void; onResizeForZip?: (next: MapProject) => void; onClose: () => void; onInstall: () => void; onZip: () => void; onPlayerZip?: () => void; onProject: () => void; onPreview: () => void; onValidate: () => void }) {
   const errors = issues.filter((issue) => issue.severity === "error").length;
   const artworkError = artwork === "illustrated" ? illustratedExportError(project) : undefined;
   const zipSafety = zipPackageSafety(project, catalog, artwork);
   const zipBlocked = zipSafety.level === "blocked";
+  const zipMemoryMessage = directInstallSupported ? zipSafety.message : "Reduce image dimensions or plane count to lower the ZIP's memory use.";
+  const canResizeForZip = onResizeForZip !== undefined;
+  const smallerProject = useMemo(() => !errors && !artworkError && canResizeForZip && zipBlocked
+    ? smallerZipProject(project, catalog, artwork) : undefined,
+  [artwork, artworkError, canResizeForZip, catalog, errors, project, zipBlocked]);
   const dialogRef = useDialogFocus<HTMLElement>(onClose, busy);
   const progressPercent = Math.max(0, Math.min(100, progress?.percent ?? 0));
   const progressMessage = progress?.message ?? "Preparing the export";
@@ -2523,22 +2535,28 @@ export function ExportDialog({ project, catalog = BUILTIN_DOM6_CATALOG, activePl
     <div className="package-summary"><div className="package-glyph">D6</div><div><strong>{sanitizeMapName(project.name)}.map</strong><span>{project.planes.length} plane{project.planes.length === 1 ? "" : "s"} · {project.planes.reduce((sum, plane) => sum + plane.provinces.length, 0)} provinces · up to {formatBytes(estimatedPackageBytes(project, catalog, undefined, artwork))}</span></div><i className={errors || artworkError ? "bad" : "good"}>{errors || artworkError ? "!" : "✓"}</i></div>
     {artworkError && <div className="export-blocked" role="alert">{artworkError}</div>}
     {errors ? <div className="export-blocked"><strong>{errors} compatibility blocker{errors === 1 ? "" : "s"}</strong><p>Resolve export errors before building the package.</p><button className="button quiet" type="button" onClick={onValidate}>Review validation</button></div> : !artworkError && <div className="export-options">
-      <button className="export-option primary-option" type="button" onClick={onInstall} disabled={busy}><span className="option-icon" aria-hidden="true">↳</span><span><strong>Install directly</strong><small>Choose the Dominions 6 <code>maps</code> folder once; the ready-to-play folder is written there.</small></span><b>Recommended</b></button>
+      <button className="export-option primary-option" type="button" onClick={onInstall} disabled={busy || !directInstallSupported} aria-describedby={!directInstallSupported ? "direct-install-unavailable" : undefined}><span className="option-icon" aria-hidden="true">↳</span><span><strong>Install directly</strong><small>{directInstallSupported ? <>Choose the Dominions 6 <code>maps</code> folder once; the ready-to-play folder is written there.</> : "Unavailable in this browser: folder access and safe cross-tab locking are required."}</small></span>{directInstallSupported && <b>Recommended</b>}</button>
       <button
         className="export-option"
         type="button"
         onClick={onZip}
         disabled={busy || zipBlocked}
         aria-describedby={zipSafety.message ? "zip-memory-safety" : undefined}
-        title={zipBlocked ? zipSafety.message : undefined}
-      ><span className="option-icon" aria-hidden="true">↓</span><span><strong>Download ready ZIP</strong><small>{zipBlocked ? "Unavailable at this package size; use direct install or Editable project JSON." : "Extract the included folder into your Dominions 6 user-data maps directory."}</small></span></button>
+        title={zipBlocked ? zipMemoryMessage : undefined}
+      ><span className="option-icon" aria-hidden="true">↓</span><span><strong>Download ready ZIP</strong><small>{zipBlocked ? "Unavailable at this package size; review the smaller-output options below." : "Extract the included folder into your Dominions 6 user-data maps directory."}</small></span></button>
       {onPlayerZip && <button className="export-option" type="button" onClick={onPlayerZip} disabled={busy || zipBlocked} aria-describedby={zipSafety.message ? "zip-memory-safety" : undefined}><span className="option-icon" aria-hidden="true">↓</span><span><strong>Download player ZIP</strong><small>Same playable files, without editable JSON or host reports. Map files still reveal content if inspected; this is not secrecy protection.</small></span></button>}
     </div>}
+    {!errors && !artworkError && !directInstallSupported && <p id="direct-install-unavailable" className="hint">{unsupportedInstallMessage(zipSafety, artwork)}</p>}
     {!errors && zipSafety.message && <div
       id="zip-memory-safety"
       className="warning-copy zip-memory-safety"
       role={zipBlocked ? "alert" : "status"}
-    ><strong>{zipBlocked ? "ZIP download blocked for browser memory safety." : "Large ZIP memory warning."}</strong>{" "}{zipSafety.message} Estimated peak working memory: {formatBytes(zipSafety.estimatedPeakBytes)}. Direct install and Editable project JSON remain available.</div>}
+    ><strong>{zipBlocked ? "ZIP download blocked for browser memory safety." : "Large ZIP memory warning."}</strong>{" "}{zipMemoryMessage} Estimated peak working memory: {formatBytes(zipSafety.estimatedPeakBytes)}. {directInstallSupported ? "Direct install and Editable project JSON remain available." : "Editable project JSON remains available."}
+      {zipBlocked && !artworkError && onResizeForZip && <div className="catalog-actions">
+        {smallerProject ? <div><p>Current map: reduce image dimensions without regenerating provinces. Undo restores the previous dimensions.</p><button className="button quiet" type="button" disabled={busy} onClick={() => onResizeForZip(smallerProject)}>Reduce output resolution to fit ZIP</button></div>
+          : <p>{project.authoring?.lockLayout ? "Layout is locked. Unlock it in Iterate before changing output dimensions." : `No smaller output passed both ZIP safety and map validation. ${artwork === "illustrated" ? "Try Native scenery, or save" : "Save"} the project and use a browser with direct folder access.`}</p>}
+      </div>}
+    </div>}
     {busy && <div
       className="export-progress"
       role="progressbar"

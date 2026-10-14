@@ -362,6 +362,8 @@ These controls are in the **Province names** section, which starts collapsed and
 
 **Reroll generated names (preserve manual)** immediately renames generated provinces on every plane without changing geography. Names use plane, terrain, coast, flooded-cave, and Styx context. Names edited in the province inspector and legacy names with no provenance are preserved. The action is Undoable.
 
+Current source removes adjacent repeated words from newly generated names (for example, “Mourning Mourning Bank” becomes “Mourning Bank”) before checking uniqueness. This does not rewrite saved, manually edited or name-locked provinces unless they are otherwise eligible for an explicit naming action.
+
 **Replace every province name** opens a confirmation and replaces generated, manual, and legacy names, except provinces protected by a name lock. Unlock those names first if they should also change. Use it to repair duplicate or poorly matched names in older projects. It is also Undoable.
 
 Generated names are unique across the atlas and avoid known nation, epithet, home/capital-site, and special-realm names.
@@ -1080,7 +1082,7 @@ Image-based province numbers follow Dominions' white-pixel scan order. Atlas rem
 
 **Start a new game when changing artwork modes.** Do not replace a running game's files with a differently numbered export. Keep the same complete package for host and players. Active advanced raw commands block illustrated export; they remain available with Native scenery.
 
-Illustrated packages take longer to render and can be much larger. The dialog's size and memory checks change with the selected mode. Prefer **Install directly** for large illustrated maps; it stages one image at a time. [Verification and remaining limits](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/ILLUSTRATED_EXPORT_2026-09-22.md#verification-and-limits) distinguish actual native-game observations from automated checks.
+Illustrated packages take longer to render and can be much larger. The dialog's size and memory checks change with the selected mode. Prefer **Install directly** for large illustrated maps when your browser supports it; it stages one image at a time. If ZIP is too large, current source can offer **Reduce output resolution to fit ZIP** as described below. [Verification and remaining limits](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/ILLUSTRATED_EXPORT_2026-09-22.md#verification-and-limits) distinguish actual native-game observations from automated checks.
 
 ### Package contents
 
@@ -1115,7 +1117,9 @@ Extract the single contained map folder into the Dominions user-data `maps` dire
 
 If you added custom battle assets manually, back them up before replacing the folder and copy them into the new one afterward.
 
-Large packages may show a ZIP memory warning or disable both ZIP options. **Install directly**, **Editable project JSON**, and active-plane preview remain available. Prefer direct installation for large multi-plane 4K atlases.
+Large packages may show a ZIP memory warning or disable both ZIP options. **Editable project JSON** and active-plane preview remain available; **Install directly** also remains available when your browser supports secure folder access and Web Locks.
+
+Current source offers **Reduce output resolution to fit ZIP** when it can find a smaller, export-valid size within the memory ceiling. This is an explicit Current Map edit: it reduces each plane's output dimensions, preserves its aspect ratio, sets resolution to **Custom**, and leaves provinces, terrain, starts, guardians and connections unchanged. It does not regenerate geography. **Undo** restores the previous dimensions. The option respects the layout lock, minimum image dimensions and validation; it is not available for every project. If no safe reduction fits, save editable JSON and reopen it in a browser with direct-folder support, or choose **Native scenery** if appropriate.
 
 ### Download player ZIP
 
@@ -1137,7 +1141,7 @@ The normalized project root uses safe ASCII letters, digits, and underscores, wi
 
 ### Browser limitations
 
-Direct folder access requires a secure browser context with the File System Access API and Web Locks. If either is unavailable, use the ZIP. Atlas permits only one direct installation at a time across tabs using the same app address. Do not install into the same folder from different app addresses, browsers or profiles simultaneously: browser locks do not cover those writers. Atlas also checks for outside changes and retains recovery backups rather than overwriting a detected conflict.
+Direct folder access requires a secure browser context with the File System Access API and Web Locks. Current source detects these capabilities, disables **Install directly** when unavailable, and explains the usable alternatives. Use ZIP if it fits the memory ceiling, or the smaller-output option above. Editable JSON remains available to move the project to another browser. Atlas permits only one direct installation at a time across tabs using the same app address. Do not install into the same folder from different app addresses, browsers or profiles simultaneously: browser locks do not cover those writers. Atlas also checks for outside changes and retains recovery backups rather than overwriting a detected conflict.
 
 A retry can use a folder containing only recognizable staging files from an interrupted first install; those old files are preserved, not deleted. If recovery reports retained backups or an unrecognized folder, do not host it yet. Review the folder and backups, or choose a new atlas name for a clean installation. For large 4K multi-plane atlases, direct installation is more memory-efficient than ZIP generation.
 
@@ -1198,13 +1202,13 @@ Validation, replacement-confirmation, and export dialogs trap focus. Escape clos
 | Blocked Cave Wall contains a throne or guardians | Resolve the structured content or recognized province-level raw commands reported by validation. Current-source playable export refuses the conflict; saving editable JSON remains available. |
 | Sea + Cave Wall warning | The province is still blocked even though native relief is submerged. Remove Cave Wall for navigable water; the mixed terrain's native appearance still needs visual verification. |
 | Gate is too close to a start | Generated gates prefer endpoints at least two moves away, but a constrained fallback can produce a warning. Move the endpoint, enlarge the plane, reduce the gate count, or regenerate. |
-| Direct folder access unavailable | Use Download ready ZIP. If ZIP is disabled by the memory ceiling, lower resolution/plane count or move the project to a supported browser for direct install. Editable project JSON remains available. |
+| Direct folder access unavailable | Use Download ready ZIP if enabled. If ZIP is memory-blocked, choose Reduce output resolution to fit ZIP when offered, or move an Editable project JSON backup to a browser with direct-folder support. The smaller-output edit is Undoable and does not remove provinces or planes. |
 | Direct reinstall refuses an existing folder | A nonempty folder needs a valid `atlas_project.json` matching its normalized name. Atlas leaves it untouched. Use a different project name, or back up and move the conflicting folder before retrying. |
 | Artwork file is not an unchanged Atlas-owned file | Its name collides with a generated image or its bytes no longer match `atlas_artwork.json`. Back up and move that file yourself, or choose a new atlas name. Do not delete the ownership record to bypass the check. |
 | Illustrated export rejects raw commands | Any active map/plane/province raw command can contain unsafe numeric references. Use Native scenery or supported structured controls. |
 | Map does not appear in Dominions | Confirm `user data/maps/<Map_Name>/<Map_Name>.map`; avoid the game installation or doubled folder nesting. |
 | Removed planes still appear | Delete/replace the old folder before extracting a new ZIP, or use direct reinstall. |
-| ZIP is slow or memory-heavy | Use direct install, lower resolution, or reduce plane sizes/count. |
+| ZIP is slow or memory-heavy | Use direct install when supported. If ZIP is blocked, use Reduce output resolution to fit ZIP when offered, choose Native scenery, or save JSON and move to a supported browser. Layout locks and validation still apply. |
 | Autosave unavailable / storage full | Download Editable project JSON immediately. |
 | Latest edit disappeared after reload | Reload may have occurred while **Saving changes** was visible. Use **Save now**, wait for the saved status, and keep project JSON backups. |
 | Planned plane is empty after reopen | Expected: a staged plane round-trips in autosave/JSON but remains a playable-export error until you configure it and Generate. |

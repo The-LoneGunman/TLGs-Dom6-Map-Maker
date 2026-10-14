@@ -22,6 +22,7 @@ import {
   type D6mProgress,
 } from "./dom6";
 import { downloadBlob, MAX_PROJECT_IMPORT_BYTES, parseProject, serializeProject } from "./projectFile";
+import { supportsDirectInstall } from "./exportOptions";
 import { zipPackageSafety } from "./packageEstimate";
 
 // The editor imports the project-file and estimate modules directly and loads
@@ -189,7 +190,7 @@ export async function installPackage(project: MapProject, onProgress?: ProgressC
     showDirectoryPicker?: (options?: { mode?: "read" | "readwrite"; id?: string }) => Promise<FileSystemDirectoryHandle>;
   }).showDirectoryPicker;
   const locks = globalThis.navigator?.locks;
-  if (!picker || !locks) return "unsupported";
+  if (!picker || !locks || !supportsDirectInstall({ showDirectoryPicker: picker, navigator: { locks }, isSecureContext: globalThis.isSecureContext })) return "unsupported";
   try {
     const mapsDirectory = await picker({ mode: "readwrite", id: "dominions6-maps" });
     // Keep the picker in the initiating user gesture, then exclude competing
