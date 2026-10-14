@@ -11,6 +11,7 @@
     "build": "vinext build",
     "start": "vinext start",
     "test": "npm run build && node --test tests/*.test.mjs && tsx --test tests/*.test.ts",
+    "test:vendor": "node --test tests/braces-security.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "typecheck": "tsc --noEmit",
     "licenses:generate": "node scripts/generate-third-party-licenses.mjs",
@@ -30,6 +31,7 @@
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.5",
     "@vitejs/plugin-rsc": "0.5.34",
+    "braces": "file:vendor/braces",
     "eslint": "9.39.4",
     "eslint-plugin-jsx-a11y": "6.10.2",
     "eslint-plugin-react": "7.37.5",
@@ -43,6 +45,13 @@
     "vinext": "1.0.0-beta.8",
     "vite": "8.2.1",
     "wrangler": "4.135.0"
+  },
+  "overrides": {
+    "braces": "$braces",
+    "miniflare": {
+      "sharp": "0.35.5",
+      "undici": "7.29.1"
+    }
   },
   "type": "module"
 }

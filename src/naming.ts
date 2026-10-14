@@ -314,6 +314,15 @@ function permutationStep(size: number, seed: number): number {
 }
 
 function candidateAtRank(vocabulary: ReturnType<typeof namingVocabulary>, seed: string, rank: number): { name: string; numericFallback: boolean } {
+  const candidate = rawCandidateAtRank(vocabulary, seed, rank);
+  // Theme modifiers can repeat the first word of a compound place noun.
+  // Normalize before uniqueness/reserved-name checks, and only for new names.
+  const words = candidate.name.split(/\s+/);
+  return { ...candidate, name: words.filter((word, index) => index === 0
+    || word.toLowerCase() !== words[index - 1]!.toLowerCase()).join(" ") };
+}
+
+function rawCandidateAtRank(vocabulary: ReturnType<typeof namingVocabulary>, seed: string, rank: number): { name: string; numericFallback: boolean } {
   const hash = stableHash(`${seed}:${vocabulary.key}`);
   const phasedRank = rank + ((hash >>> 16) % 4);
   const namedRank = Math.floor(phasedRank / 4);

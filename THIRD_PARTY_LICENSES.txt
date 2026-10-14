@@ -113,32 +113,32 @@ LOCKED PACKAGE INVENTORY (588 package instances)
 @humanwhocodes/module-importer@1.0.1 | Apache-2.0 | node_modules/@humanwhocodes/module-importer
 @humanwhocodes/retry@0.4.3 | Apache-2.0 | node_modules/@humanwhocodes/retry
 @img/colour@1.1.0 | MIT | node_modules/@img/colour
-@img/sharp-darwin-arm64@0.35.4 | Apache-2.0 | node_modules/@img/sharp-darwin-arm64
-@img/sharp-darwin-x64@0.35.4 | Apache-2.0 | node_modules/@img/sharp-darwin-x64
-@img/sharp-freebsd-wasm32@0.35.4 | Apache-2.0 | node_modules/@img/sharp-freebsd-wasm32
-@img/sharp-libvips-darwin-arm64@1.3.3 | LGPL-3.0-or-later | node_modules/@img/sharp-libvips-darwin-arm64
-@img/sharp-libvips-darwin-x64@1.3.3 | LGPL-3.0-or-later | node_modules/@img/sharp-libvips-darwin-x64
-@img/sharp-libvips-linux-arm64@1.3.3 | LGPL-3.0-or-later | node_modules/@img/sharp-libvips-linux-arm64
-@img/sharp-libvips-linux-arm@1.3.3 | LGPL-3.0-or-later | node_modules/@img/sharp-libvips-linux-arm
-@img/sharp-libvips-linux-ppc64@1.3.3 | LGPL-3.0-or-later | node_modules/@img/sharp-libvips-linux-ppc64
-@img/sharp-libvips-linux-riscv64@1.3.3 | LGPL-3.0-or-later | node_modules/@img/sharp-libvips-linux-riscv64
-@img/sharp-libvips-linux-s390x@1.3.3 | LGPL-3.0-or-later | node_modules/@img/sharp-libvips-linux-s390x
-@img/sharp-libvips-linux-x64@1.3.3 | LGPL-3.0-or-later | node_modules/@img/sharp-libvips-linux-x64
-@img/sharp-libvips-linuxmusl-arm64@1.3.3 | LGPL-3.0-or-later | node_modules/@img/sharp-libvips-linuxmusl-arm64
-@img/sharp-libvips-linuxmusl-x64@1.3.3 | LGPL-3.0-or-later | node_modules/@img/sharp-libvips-linuxmusl-x64
-@img/sharp-linux-arm64@0.35.4 | Apache-2.0 | node_modules/@img/sharp-linux-arm64
-@img/sharp-linux-arm@0.35.4 | Apache-2.0 | node_modules/@img/sharp-linux-arm
-@img/sharp-linux-ppc64@0.35.4 | Apache-2.0 | node_modules/@img/sharp-linux-ppc64
-@img/sharp-linux-riscv64@0.35.4 | Apache-2.0 | node_modules/@img/sharp-linux-riscv64
-@img/sharp-linux-s390x@0.35.4 | Apache-2.0 | node_modules/@img/sharp-linux-s390x
-@img/sharp-linux-x64@0.35.4 | Apache-2.0 | node_modules/@img/sharp-linux-x64
-@img/sharp-linuxmusl-arm64@0.35.4 | Apache-2.0 | node_modules/@img/sharp-linuxmusl-arm64
-@img/sharp-linuxmusl-x64@0.35.4 | Apache-2.0 | node_modules/@img/sharp-linuxmusl-x64
-@img/sharp-wasm32@0.35.4 | Apache-2.0 AND LGPL-3.0-or-later AND MIT | node_modules/@img/sharp-wasm32
-@img/sharp-webcontainers-wasm32@0.35.4 | Apache-2.0 | node_modules/@img/sharp-webcontainers-wasm32
-@img/sharp-win32-arm64@0.35.4 | Apache-2.0 AND LGPL-3.0-or-later | node_modules/@img/sharp-win32-arm64
-@img/sharp-win32-ia32@0.35.4 | Apache-2.0 AND LGPL-3.0-or-later | node_modules/@img/sharp-win32-ia32
-@img/sharp-win32-x64@0.35.4 | Apache-2.0 AND LGPL-3.0-or-later | node_modules/@img/sharp-win32-x64
+@img/sharp-darwin-arm64@0.35.5 | Apache-2.0 | node_modules/@img/sharp-darwin-arm64
+@img/sharp-darwin-x64@0.35.5 | Apache-2.0 | node_modules/@img/sharp-darwin-x64
+@img/sharp-freebsd-wasm32@0.35.5 | Apache-2.0 | node_modules/@img/sharp-freebsd-wasm32
+@img/sharp-libvips-darwin-arm64@1.3.4 | LGPL-3.0-or-later | node_modules/@img/sharp-libvips-darwin-arm64
+@img/sharp-libvips-darwin-x64@1.3.4 | LGPL-3.0-or-later | node_modules/@img/sharp-libvips-darwin-x64
+@img/sharp-libvips-linux-arm64@1.3.4 | LGPL-3.0-or-later | node_modules/@img/sharp-libvips-linux-arm64
+@img/sharp-libvips-linux-arm@1.3.4 | LGPL-3.0-or-later | node_modules/@img/sharp-libvips-linux-arm
+@img/sharp-libvips-linux-ppc64@1.3.4 | LGPL-3.0-or-later | node_modules/@img/sharp-libvips-linux-ppc64
+@img/sharp-libvips-linux-riscv64@1.3.4 | LGPL-3.0-or-later | node_modules/@img/sharp-libvips-linux-riscv64
+@img/sharp-libvips-linux-s390x@1.3.4 | LGPL-3.0-or-later | node_modules/@img/sharp-libvips-linux-s390x
+@img/sharp-libvips-linux-x64@1.3.4 | LGPL-3.0-or-later | node_modules/@img/sharp-libvips-linux-x64
+@img/sharp-libvips-linuxmusl-arm64@1.3.4 | LGPL-3.0-or-later | node_modules/@img/sharp-libvips-linuxmusl-arm64
+@img/sharp-libvips-linuxmusl-x64@1.3.4 | LGPL-3.0-or-later | node_modules/@img/sharp-libvips-linuxmusl-x64
+@img/sharp-linux-arm64@0.35.5 | Apache-2.0 | node_modules/@img/sharp-linux-arm64
+@img/sharp-linux-arm@0.35.5 | Apache-2.0 | node_modules/@img/sharp-linux-arm
+@img/sharp-linux-ppc64@0.35.5 | Apache-2.0 | node_modules/@img/sharp-linux-ppc64
+@img/sharp-linux-riscv64@0.35.5 | Apache-2.0 | node_modules/@img/sharp-linux-riscv64
+@img/sharp-linux-s390x@0.35.5 | Apache-2.0 | node_modules/@img/sharp-linux-s390x
+@img/sharp-linux-x64@0.35.5 | Apache-2.0 | node_modules/@img/sharp-linux-x64
+@img/sharp-linuxmusl-arm64@0.35.5 | Apache-2.0 | node_modules/@img/sharp-linuxmusl-arm64
+@img/sharp-linuxmusl-x64@0.35.5 | Apache-2.0 | node_modules/@img/sharp-linuxmusl-x64
+@img/sharp-wasm32@0.35.5 | Apache-2.0 AND LGPL-3.0-or-later AND MIT | node_modules/@img/sharp-wasm32
+@img/sharp-webcontainers-wasm32@0.35.5 | Apache-2.0 | node_modules/@img/sharp-webcontainers-wasm32
+@img/sharp-win32-arm64@0.35.5 | Apache-2.0 AND LGPL-3.0-or-later | node_modules/@img/sharp-win32-arm64
+@img/sharp-win32-ia32@0.35.5 | Apache-2.0 AND LGPL-3.0-or-later | node_modules/@img/sharp-win32-ia32
+@img/sharp-win32-x64@0.35.5 | Apache-2.0 AND LGPL-3.0-or-later | node_modules/@img/sharp-win32-x64
 @jridgewell/gen-mapping@0.3.13 | MIT | node_modules/@jridgewell/gen-mapping
 @jridgewell/remapping@2.3.5 | MIT | node_modules/@jridgewell/remapping
 @jridgewell/resolve-uri@3.1.2 | MIT | node_modules/@jridgewell/resolve-uri
@@ -152,6 +152,7 @@ LOCKED PACKAGE INVENTORY (588 package instances)
 @nodelib/fs.stat@2.0.5 | MIT | node_modules/@nodelib/fs.stat
 @nodelib/fs.walk@1.2.8 | MIT | node_modules/@nodelib/fs.walk
 @oxc-project/types@0.143.0 | MIT | node_modules/@oxc-project/types
+@pantokrator-atlas/braces@3.0.3-atlas.1 | MIT | node_modules/braces
 @poppinss/colors@4.1.6 | MIT | node_modules/@poppinss/colors
 @poppinss/dumper@0.6.5 | MIT | node_modules/@poppinss/dumper
 @poppinss/exception@1.2.3 | MIT | node_modules/@poppinss/exception
@@ -259,9 +260,8 @@ balanced-match@4.0.4 | MIT | node_modules/@typescript-eslint/typescript-estree/n
 base64-js@0.0.8 | MIT | node_modules/base64-js
 baseline-browser-mapping@2.11.21 | Apache-2.0 | node_modules/baseline-browser-mapping
 blake3-wasm@2.1.5 | MIT | node_modules/blake3-wasm
-brace-expansion@1.1.18 | MIT | node_modules/brace-expansion
-brace-expansion@5.0.9 | MIT | node_modules/@typescript-eslint/typescript-estree/node_modules/brace-expansion
-braces@3.0.3 | MIT | node_modules/braces
+brace-expansion@1.1.21 | MIT | node_modules/brace-expansion
+brace-expansion@5.0.12 | MIT | node_modules/@typescript-eslint/typescript-estree/node_modules/brace-expansion
 browserslist@4.28.9 | MIT | node_modules/browserslist
 buffer-from@1.1.2 | MIT | node_modules/buffer-from
 call-bind-apply-helpers@1.0.2 | MIT | node_modules/call-bind-apply-helpers
@@ -338,7 +338,7 @@ fast-glob@3.3.1 | MIT | node_modules/fast-glob
 fast-glob@3.3.3 | MIT | node_modules/vite-plugin-dynamic-import/node_modules/fast-glob
 fast-json-stable-stringify@2.1.0 | MIT | node_modules/fast-json-stable-stringify
 fast-levenshtein@2.0.6 | MIT | node_modules/fast-levenshtein
-fast-uri@3.1.7 | BSD-3-Clause | node_modules/fast-uri
+fast-uri@3.1.8 | BSD-3-Clause | node_modules/fast-uri
 fastq@1.20.1 | ISC | node_modules/fastq
 fdir@6.5.0 | MIT | node_modules/tinyglobby/node_modules/fdir
 fflate@0.7.5 | MIT | node_modules/fflate
@@ -527,14 +527,14 @@ semver@7.8.5 | ISC | node_modules/sharp/node_modules/semver
 set-function-length@1.2.2 | MIT | node_modules/set-function-length
 set-function-name@2.0.2 | MIT | node_modules/set-function-name
 set-proto@1.0.0 | MIT | node_modules/set-proto
-sharp@0.35.4 | Apache-2.0 | node_modules/sharp
+sharp@0.35.5 | Apache-2.0 | node_modules/sharp
 shebang-command@2.0.0 | MIT | node_modules/shebang-command
 shebang-regex@3.0.0 | MIT | node_modules/shebang-regex
 side-channel-list@1.0.1 | MIT | node_modules/side-channel-list
 side-channel-map@1.0.1 | MIT | node_modules/side-channel-map
 side-channel-weakmap@1.0.2 | MIT | node_modules/side-channel-weakmap
 side-channel@1.1.0 | MIT | node_modules/side-channel
-source-map-js@1.2.1 | BSD-3-Clause | node_modules/source-map-js
+source-map-js@1.2.2 | BSD-3-Clause | node_modules/source-map-js
 source-map-support@0.5.21 | MIT | node_modules/source-map-support
 source-map@0.6.1 | BSD-3-Clause | node_modules/source-map
 srvx@0.12.5 | MIT | node_modules/srvx
@@ -573,7 +573,7 @@ typescript-eslint@8.59.3 | MIT | node_modules/typescript-eslint
 typescript@5.9.3 | Apache-2.0 | node_modules/typescript
 unbox-primitive@1.1.0 | MIT | node_modules/unbox-primitive
 undici-types@6.21.0 | MIT | node_modules/undici-types
-undici@7.29.0 | MIT | node_modules/undici
+undici@7.29.1 | MIT | node_modules/undici
 unenv@2.0.0-rc.24 | MIT | node_modules/unenv
 unicode-trie@2.0.0 | MIT | node_modules/unicode-trie
 unpic@4.2.2 | MIT | node_modules/unpic
@@ -4115,7 +4115,7 @@ Apache License
 
 --- SHA-256 6ead954f967233375b98f6d8363bdb27ddc7d945a83f88c20952e7ca0fa8675d ---
 Packages:
-  source-map-js@1.2.1 (LICENSE)
+  source-map-js@1.2.2 (LICENSE)
   source-map@0.6.1 (LICENSE)
 
 Copyright (c) 2009-2011, Mozilla Foundation and contributors
@@ -6490,7 +6490,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 --- SHA-256 9ff562631a04b8cb1030c53fdf461bd749c9af0655d86e4f17eb270e935a7fe2 ---
 Packages:
-  sharp@0.35.4 (LICENSE)
+  sharp@0.35.5 (LICENSE)
 
 Apache License
 Version 2.0, January 2004
@@ -7064,7 +7064,7 @@ SOFTWARE.
 
 --- SHA-256 b010b0dfdfdb23d7396e03b82cd4621fc9bb8f95d6b0aea70b9c24e12074c786 ---
 Packages:
-  fast-uri@3.1.7 (LICENSE)
+  fast-uri@3.1.8 (LICENSE)
 
 Copyright (c) 2011-2021, Gary Court until https://github.com/garycourt/uri-js/commit/a1acf730b4bba3f1097c9f52e7d9d3aba8cdcaae
 Copyright (c) 2021-present The Fastify team <https://github.com/fastify/fastify#team>
@@ -8219,7 +8219,7 @@ SOFTWARE.
 
 --- SHA-256 cfe46dde9d4b5f4c1e2db0935b3f5b8570a19c59e8938bb082065e3b6e26d834 ---
 Packages:
-  brace-expansion@1.1.18 (LICENSE)
+  brace-expansion@1.1.21 (LICENSE)
   isarray@2.0.5 (LICENSE)
 
 MIT License
@@ -8466,7 +8466,7 @@ DEALINGS IN THE SOFTWARE.
 
 --- SHA-256 d99bf3271ffd7561b89e2c51b5da6ca3a3669e031efc6543f477541520a1566b ---
 Packages:
-  braces@3.0.3 (LICENSE)
+  @pantokrator-atlas/braces@3.0.3-atlas.1 (LICENSE)
   fill-range@7.1.1 (LICENSE)
   is-number@7.0.0 (LICENSE)
   micromatch@4.0.8 (LICENSE)
@@ -9111,7 +9111,7 @@ SOFTWARE.
 
 --- SHA-256 f36e2da26df2488bf0d0ecf2f54a4ba02e2372cdd27ee07974da85a0975e29c3 ---
 Packages:
-  brace-expansion@5.0.9 (LICENSE)
+  brace-expansion@5.0.12 (LICENSE)
 
 MIT License
 
@@ -11973,7 +11973,7 @@ SOFTWARE.
 --- SHA-256 fe64958bfaef10b1c9628b4ee9f1c48170b0219bd4b2a7ef4a0c41aebd920c9e ---
 Packages:
   undici-types@6.21.0 (LICENSE)
-  undici@7.29.0 (LICENSE)
+  undici@7.29.1 (LICENSE)
 
 MIT License
 

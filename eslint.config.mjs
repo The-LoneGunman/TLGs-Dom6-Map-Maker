@@ -37,6 +37,12 @@ const eslintConfig = defineConfig([
       },
     },
   },
+  {
+    // Preserve the vendored upstream CommonJS API; retain all other checks.
+    files: ["vendor/braces/**/*.js"],
+    languageOptions: { sourceType: "commonjs" },
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+  },
 ]);
 
 export default eslintConfig;

@@ -3,7 +3,7 @@ import test from "node:test";
 import { performance } from "node:perf_hooks";
 import { cloneProject, type Plane, type PlaneKind, type PlaneVariant, type Province, type TerrainFlag, type TerrainKey } from "../src/domain";
 import { compileMapText } from "../src/dom6";
-import { createDefaultProject, generateProject } from "../src/generator";
+import { addPlane, createDefaultProject, generateProject } from "../src/generator";
 import { DISTINCTIVE_REALM_NAMES, DISTINCTIVE_TERRAIN_NAMES, distinctiveRealmNames } from "../src/nameVocabulary";
 import {
   MIN_CONTEXTUAL_NAME_POOL,
@@ -17,6 +17,30 @@ import {
 
 const KINDS: PlaneKind[] = ["surface", "cave", "cavern", "cloud", "air", "underworld", "hell", "abyss", "dream", "elemental", "custom"];
 const VARIANTS: PlaneVariant[] = ["temperate", "wild", "frozen", "arid", "oceanic", "fungal", "crystal", "volcanic", "storm", "infernal", "void"];
+
+test("the reported Styx seed does not repeat adjacent words in a generated name", () => {
+  const project = generateProject(addPlane(createDefaultProject("realm-81w2t1-x0koa1"), "underworld", { generate: false, autoSize: true }));
+  assert.equal(project.planes[1]!.provinces[10]!.name, "Mourning Bank");
+});
+
+test("new names avoid adjacent repeats across themes while retaining manual and locked names", () => {
+  for (const kind of KINDS) for (const variant of VARIANTS) {
+    const plane = fixturePlane(kind, variant, kind === "underworld" ? "sea" : "caveforest");
+    const prototype = plane.provinces[0]!;
+    plane.provinces = Array.from({ length: 128 }, (_, index) => ({ ...prototype, id: `repeat-${index}`, index: index + 1 }));
+    plane.provinces.push({ ...prototype, id: "manual-repeat", index: 129, name: "Mourning Mourning Bank", nameSource: "authored" });
+    plane.provinces.push({ ...prototype, id: "locked-repeat", index: 130, name: "Deep Deep Hall", editorLocks: ["name"] });
+    const first = structuredClone(plane);
+    const second = structuredClone(plane);
+    regenerateGeneratedProvinceNames([first], `word-repeat-${kind}-${variant}`);
+    regenerateGeneratedProvinceNames([second], `word-repeat-${kind}-${variant}`);
+    assert.deepEqual(first, second);
+    assert.deepEqual(first.provinces.slice(-2), plane.provinces.slice(-2));
+    for (const province of first.provinces.slice(0, 128)) assert.doesNotMatch(province.name, /\b(\w+)\s+\1\b/i);
+    assert.equal(new Set(first.provinces.map(p => normalizeProvinceName(p.name))).size, first.provinces.length);
+    assert.ok(first.provinces.every(p => !isReservedProvinceName(p.name)));
+  }
+});
 
 const EXPECTED_CUSTOM_THEMES: Record<PlaneVariant, string> = {
   temperate: "custom:temperate",
