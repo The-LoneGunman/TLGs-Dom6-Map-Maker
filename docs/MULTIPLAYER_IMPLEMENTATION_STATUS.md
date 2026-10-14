@@ -1,6 +1,6 @@
 # Multiplayer workbench implementation
 
-Reviewed October 14, 2026, including the merged [island-start audit repairs](AUDIT_ISLAND_REPAIRS_2026-09-23.md). Package version remains 0.1.5. The last recorded publication check identifies hosted Site version 13 and Windows v0.1.5 with the earlier `581b2b8` source; it does not cover the post-release additions below. See [Versions and documentation](../README.md#versions-and-documentation) and [release verification](RELEASE_VERIFICATION_0.1.5.md) for the separate delivery records.
+Reviewed October 14, 2026 for version 0.1.6, including the merged [island-start audit repairs](AUDIT_ISLAND_REPAIRS_2026-09-23.md) and [October corrections](AUDIT_REPAIRS_2026-10-14.md). The additions below are included in the 0.1.6 source. See [Versions and documentation](../README.md#versions-and-documentation) and [0.1.6 release verification](RELEASE_VERIFICATION_0.1.6.md) for hosted and Windows delivery status.
 
 This tracks the approved [comparative-research roadmap](MULTIPLAYER_MAPMAKER_RESEARCH_2026-09-06.md). Approval is not proof of delivery or measured balance. Selector catalogs are pinned to 6.37; they are not nation-strength rulesets or automatic update feeds.
 
@@ -65,7 +65,7 @@ The September 22 repair check reran the first **128** corpus cases: **14 export-
 Still outstanding:
 
 - Fresh native-game visual acceptance for the latest Cloud/Air and natural contours, connected river/bridge rendering (including wrap seams), and Sea + Cave Wall relief. Earlier illustrated-art loading/visual checks predate these refinements.
-- Separate hosted deployment and clean-runner installer packaging/publication for the post-release additions; a source merge does not complete either.
+- Channel-specific verification for each release; the [0.1.6 delivery record](RELEASE_VERIFICATION_0.1.6.md) tracks hosted deployment and clean-runner installer packaging/publication separately from source merges.
 - Full lossless editable import of arbitrary external maps, including authored raster geometry and unsupported directives.
 - Calibrated nation movement, separate income/resources/recruitment estimates, and combat difficulty models.
 - Verified automatic nation accommodations. Host-declared checks are not a substitute for patch-specific evidence.

@@ -1,12 +1,12 @@
 # Pantokrator Atlas User Guide
 
-Pantokrator Atlas is a local-first map maker for Dominions 6. It generates deterministic, multiplayer-oriented atlases with one to eight planes and exports playable packages that Dominions can load directly. Native `.map`/`.d6m` scenery remains the default; current `main` also offers illustrated realm images.
+Pantokrator Atlas is a local-first map maker for Dominions 6. It generates deterministic, multiplayer-oriented atlases with one to eight planes and exports playable packages that Dominions can load directly. Native `.map`/`.d6m` scenery remains the default; version 0.1.6 also offers illustrated realm images.
 
-Reviewed September 22, 2026, including the [seed and numeric-edit audit repairs](AUDIT_REPAIRS_2026-09-22.md); the package version remains **0.1.5**. **Unreleased development** means source additions not yet published to the hosted GUI or Windows installer. Those editions (Site version 13 and Windows v0.1.5) still use `581b2b8`. Check [Versions and documentation](../README.md#versions-and-documentation) before looking for a missing control.
+This guide covers **version 0.1.6**, reviewed October 14, 2026. Check [Versions and documentation](../README.md#versions-and-documentation) and the release notes if a control is missing from an older installation.
 
-The merged additions are automatic [connected-region layouts](#province-layout), [procedural realm artwork](#procedural-realm-appearance), [Illustrated realms export](#in-game-artwork), [coastal/ocean/lake shapes](#overland-ocean-layout), [connected rivers](#connected-border-rivers), [smaller default biomes](#biome-cohesion), and [cave-wall/mixed-terrain repairs](#additional-terrain-flags). They are not in the published 0.1.5 build. Keep a pre-upgrade JSON backup; regeneration can replace geography and content, and older builds may reject the new saved fields.
+New since 0.1.5 are automatic [connected-region layouts](#province-layout), [procedural realm artwork](#procedural-realm-appearance), [Illustrated realms export](#in-game-artwork), [coastal/ocean/lake shapes](#overland-ocean-layout), [connected rivers](#connected-border-rivers), [smaller default biomes](#biome-cohesion), and [cave-wall/mixed-terrain repairs](#additional-terrain-flags). Keep a pre-upgrade JSON backup; regeneration can replace geography and content, and older builds may reject the new saved fields.
 
-The [release verification record](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/RELEASE_VERIFICATION_0.1.5.md) separates completed tests from remaining limits and delivery. Native testing covers specific map-loading, winter appearance, defender-template and guardian-capture cases; it does not certify every seasonal visual, PD roster or multiplayer matchup. Supplemental evidence and catalog links open GitHub and require internet access; the installed Windows edition bundles this guide and the README for offline use.
+The [release verification record](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/RELEASE_VERIFICATION_0.1.6.md) separates completed tests from remaining limits and delivery. Native testing covers specific map-loading, winter appearance, defender-template and guardian-capture cases; it does not certify every seasonal visual, PD roster or multiplayer matchup. Supplemental evidence and catalog links open GitHub and require internet access; the installed Windows edition bundles this guide and the README for offline use.
 
 ## Contents
 
@@ -38,7 +38,7 @@ The simplest route is the [hosted GUI](https://pantokrator-atlas.mbatlle7.chatgp
 
 Use the local Windows release if you want an offline copy. Source, releases, and issue reporting are available in the public [GitHub repository](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker).
 
-For the unreleased features already on `main`, follow [Develop from source](../README.md#develop-from-source). Downloading the same v0.1.5 installer again will not add them.
+For development or changes newer than a release, follow [Develop from source](../README.md#develop-from-source). Reinstalling an older release does not add newer controls.
 
 ### 2. Run a local Windows copy
 
@@ -47,9 +47,9 @@ For the unreleased features already on `main`, follow [Develop from source](../R
 3. Open **Pantokrator Atlas** from the Start Menu.
 4. Keep the launcher terminal open while using Atlas. Press **Ctrl+C** there, or close it, when finished.
 
-The installer includes the tested application and a private Node.js runtime. It does not modify the system Node.js installation, run npm, or download dependencies. The launcher runs only on your computer and opens Atlas when ready at `http://127.0.0.1:<port>/`, choosing a free port from 3000 through 3099. In published v0.1.5, a second launch can start another server at a different address with a separate autosave. Reuse the existing browser tab; if a second tab looks empty, return to the original address. Close the old launcher before updating.
+The installer includes the tested application and a private Node.js runtime. It does not modify the system Node.js installation, run npm, or download dependencies. The launcher runs only on your computer and opens Atlas when ready at `http://127.0.0.1:<port>/`, choosing a free port from 3000 through 3099. Close the old launcher before updating.
 
-**Unreleased source behavior:** launching again reopens an already running Atlas instead of starting a second server. If its package version differs, the launcher reports that difference. Close the running launcher first to use the updated source; different source commits can share the same package version.
+Launching again reopens an already running Atlas instead of starting a second server. If its package version differs, the launcher reports that difference. Close the running launcher first to use the updated version; different source commits can share the same package version. Older v0.1.5 installations do not have this running-instance reuse.
 
 The setup is not currently code-signed, so Windows may show an unknown-publisher warning. Download it only from the project's GitHub release page. To check integrity, download its matching `Pantokrator-Atlas-Setup-x64.exe.sha256`, open PowerShell in that download folder, and run:
 
@@ -62,7 +62,7 @@ The hash values must match, ignoring letter case. Do not run the installer if th
 
 For a portable copy instead, download `Pantokrator-Atlas-Windows.zip`, install [Node.js 22.13.0 or newer](https://nodejs.org/en/download), extract the archive to a writable folder, and run **Start Pantokrator Atlas.cmd** there. Never run the launcher inside the ZIP or from the Steam game directory. GitHub's **Source code** archives are not this prepared portable release.
 
-Storage follows the browser profile and exact origin, not the application folder. Installer and portable copies share autosave when opened at the same address; different ports, `localhost`, `127.0.0.1`, and the hosted site use separate storage. Running-instance reuse is currently source-only, and even with it the port can change between sessions if another program occupies the previous one. Use **Editable project JSON** to move projects between them.
+Storage follows the browser profile and exact origin, not the application folder. Installer and portable copies share autosave when opened at the same address; different ports, `localhost`, `127.0.0.1`, and the hosted site use separate storage. The port can still change between sessions if another program occupies the previous one. Use **Editable project JSON** to move projects between them.
 
 ### Updating a local copy
 
@@ -83,7 +83,7 @@ Uninstall through **Windows Settings -> Apps -> Installed apps -> Pantokrator At
 5. Review the map, generation notice, fairness report, and **Validate** results.
 6. Make province, border, site, guardian, throne, and actual-gateway edits.
 7. Resolve every red validation error.
-8. Choose **Install / export**, select the desired **In-game artwork** when using current source, and either install directly into the Dominions user-data `maps` folder or download the ready ZIP.
+8. Choose **Install / export**, select the desired **In-game artwork** and either install directly into the Dominions user-data `maps` folder or download the ready ZIP.
 
 While no province is selected, the province inspector shows these steps as a **Getting started** checklist: Generate, Planes, Scenario, Validate, and Install. Each step opens its tab or dialog.
 
@@ -146,7 +146,7 @@ The tab is grouped into collapsible sections: **Basics**, **Starts**, **World sh
 | Water | 18% |
 | Ocean layout | Natural / varied |
 | Major continents | 3 |
-| Biome cohesion | 58% on current main (68% in published 0.1.5) |
+| Biome cohesion | 58%; saved settings are preserved |
 | Economy balance | Hard competitive balance |
 | Overland topology | Competitive mix |
 | Bonus-plane size | 30% of core |
@@ -169,7 +169,7 @@ Seed, player count, provinces per player and the generation plan summary.
 
 A free-text deterministic seed. A first visit without a saved atlas and each **New atlas** use a fresh random seed. Reopening an existing project preserves its seed. The same effective settings and seed reproduce the same generated atlas within the same generator revision; updates can change generation, so keep project JSON when an exact map matters. The icon beside the field creates another random realm-style seed for the next **Generate**; it does not immediately rename or regenerate the current map. To change only names, use the name controls below.
 
-Current source also reproduces generation across independently created atlases: use the same seed, plane order, names and configuration, with no differing authored content or locks. Earlier builds mixed internal plane IDs into some generation/art decisions. Saved maps keep their existing outlines and artwork when opened; the fix takes effect on explicit Generate. Older builds may reject the new applied-generation metadata, so retain a pre-upgrade JSON backup.
+Atlas also reproduces generation across independently created atlases: use the same seed, plane order, names and configuration, with no differing authored content or locks. Earlier builds mixed internal plane IDs into some generation/art decisions. Saved maps keep their existing outlines and artwork when opened; the fix takes effect on explicit Generate. Older builds may reject the new applied-generation metadata, so retain a pre-upgrade JSON backup.
 
 #### Players
 
@@ -258,13 +258,13 @@ This is the requested water share on water-capable generated realms. Generation 
 
 Island Chains needs enough sea to look and play like islands. If Water is below 48%, generation raises the effective setting to 48% and reports the change.
 
-**Unreleased island-start repair:** generation first checks whether the islands can fit the requested inland **Land**, **Coastal**, and **Water** starts. If not, it tries wider island interiors reserved around safe capital locations. The repair keeps the exact water count, one connected ocean, at least three separated islands, and the minimum capital spacing; already-feasible island geography stays unchanged. It applies only when generating, not when opening a saved map.
+**Island-start repair:** generation first checks whether the islands can fit the requested inland **Land**, **Coastal**, and **Water** starts. If not, it tries wider island interiors reserved around safe capital locations. The repair keeps the exact water count, one connected ocean, at least three separated islands, and the minimum capital spacing; already-feasible island geography stays unchanged. It applies only when generating, not when opening a saved map.
 
 Some combinations still cannot fit. The generator warns rather than reducing water, changing the requested start categories, or weakening export validation. Prefer more **Coastal** starts, increase provinces per player, or choose a continental layout if the requested inland start count exceeds the available dry land.
 
-On current main, explicit ocean presets keep their water layout during start placement. If a coast-heavy map cannot fit the requested inland capitals safely, review the spacing/category notices, allocate more Coastal or Water starts, or increase provinces per player. The generator no longer scatters the chosen ocean just to accommodate those starts.
+In 0.1.6, explicit ocean presets keep their water layout during start placement. If a coast-heavy map cannot fit the requested inland capitals safely, review the spacing/category notices, allocate more Coastal or Water starts, or increase provinces per player. The generator no longer scatters the chosen ocean just to accommodate those starts.
 
-**Unreleased natural landforms:** new generations curve shared province boundaries, including shorelines. Single Continent grows a connected peripheral sea; Multiple Continents and Island Chains try broad, winding separators before falling back to their capacity-safe layouts; Central Inland Sea uses an asymmetric, lobed basin. Natural / Varied keeps its existing seed-driven water distribution with the new boundary shapes. The existing water budget, start placement and connectivity safeguards still apply; constrained settings may limit the achievable outline or continent count. These are cartographic shapes, not a physical erosion simulation.
+**Natural landforms:** new generations curve shared province boundaries, including shorelines. Single Continent grows a connected peripheral sea; Multiple Continents and Island Chains try broad, winding separators before falling back to their capacity-safe layouts; Central Inland Sea uses an asymmetric, lobed basin. Natural / Varied keeps its existing seed-driven water distribution with the new boundary shapes. The existing water budget, start placement and connectivity safeguards still apply; constrained settings may limit the achievable outline or continent count. These are cartographic shapes, not a physical erosion simulation.
 
 Water remains a set of playable Sea/Deep Sea provinces, not a painted overlay. Preview, clicking and native export use the same ownership. Older saved maps do not change just by loading, exporting or rerolling content; back up the project and **Generate** to obtain the new shapes. A settings recipe is not an exact map backup: it uses the current generator when you subsequently generate.
 
@@ -272,7 +272,7 @@ Coastal boundaries use stronger bays/headlands than inland divisions; ocean inte
 
 #### Biome cohesion
 
-Range: **0-100%**. Current-main default: **58%** (published 0.1.5 uses 68%). Saved settings are not automatically lowered.
+Range: **0-100%**. Default: **58%**. Saved settings are not automatically lowered.
 
 - Lower values make smaller, more varied terrain patches.
 - Higher values create larger connected biome regions.
@@ -301,7 +301,7 @@ This affects solid Surface and surface-like Custom planes. Cave-family and spars
 
 ##### Connected border rivers
 
-Unreleased feature on current main; published 0.1.5 retains the earlier border-river generator.
+Version 0.1.6 connects eligible border rivers into terrain-guided watercourses; province-water rivers such as the Styx are separate.
 
 On newly generated solid Surface and surface-like Custom maps, small river borders form connected channels instead of isolated random stretches. Routes use the actual junctions where province borders meet, including enabled wrap seams. Upland and lake headwaters are preferred, with routes favoring valleys toward larger water bodies. Tributaries can join existing downstream channels. Where no coast is reachable, rivers drain to another water body, an unwrapped map edge, or a low inland basin on fully wrapped dry maps. This is terrain-guided layout, not a physical water-flow simulation.
 
@@ -362,7 +362,7 @@ These controls are in the **Province names** section, which starts collapsed and
 
 **Reroll generated names (preserve manual)** immediately renames generated provinces on every plane without changing geography. Names use plane, terrain, coast, flooded-cave, and Styx context. Names edited in the province inspector and legacy names with no provenance are preserved. The action is Undoable.
 
-Current source removes adjacent repeated words from newly generated names (for example, “Mourning Mourning Bank” becomes “Mourning Bank”) before checking uniqueness. This does not rewrite saved, manually edited or name-locked provinces unless they are otherwise eligible for an explicit naming action.
+Atlas removes adjacent repeated words from newly generated names (for example, “Mourning Mourning Bank” becomes “Mourning Bank”) before checking uniqueness. This does not rewrite saved, manually edited or name-locked provinces unless they are otherwise eligible for an explicit naming action.
 
 **Replace every province name** opens a confirmation and replaces generated, manual, and legacy names, except provinces protected by a name lock. Unlock those names first if they should also change. Use it to repair duplicate or poorly matched names in older projects. It is also Undoable.
 
@@ -470,7 +470,7 @@ Variants reweight climate, terrain, site paths, population pools, guardian theme
 
 ### Province layout
 
-Unreleased feature on current main; not available in the published 0.1.5 build.
+Version 0.1.6 uses connected regions and broad passages instead of the old classic layout selector.
 
 Sparse realms automatically use **Connected regions & passages**: adjacent province masses joined by broad passage provinces. The Planes panel explains the current layout; there is no classic-layout selector. **Generate** builds the corresponding clustered movement graph and remains a separate, confirmed regeneration step. Merely opening an existing map does not replace province IDs, contents, starts or movement links.
 
@@ -488,7 +488,7 @@ Old project and recipe `sparseLayout` fields remain readable as compatibility me
 
 ### Procedural realm appearance
 
-In current source, the editor and **Preview PNG** render Cloud/Air as floating islands over clouds; Cave/Cavern with textured rock and fungal or crystal details; the Underworld with tomb-like stones and mist around the Styx; Infernal with ember fissures; Abyss with obsidian forms; Dream with mist and enchanted vegetation; and Elemental realms with variant-led accents. The pixels are generated locally and deterministically from project data, without external artwork, downloads, or new dependencies.
+In 0.1.6, the editor and **Preview PNG** render Cloud/Air as floating islands over clouds; Cave/Cavern with textured rock and fungal or crystal details; the Underworld with tomb-like stones and mist around the Styx; Infernal with ember fissures; Abyss with obsidian forms; Dream with mist and enchanted vegetation; and Elemental realms with variant-led accents. The pixels are generated locally and deterministically from project data, without external artwork, downloads, or new dependencies.
 
 Primary terrain, additional flags, realm presets, and the selected Condition preview still determine the effective appearance. Actual Sea remains blue and receives aquatic-colored details, including the Styx and mixed water terrain on Infernal or Abyss planes; realm theming cannot repaint it as dry ground. Frozen/winter adds illustrative snow only where the existing preview policy allows it. Cloud/Air dry islands can receive snow, while the newly illustrated Cave/Cavern, Underworld, Infernal, Abyss, Dream, and Elemental realms retain their normal palette.
 
@@ -797,7 +797,7 @@ Heartland, Wildwood, Marshlands, Sunscorched, High country, Tundra, Archipelago,
 
 Sea, Highland, Swamp, Wasteland, Forest, Farm, Deep sea, Cave, Mountains, and Impassable cave wall can be combined additively. The tab shows what the primary terrain already contributes and the resulting effective mask; **About terrain flags** holds the combination, Cave Wall, and artwork notes.
 
-The cave-wall cleanup and mixed Swamp/Sea relief corrections described below are unreleased repairs on current main. The published 0.1.5 build does not include them.
+The cave-wall cleanup and mixed Swamp/Sea relief corrections described below are included in 0.1.6.
 
 Changes repaint the map immediately and appear in the [high-resolution PNG preview](#preview-png). Mixed terrain combines its colors, materials, and symbols: Farm adds field rows, Forest adds trees (kelp under water), and Cave adds cave details. Mountains, hills, marshes, waste, and water have their own marks. Details fit within the province and remain clipped on irregular, narrow, and wrapped shapes; zoom in on small provinces. Fresh water adds a water marker without turning land into a sea. Deep sea only has an effect when Sea is also present.
 
@@ -944,7 +944,7 @@ Use the official map manual. Rare scenario commands such as `#god`, `#dominionst
 
 ## Catalog manager
 
-The 0.1.5 source bundles a pinned Dominions 6.37 selector catalog covering units, sites, population types, nations, and forts. See the [catalog coverage and provenance notes](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/CONTENT_CATALOG.md) for its source and exact IDs. It does not automatically track later game updates. Pickers search names, aliases, tags, and numeric IDs. Older published builds may still use the 6.35 snapshot. The separate recruitment-membership table is evidence for roster identities, not a claim that every population has an accepted automatic defender template.
+Atlas bundles a pinned Dominions 6.37 selector catalog covering units, sites, population types, nations, and forts. See the [catalog coverage and provenance notes](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/CONTENT_CATALOG.md) for its source and exact IDs. It does not automatically track later game updates. Pickers search names, aliases, tags, and numeric IDs. The separate recruitment-membership table is evidence for roster identities, not a claim that every population has an accepted automatic defender template.
 
 - **Sources & license:** shows data provenance.
 - **Import verified JSON:** accepts up to 8 MiB of UTF-8 JSON and merges a schema-valid catalog with bundled entries. Custom entries override matching IDs for lookup/display. The label does not independently authenticate user-supplied data; use a source you trust.
@@ -1053,7 +1053,7 @@ The header buttons keep up to 30 project snapshots. A new edit clears Redo. Undo
 
 ### Editable project JSON
 
-Projects saved by current source can contain optional analysis requirements, host-era declarations, pinned population-defender policies, generation-input snapshots, per-plane preferences, locks, saved selections, and natural-landform/water-shape provenance. It opens older schema-v1 projects without inventing a generation baseline, upgrading their defender revision or adding the new natural-shape marker. Older app versions may reject these fields; keep a pre-upgrade backup if you need to return to an older app.
+Projects saved by 0.1.6 can contain optional analysis requirements, host-era declarations, pinned population-defender policies, generation-input snapshots, per-plane preferences, locks, saved selections, and natural-landform/water-shape provenance. It opens older schema-v1 projects without inventing a generation baseline, upgrading their defender revision or adding the new natural-shape marker. Older app versions may reject these fields; keep a pre-upgrade backup if you need to return to an older app.
 
 Choose **Install / export -> Editable project JSON** for a portable backup named `<map-name>.atlas.json`. Host packages and direct installs also include `atlas_project.json`; player ZIPs deliberately do not.
 
@@ -1069,7 +1069,7 @@ Open **Install / export** in the header after validation.
 
 ### In-game artwork
 
-This selector is available on **current main**, but not in the published hosted app or Windows v0.1.5:
+Version 0.1.6 offers these artwork modes:
 
 | Choice | Playable output |
 | --- | --- |
@@ -1082,7 +1082,7 @@ Image-based province numbers follow Dominions' white-pixel scan order. Atlas rem
 
 **Start a new game when changing artwork modes.** Do not replace a running game's files with a differently numbered export. Keep the same complete package for host and players. Active advanced raw commands block illustrated export; they remain available with Native scenery.
 
-Illustrated packages take longer to render and can be much larger. The dialog's size and memory checks change with the selected mode. Prefer **Install directly** for large illustrated maps when your browser supports it; it stages one image at a time. If ZIP is too large, current source can offer **Reduce output resolution to fit ZIP** as described below. [Verification and remaining limits](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/ILLUSTRATED_EXPORT_2026-09-22.md#verification-and-limits) distinguish actual native-game observations from automated checks.
+Illustrated packages take longer to render and can be much larger. The dialog's size and memory checks change with the selected mode. Prefer **Install directly** for large illustrated maps when your browser supports it; it stages one image at a time. If ZIP is too large, Atlas can offer **Reduce output resolution to fit ZIP** as described below. [Verification and remaining limits](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/blob/main/docs/ILLUSTRATED_EXPORT_2026-09-22.md#verification-and-limits) distinguish actual native-game observations from automated checks.
 
 ### Package contents
 
@@ -1119,7 +1119,7 @@ If you added custom battle assets manually, back them up before replacing the fo
 
 Large packages may show a ZIP memory warning or disable both ZIP options. **Editable project JSON** and active-plane preview remain available; **Install directly** also remains available when your browser supports secure folder access and Web Locks.
 
-Current source offers **Reduce output resolution to fit ZIP** when it can find a smaller, export-valid size within the memory ceiling. This is an explicit Current Map edit: it reduces each plane's output dimensions, preserves its aspect ratio, sets resolution to **Custom**, and leaves provinces, terrain, starts, guardians and connections unchanged. It does not regenerate geography. **Undo** restores the previous dimensions. The option respects the layout lock, minimum image dimensions and validation; it is not available for every project. If no safe reduction fits, save editable JSON and reopen it in a browser with direct-folder support, or choose **Native scenery** if appropriate.
+Atlas offers **Reduce output resolution to fit ZIP** when it can find a smaller, export-valid size within the memory ceiling. This is an explicit Current Map edit: it reduces each plane's output dimensions, preserves its aspect ratio, sets resolution to **Custom**, and leaves provinces, terrain, starts, guardians and connections unchanged. It does not regenerate geography. **Undo** restores the previous dimensions. The option respects the layout lock, minimum image dimensions and validation; it is not available for every project. If no safe reduction fits, save editable JSON and reopen it in a browser with direct-folder support, or choose **Native scenery** if appropriate.
 
 ### Download player ZIP
 
@@ -1141,7 +1141,7 @@ The normalized project root uses safe ASCII letters, digits, and underscores, wi
 
 ### Browser limitations
 
-Direct folder access requires a secure browser context with the File System Access API and Web Locks. Current source detects these capabilities, disables **Install directly** when unavailable, and explains the usable alternatives. Use ZIP if it fits the memory ceiling, or the smaller-output option above. Editable JSON remains available to move the project to another browser. Atlas permits only one direct installation at a time across tabs using the same app address. Do not install into the same folder from different app addresses, browsers or profiles simultaneously: browser locks do not cover those writers. Atlas also checks for outside changes and retains recovery backups rather than overwriting a detected conflict.
+Direct folder access requires a secure browser context with the File System Access API and Web Locks. Atlas detects these capabilities, disables **Install directly** when unavailable, and explains the usable alternatives. Use ZIP if it fits the memory ceiling, or the smaller-output option above. Editable JSON remains available to move the project to another browser. Atlas permits only one direct installation at a time across tabs using the same app address. Do not install into the same folder from different app addresses, browsers or profiles simultaneously: browser locks do not cover those writers. Atlas also checks for outside changes and retains recovery backups rather than overwriting a detected conflict.
 
 A retry can use a folder containing only recognizable staging files from an interrupted first install; those old files are preserved, not deleted. If recovery reports retained backups or an unrecognized folder, do not host it yet. Review the folder and backups, or choose a new atlas name for a clean installation. For large 4K multi-plane atlases, direct installation is more memory-efficient than ZIP generation.
 
@@ -1199,7 +1199,7 @@ Validation, replacement-confirmation, and export dialogs trap focus. Escape clos
 | Plane not linked to main plane | Add/regenerate a valid gateway path to plane 1. |
 | Dry/aquatic gateway mismatch | Move an endpoint so both sides have matching water status or regenerate. This blocks export. |
 | Guardian or throne at/adjacent to a start | Remove it or regenerate. Start capitals and their directly connected provinces are a protected one-ring zone. |
-| Blocked Cave Wall contains a throne or guardians | Resolve the structured content or recognized province-level raw commands reported by validation. Current-source playable export refuses the conflict; saving editable JSON remains available. |
+| Blocked Cave Wall contains a throne or guardians | Resolve the structured content or recognized province-level raw commands reported by validation. Playable export refuses the conflict; saving editable JSON remains available. |
 | Sea + Cave Wall warning | The province is still blocked even though native relief is submerged. Remove Cave Wall for navigable water; the mixed terrain's native appearance still needs visual verification. |
 | Gate is too close to a start | Generated gates prefer endpoints at least two moves away, but a constrained fallback can produce a warning. Move the endpoint, enlarge the plane, reduce the gate count, or regenerate. |
 | Direct folder access unavailable | Use Download ready ZIP if enabled. If ZIP is memory-blocked, choose Reduce output resolution to fit ZIP when offered, or move an Editable project JSON backup to a browser with direct-folder support. The smaller-output edit is Undoable and does not remove provinces or planes. |
@@ -1216,7 +1216,7 @@ Validation, replacement-confirmation, and export dialogs trap focus. Escape clos
 | Filename changed | Export normalized it. Use the folder/file stem shown in the package summary. |
 | Unknown catalog ID | Enable matching custom content. Catalog metadata does not install a mod. |
 | Skybox/battle-map asset warning | Copy referenced `.tga`, `.rgb`, or `.d3m` files beside the map files. |
-| Realm art or backdrop differs in Dominions | Native scenery intentionally uses the game's renderer. In current source, select Illustrated realms and install the complete package to use custom art on supported planes. Surface/Custom and editor-only overlays still differ. |
+| Realm art or backdrop differs in Dominions | Native scenery intentionally uses the game's renderer. In 0.1.6, select Illustrated realms and install the complete package to use custom art on supported planes. Surface/Custom and editor-only overlays still differ. |
 | Terrain looks unchanged after editing | Biome is metadata only; change Primary terrain or Additional terrain flags. Export/install the package again and start a new game. The selected artwork mode determines whether supported realms use generated TGA art or native scenery. |
 | In-game province numbers differ from the editor | Expected for Illustrated realms: image markers determine numbering. Use the table in the host package's `host_settings.txt`. Do not swap artwork modes in a running game. |
 | Province labels are hidden or cut off at the screen edge | Names appear from 135% zoom and can be omitted to avoid collisions. Pan to bring a province into view, or hover/select it for the complete name and marker details. |

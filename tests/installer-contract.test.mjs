@@ -70,6 +70,22 @@ test("release verifies the Inno Setup asset against its exact tagged attestation
   );
 });
 
+test("release pins a consistent runtime and carries version-matched release notes through the Windows gate", async () => {
+  const workflow = await readFile(path.join(repositoryRoot, ".github", "workflows", "release.yml"), "utf8");
+  const metadata = JSON.parse(await readFile(path.join(repositoryRoot, "package.json"), "utf8"));
+  const runtime = workflow.match(/\$nodeVersion = "([\d.]+)"/)?.[1];
+  assert.equal(runtime, "22.23.3");
+  assert.ok(workflow.includes(`candidate/node/node-v${runtime}-win-x64`));
+  assert.ok(workflow.includes(`--node-version v${runtime}`));
+  assert.ok(workflow.includes("2b0ff57b049cda1bbcea2240eec20467018713c1efe1f7360c2681859b90ed71"));
+  const notes = await readFile(path.join(repositoryRoot, "docs", `RELEASE_NOTES_${metadata.version}.md`), "utf8");
+  assert.ok(notes.startsWith(`# Pantokrator Atlas ${metadata.version}`));
+  assert.match(workflow, /cp "docs\/RELEASE_NOTES_\$\{GITHUB_REF_NAME#v\}\.md" RELEASE_NOTES\.md/);
+  assert.match(workflow, /--notes-file RELEASE_NOTES\.md/);
+  assert.match(workflow, /publish:\s+needs: windows-gate/);
+  assert.match(workflow, /run: npm run test:vendor/);
+});
+
 test("installer payload contains only runtime, documentation, and required licenses", async () => {
   const fixture = await createFixture();
   try {
