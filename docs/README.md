@@ -1,6 +1,6 @@
 # Documentation index
 
-Reviewed October 14, 2026, including the [current audit repairs](AUDIT_REPAIRS_2026-10-14.md) in [PR #15](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/pull/15), based on merged `11a4ede`. The package version remains **0.1.5**. Dated records identify the branch or commit tested; unreleased source is not proof of publication. See the root [version table](../README.md#versions-and-documentation): source merges, hosted deployments and Windows releases are separate actions.
+Version **0.1.6** includes the merged [October audit repairs](AUDIT_REPAIRS_2026-10-14.md), illustrated realms and natural geography. See the [0.1.6 release verification](RELEASE_VERIFICATION_0.1.6.md) for tested source and delivery status. Dated records preserve their original scope; source merges, hosted deployments and Windows releases remain separate actions.
 
 ## Current source checkpoint
 
@@ -9,25 +9,26 @@ Reviewed October 14, 2026, including the [current audit repairs](AUDIT_REPAIRS_2
 | October source repairs | [Export fallback, generated names and dependency repairs](AUDIT_REPAIRS_2026-10-14.md), [PR #15](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/pull/15): **1,141 local tests pass**. Registry audits report zero findings; the approved local dependency patch has separate mandatory CI regressions and maintenance notes. |
 | September merged baseline | [`11a4ede`, PR #14](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/pull/14), including connected/illustrated realms, launcher reuse, import caps, island-start repairs, numeric Undo and Windows test portability. [Main CI](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35821623798) passed: **1,123 tests** (14 integration + 1,109 TypeScript) in the Linux full suite, plus Windows launcher/server and bundle/input/history checks. |
 | Generator corpus | The [September 23 repair record](AUDIT_ISLAND_REPAIRS_2026-09-23.md) records 1,000 cases: all 125 island cases export-valid, three unchanged continental-capacity blockers, no generation exceptions, and 328 experimental quality misses. The October 14 audit repeated the first 128 cases: no export errors or exceptions, with 40 quality misses. This was not a new full-corpus run. |
-| Hosted / Windows | Rechecked September 22: Site version 13 and Windows v0.1.5 still use `581b2b8`. Their [743-test release record](RELEASE_VERIFICATION_0.1.5.md) is separate from current source testing. |
+| Hosted / Windows | The [0.1.6 delivery record](RELEASE_VERIFICATION_0.1.6.md) tracks the new hosted build and Windows artifacts separately. The [0.1.5 record](RELEASE_VERIFICATION_0.1.5.md) is historical evidence for Site version 13 and `581b2b8`, not the current feature set. |
 
-Post-release source includes automatic **Connected regions & passages** without the classic selector; procedural realm artwork and optional playable **Illustrated realms** export; distinct coastal, ocean, lake and realm contours; connected border rivers; 58% default biome cohesion with modest temperate variation; and cave-wall/mixed-terrain safety repairs. **Native scenery** remains the default. See the user guide for controls and the dated records below for evidence.
+Version 0.1.6 includes automatic **Connected regions & passages** without the classic selector; procedural realm artwork and optional playable **Illustrated realms** export; distinct coastal, ocean, lake and realm contours; connected border rivers; 58% default biome cohesion with modest temperate variation; and cave-wall/mixed-terrain safety repairs. **Native scenery** remains the default. See the user guide for controls and the dated records below for evidence.
 
 Latest-generation shape changes require **Generate**; loading, exporting and content rerolls preserve saved natural-landform provenance. The earlier Cloud/Air renderer refinement can update compatible saved sky outlines without regenerating their graph. See [Province layout](USER_GUIDE.md#province-layout) for these distinct compatibility rules.
 
-Remaining acceptance includes an in-game visual pass for the latest sky/natural contours, connected rivers and mixed Sea + Cave Wall terrain, and multiplayer playtesting. Earlier illustrated artwork was loaded and visually checked in Dominions 6.37, but those observations predate these refinements. The merged island-start repair's corpus results and remaining limits are described in [implementation status](MULTIPLAYER_IMPLEMENTATION_STATUS.md#verification-and-remaining-work). Hosted deployment and a new installer also remain separate work.
+Remaining acceptance includes an in-game visual pass for the latest sky/natural contours, connected rivers and mixed Sea + Cave Wall terrain, and multiplayer playtesting. Earlier illustrated artwork was loaded and visually checked in Dominions 6.37, but those observations predate these refinements. The merged island-start repair's corpus results and remaining limits are described in [implementation status](MULTIPLAYER_IMPLEMENTATION_STATUS.md#verification-and-remaining-work). The [release record](RELEASE_VERIFICATION_0.1.6.md) separately tracks hosted and Windows delivery.
 
 ## Current references
 
 - [User guide](USER_GUIDE.md): installation, generation, safe iteration, inspection, recovery, host/player export, and troubleshooting.
-- [0.1.5 release verification](RELEASE_VERIFICATION_0.1.5.md): completed checks, remaining limits, and delivery status.
+- [0.1.6 release verification](RELEASE_VERIFICATION_0.1.6.md): source, hosted and Windows checks, remaining limits, and delivery status.
+- [0.1.6 release notes](RELEASE_NOTES_0.1.6.md): changes, upgrade instructions and compatibility cautions.
 - [Multiplayer implementation status](MULTIPLAYER_IMPLEMENTATION_STATUS.md): available controls and work that is still planned.
 - [Content catalog](CONTENT_CATALOG.md): pinned Dominions 6.37 selector data, separate recruitment membership, numeric IDs, and provenance limits.
 - [Population-defender acceptance](research/NATIVE_POPULATION_DEFENDERS_2026-09-21.md): 76 opt-in v3 templates, 161 accepted terrain cases, excluded populations and evidence limits.
 - [Recruitment-table evidence and extraction](research/POPULATION_RECRUITMENT_TABLE_2026-09-21.md): 82 static population rosters; membership is separate from defender-template acceptance.
 - [Artwork implementation and future asset-pack contract](ILLUSTRATED_ASSET_SPEC.md): what the renderer does now versus future requirements.
 - [Artwork provenance](ASSET_PROVENANCE.md): bundled textures/backdrops and their licenses.
-- [Illustrated export](ILLUSTRATED_EXPORT_2026-09-22.md): unreleased playable artwork, installation safeguards, numbering differences, native-game evidence and remaining verification limits.
+- [Illustrated export](ILLUSTRATED_EXPORT_2026-09-22.md): playable artwork, installation safeguards, numbering differences, native-game evidence and remaining verification limits.
 
 ## Dated evidence and proposals
 

@@ -27,6 +27,8 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci
+      - name: Verify local dependency security patch
+        run: npm run test:vendor
       - name: Audit locked dependencies
         run: npm audit --audit-level=high
       - name: Verify tag matches package version
@@ -53,6 +55,7 @@ jobs:
           test ! -d "$release_root/Pantokrator-Atlas/node_modules"
           (cd "$release_root" && zip -q -r "$GITHUB_WORKSPACE/Pantokrator-Atlas-Windows.zip" Pantokrator-Atlas)
           sha256sum Pantokrator-Atlas-Windows.zip > Pantokrator-Atlas-Windows.zip.sha256
+          cp "docs/RELEASE_NOTES_${GITHUB_REF_NAME#v}.md" RELEASE_NOTES.md
       - name: Smoke-test packaged release without npm install
         run: |
           cd "$RUNNER_TEMP/pantokrator-release/Pantokrator-Atlas"
@@ -66,6 +69,7 @@ jobs:
           path: |
             Pantokrator-Atlas-Windows.zip
             Pantokrator-Atlas-Windows.zip.sha256
+            RELEASE_NOTES.md
           if-no-files-found: error
           retention-days: 1
 
@@ -99,11 +103,11 @@ jobs:
       - name: Download verified private Node.js runtime
         shell: powershell
         run: |
-          $nodeVersion = "22.23.2"
+          $nodeVersion = "22.23.3"
           $nodeArchiveName = "node-v$nodeVersion-win-x64.zip"
           $nodeArchive = Join-Path $env:RUNNER_TEMP $nodeArchiveName
           Invoke-WebRequest "https://nodejs.org/download/release/v$nodeVersion/$nodeArchiveName" -OutFile $nodeArchive
-          $expected = "1177b4137ba5adaa56354ae40f1080c7450e8ae09cecb47da459d1c52ac99f97"
+          $expected = "2b0ff57b049cda1bbcea2240eec20467018713c1efe1f7360c2681859b90ed71"
           $actual = (Get-FileHash -LiteralPath $nodeArchive -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($actual -ne $expected) { throw "Node.js runtime checksum mismatch: $actual" }
           Expand-Archive -LiteralPath $nodeArchive -DestinationPath candidate/node
@@ -111,13 +115,13 @@ jobs:
         shell: powershell
         run: |
           $releaseRoot = (Resolve-Path candidate/extracted/Pantokrator-Atlas).Path
-          $nodeRoot = (Resolve-Path candidate/node/node-v22.23.2-win-x64).Path
+          $nodeRoot = (Resolve-Path candidate/node/node-v22.23.3-win-x64).Path
           $payload = Join-Path $env:RUNNER_TEMP "pantokrator-installer-payload"
           node "$releaseRoot/scripts/stage-windows-installer.mjs" `
             --project-root $releaseRoot `
             --node-root $nodeRoot `
             --output $payload `
-            --node-version v22.23.2
+            --node-version v22.23.3
       - name: Install verified Inno Setup compiler
         shell: powershell
         env:
@@ -136,7 +140,7 @@ jobs:
           $innoRoot = Join-Path $env:RUNNER_TEMP "InnoSetup"
           $process = Start-Process -FilePath $compilerInstaller -ArgumentList @(
             "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER", "/DIR=`"$innoRoot`""
-          ) -Wait -PassThru
+          ) -WindowStyle Hidden -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw "Inno Setup installation failed with exit $($process.ExitCode)." }
           if (-not (Test-Path (Join-Path $innoRoot "ISCC.exe"))) { throw "ISCC.exe was not installed." }
       - name: Compile and exercise the exact installer
@@ -156,7 +160,7 @@ jobs:
 
           $install = Start-Process -FilePath $setup -ArgumentList @(
             "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=`"$installRoot`""
-          ) -Wait -PassThru
+          ) -WindowStyle Hidden -Wait -PassThru
           if ($install.ExitCode -ne 0) { throw "Installer failed with exit $($install.ExitCode)." }
           if (-not (Test-Path "$installRoot/runtime/node.exe")) { throw "Bundled Node.js runtime is missing." }
           if (-not (Test-Path "$installRoot/runtime/NODE_LICENSE.txt")) { throw "Bundled Node.js license is missing." }
@@ -171,7 +175,7 @@ jobs:
           if (-not (Test-Path $uninstaller)) { throw "Uninstaller is missing." }
           $uninstall = Start-Process -FilePath $uninstaller -ArgumentList @(
             "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"
-          ) -Wait -PassThru
+          ) -WindowStyle Hidden -Wait -PassThru
           if ($uninstall.ExitCode -ne 0) { throw "Uninstaller failed with exit $($uninstall.ExitCode)." }
           if (Test-Path "$installRoot/runtime/node.exe") { throw "Uninstaller left the private runtime behind." }
 
@@ -213,5 +217,5 @@ jobs:
           Pantokrator-Atlas-Setup-x64.exe
           Pantokrator-Atlas-Setup-x64.exe.sha256
           --verify-tag
-          --generate-notes
+          --notes-file RELEASE_NOTES.md
           --title "Pantokrator Atlas $GITHUB_REF_NAME"
