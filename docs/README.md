@@ -6,6 +6,7 @@ Version **0.1.6** includes the merged [October audit repairs](AUDIT_REPAIRS_2026
 
 | Edition / evidence | Verified state |
 | --- | --- |
+| Version 0.1.6 | [Release verification](RELEASE_VERIFICATION_0.1.6.md): tagged source, hosted/Windows delivery, **1,142 automated tests**, real browser illustrated-ZIP and recovery checks, and exact installer evidence. |
 | October source repairs | [Export fallback, generated names and dependency repairs](AUDIT_REPAIRS_2026-10-14.md), [PR #15](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/pull/15): **1,141 local tests pass**. Registry audits report zero findings; the approved local dependency patch has separate mandatory CI regressions and maintenance notes. |
 | September merged baseline | [`11a4ede`, PR #14](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/pull/14), including connected/illustrated realms, launcher reuse, import caps, island-start repairs, numeric Undo and Windows test portability. [Main CI](https://github.com/The-LoneGunman/TLGs-Dom6-Map-Maker/actions/runs/35821623798) passed: **1,123 tests** (14 integration + 1,109 TypeScript) in the Linux full suite, plus Windows launcher/server and bundle/input/history checks. |
 | Generator corpus | The [September 23 repair record](AUDIT_ISLAND_REPAIRS_2026-09-23.md) records 1,000 cases: all 125 island cases export-valid, three unchanged continental-capacity blockers, no generation exceptions, and 328 experimental quality misses. The October 14 audit repeated the first 128 cases: no export errors or exceptions, with 40 quality misses. This was not a new full-corpus run. |
@@ -38,11 +39,11 @@ These records preserve the conditions and evidence at the stated revision/date. 
 | --- | --- |
 | [October 14 audit repairs](AUDIT_REPAIRS_2026-10-14.md) | Browser-aware export options, Undoable output-size fallback, generated-name deduplication, refreshed dependency pins and the tested local nesting-security patch. |
 | [September 23 audit repairs](AUDIT_ISLAND_REPAIRS_2026-09-23.md) | Island-start-aware generation, Windows test portability, single-step numeric Undo, accurate installer instructions, and local 1,000-map verification. |
-| [September 22 review round](REVIEW_ROUND_2026-09-22.md) | Unreleased defect repairs, natural-water / authored-start / budget / strategic-river / Underworld-border generation fixes, the usability pass and measured performance and memory changes (PR #12). |
-| [September 22 natural landforms](NATURAL_LANDFORMS_2026-09-22.md) | Unreleased shared province curves, natural ocean/basin layouts, realm-specific contours and saved-map compatibility. |
-| [September 22 connected border rivers](CONNECTED_BORDER_RIVERS_2026-09-22.md) | Unreleased continuous river routing, safe bridge crossings, geographic constraints and verification evidence. |
-| [September 22 terrain-edit repairs](TERRAIN_EDIT_REPAIRS_2026-09-22.md) | Unreleased cave-wall cleanup, blocked-content export checks, mixed-terrain relief corrections and verification scope. |
-| [September 21 connected-region verification](CONNECTED_REGIONS_2026-09-21.md) | Unreleased adjacent-region layout, compatibility safeguards, automated checks and browser/native visual acceptance. |
+| [September 22 review round](REVIEW_ROUND_2026-09-22.md) | Defect repairs, natural-water / authored-start / budget / strategic-river / Underworld-border generation fixes, the usability pass and measured performance and memory changes (PR #12). |
+| [September 22 natural landforms](NATURAL_LANDFORMS_2026-09-22.md) | Shared province curves, natural ocean/basin layouts, realm-specific contours and saved-map compatibility. |
+| [September 22 connected border rivers](CONNECTED_BORDER_RIVERS_2026-09-22.md) | Continuous river routing, safe bridge crossings, geographic constraints and verification evidence. |
+| [September 22 terrain-edit repairs](TERRAIN_EDIT_REPAIRS_2026-09-22.md) | Cave-wall cleanup, blocked-content export checks, mixed-terrain relief corrections and verification scope. |
+| [September 21 connected-region verification](CONNECTED_REGIONS_2026-09-21.md) | Adjacent-region layout, compatibility safeguards, automated checks and browser/native visual acceptance. |
 | [September 22 illustrated export](ILLUSTRATED_EXPORT_2026-09-22.md) | Playable custom-image implementation, eight-plane loading/connectivity evidence, Cloud visual acceptance and safe delivery. |
 | [September 21 procedural realm artwork](REALM_ARTWORK_2026-09-21.md) | Earlier editor/PNG checkpoint, rendering invariants and dated tests; its preview-only export boundary is superseded by September 22. |
 | [September 21 cave and sky-layout references](research/NATURAL_CAVERN_REFERENCES_2026-09-21.md) | Creator-map and official references; layout motifs only, no copied artwork. |
